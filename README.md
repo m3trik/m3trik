@@ -1,2 +1,1 @@
-# m3trik
- Github Profile
+![M3trik GitHub Image](m3trik_github.png)

@@ -608,19 +608,8 @@ elseif ($Packages) {
     }
 }
 
-# Enforce canonical release order for strict packages when merging.
-if ($Merge -and $Strict -and $reposToProcess.Count -gt 1) {
-    $ordered = @()
-    foreach ($name in $RELEASE_ORDER) {
-        $match = $reposToProcess | Where-Object { $_.Name -eq $name }
-        if ($match) {
-            $ordered += $match
-        }
-    }
-    $remaining = $reposToProcess | Where-Object { $RELEASE_ORDER -notcontains $_.Name }
-    $reposToProcess = @($ordered + $remaining)
-}
-else {
+# If no packages selected yet, find defaults
+if ($reposToProcess.Count -eq 0) {
     # Default: Process current directory if it's a repo
     $current = Get-Item .
     if (Test-Path (Join-Path $current.FullName ".git")) {
@@ -630,6 +619,19 @@ else {
         Write-Host "Current directory is not a git repository. Processing ALL repositories..." -ForegroundColor Yellow
         $reposToProcess = Get-ChildItem -Directory $ROOT | Where-Object { Test-Path (Join-Path $_.FullName ".git") }
     }
+}
+
+# Always enforce canonical release order if multiple packages are involved.
+if ($reposToProcess.Count -gt 1) {
+    $ordered = @()
+    foreach ($name in $RELEASE_ORDER) {
+        $match = $reposToProcess | Where-Object { $_.Name -eq $name }
+        if ($match) {
+            $ordered += $match
+        }
+    }
+    $remaining = $reposToProcess | Where-Object { $RELEASE_ORDER -notcontains $_.Name }
+    $reposToProcess = @($ordered + $remaining)
 }
 
 $results = @{}

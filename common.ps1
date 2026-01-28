@@ -106,7 +106,12 @@ function Test-RemoteConflictMarkers {
         git fetch origin --quiet 2>&1 | Out-Null
         foreach ($rel in $FilesToScan) {
             $spec = "$($Ref):$rel"
-            $content = (git show $spec 2>$null)
+            
+            # Check if file exists in the tree first to avoid errors
+            $treeEntry = (git ls-tree $Ref $rel 2>$null)
+            if (-not $treeEntry) { continue }
+
+            $content = (git show $spec 2>&1)
             if ($content -and ($content -match "(?m)^<<<<<<< ")) {
                 Write-Err "Conflict markers found in $spec"
                 return $false

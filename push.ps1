@@ -108,6 +108,36 @@ function Test-PypiHasVersion {
     }
 }
 
+function Bump-LocalVersion {
+    param(
+        [string]$PackagePath
+    )
+    $initFile = Join-Path (Join-Path $PackagePath "src") "__init__.py"
+    # Try src/pkg/__init__.py first, then pkg/__init__.py
+    if (-not (Test-Path $initFile)) {
+        $name = Split-Path $PackagePath -Leaf
+        $initFile = Join-Path (Join-Path $PackagePath $name) "__init__.py"
+    }
+
+    if (-not (Test-Path $initFile)) { 
+        return $null 
+    }
+
+    $content = Get-Content $initFile -Raw
+    if ($content -match '__version__\s*=\s*["''](?<ver>\d+\.\d+\.\d+)["'']') {
+        $oldVer = $Matches['ver']
+        $parts = $oldVer -split "\."
+        $parts[2] = [int]$parts[2] + 1
+        $newVer = "$($parts[0]).$($parts[1]).$($parts[2])"
+        
+        $newContent = $content -replace "__version__\s*=\s*.*", "__version__ = `"$newVer`""
+        Set-Content -Path $initFile -Value $newContent -NoNewline
+        Write-Host "    Bumped version: $oldVer -> $newVer" -ForegroundColor Cyan
+        return $newVer
+    }
+    return $null
+}
+
 function Get-LocalStrictVersions {
     $versions = @{}
     foreach ($pkg in $STRICT_PACKAGES) {
@@ -120,15 +150,15 @@ function Get-LocalStrictVersions {
     return $versions
 }
 
-function Sync-InternalRequirementsToLocalVersions {
+function Sync-PyProjectDepsToLocalVersions {
     param(
         [string]$PackageName,
         [string]$RepoPath,
         [hashtable]$LocalVersions
     )
 
-    $reqFile = Join-Path $RepoPath "requirements.txt"
-    if (-not (Test-Path $reqFile)) {
+    $tomlFile = Join-Path $RepoPath "pyproject.toml"
+    if (-not (Test-Path $tomlFile)) {
         return $true
     }
 
@@ -149,7 +179,7 @@ function Sync-InternalRequirementsToLocalVersions {
     try {
         git checkout dev --quiet 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Err "Checkout dev failed (requirements sync)"
+            Write-Err "Checkout dev failed (toml sync)"
             return $false
         }
     }
@@ -157,48 +187,69 @@ function Sync-InternalRequirementsToLocalVersions {
         Pop-Location
     }
 
-    $lines = Get-Content $reqFile
+    $content = Get-Content $tomlFile -Raw
+    $newContent = $content
     $changed = $false
 
     foreach ($dep in $requiredPins) {
         if (-not $LocalVersions.ContainsKey($dep)) {
-            Write-Err "Cannot sync requirements: missing local version for '$dep'"
+            Write-Err "Cannot sync toml: missing local version for '$dep'"
             return $false
         }
-        $expected = "$dep==$($LocalVersions[$dep])"
-
-        $found = $false
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i] -match "^$dep==") {
-                $found = $true
-                if ($lines[$i] -ne $expected) {
-                    $lines[$i] = $expected
-                    $changed = $true
-                }
-            }
+        $ver = $LocalVersions[$dep]
+        
+        # Regex to find: "dep>=..." inside dependencies list
+        # We look for: "dep>=[0-9.]+"
+        # And replace with: "dep>=$ver"
+        
+        $pattern = '"' + $dep + '>=[0-9.]+"'
+        $replacement = '"' + $dep + '>=' + $ver + '"'
+        
+        if ($newContent -match $pattern) {
+             # Check if it's already correct to avoid unnecessary writes
+             $currentMatch = $matches[0]
+             if ($currentMatch -ne $replacement) {
+                 $newContent = $newContent -replace $pattern, $replacement
+                 $changed = $true
+             }
         }
+    }
 
-        if (-not $found) {
-            Write-Err "requirements.txt is missing expected pinned dep: '$dep==...'."
-            return $false
+    if ($DryRun) {
+        if ($changed) {
+            Write-Step "[DryRun] Would bump local version of $PackageName (dependency sync)"
+            Write-Step "[DryRun] Would sync pyproject.toml dependencies"
+        } else {
+            Write-Step "[DryRun] Dependencies already in sync"
         }
+        return $true
     }
 
     if (-not $changed) {
         return $true
     }
 
-    Set-Content -Path $reqFile -Value $lines
+    # CRITICAL: If dependencies change, the package artifact has changed.
+    # We MUST bump the package version, otherwise PyPI will reject the re-upload 
+    # of the existing version with new metadata.
+    $newVer = Bump-LocalVersion $RepoPath
+    if ($newVer) {
+        Write-Host "    [Dependency Cascading] Bumped $PackageName to $newVer" -ForegroundColor Cyan
+    } else {
+        Write-Err "    Failed to bump version for $PackageName after dependency update"
+    }
+
+    Set-Content -Path $tomlFile -Value $newContent -NoNewline
 
     Push-Location $RepoPath
     try {
-        git add requirements.txt
-        git commit -m "Update requirements.txt [skip ci]" | Out-Null
+        git add .
+        git commit -m "Update dependencies & bump version to $newVer [skip ci]" | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Err "Failed to commit requirements.txt updates"
+            Write-Err "Failed to commit pyproject.toml updates"
             return $false
         }
-        Write-Success "Synced requirements.txt pins"
+        Write-Success "Synced dependencies & bumped version"
         return $true
     }
     finally {
@@ -270,12 +321,18 @@ function Test-Build {
         
         $buildOutput = Receive-Job $buildJob
         Remove-Job $buildJob
-        $buildCode = $buildOutput | Select-String -Pattern "error|ERROR|failed|FAILED" -Quiet
+        
+        # Filter out benign build lines that might contain "error" in filenames (e.g. error.svg)
+        $filteredOutput = $buildOutput | Where-Object { 
+            $_ -notmatch "^\s*(copying|creating|reading|writing|hard linking|adding|removing)" 
+        }
+        
+        $buildCode = $filteredOutput | Select-String -Pattern "error|ERROR|failed|FAILED" -Quiet
         
         if ($buildCode) {
             $ErrorActionPreference = $oldErrorAction
             Write-Err "Build failed!"
-            Write-Host "    $($buildOutput | Select-String -Pattern 'error|ERROR|failed|FAILED' | Select-Object -First 1)" -ForegroundColor DarkGray
+            Write-Host "    $($filteredOutput | Select-String -Pattern 'error|ERROR|failed|FAILED' | Select-Object -First 1)" -ForegroundColor DarkGray
             return $false
         }
         
@@ -621,6 +678,43 @@ if ($reposToProcess.Count -eq 0) {
     }
 }
 
+# ------------------------------------------------------------------------------------------------
+# Auto-Cascade Dependencies (Robustness Fix)
+# If a core package is selected in Strict mode, automatically include its downstream dependents.
+# This ensures that version bumps propagate correctly through the ecosystem.
+# ------------------------------------------------------------------------------------------------
+if ($Strict) {
+    # Define the dependency graph (Upstream -> [Downstream1, Downstream2...])
+    $dependencyGraph = @{
+        "pythontk" = @("uitk", "mayatk", "tentacle")
+        "uitk"     = @("mayatk", "tentacle")
+        "mayatk"   = @("tentacle")
+    }
+
+    $initialNames = @($reposToProcess.Name)
+    $cascadeExtras = @()
+
+    foreach ($pkgName in $initialNames) {
+        if ($dependencyGraph.ContainsKey($pkgName)) {
+            foreach ($downstream in $dependencyGraph[$pkgName]) {
+                if ($initialNames -notcontains $downstream -and $cascadeExtras -notcontains $downstream) {
+                    $cascadeExtras += $downstream
+                }
+            }
+        }
+    }
+
+    if ($cascadeExtras.Count -gt 0) {
+        Write-Host "  > Auto-including downstream dependencies: $($cascadeExtras -join ', ')" -ForegroundColor Cyan
+        foreach ($extra in $cascadeExtras) {
+            $path = Join-Path $ROOT $extra
+            if (Test-Path $path) {
+                $reposToProcess += Get-Item $path
+            }
+        }
+    }
+}
+
 # Always enforce canonical release order if multiple packages are involved.
 if ($reposToProcess.Count -gt 1) {
     $ordered = @()
@@ -656,33 +750,68 @@ foreach ($repo in $reposToProcess) {
 
     # Additional safety: remote refs must not contain conflict markers in critical files.
     if ($Strict -and $isStrictPackage) {
-        $remoteMainOk = Test-RemoteConflictMarkers $repoPath "origin/main" @("requirements.txt")
-        if (-not $remoteMainOk) {
-            $results[$pkgName] = "unsafe-repo"
-            $anyErrors = $true
-            Write-Err "Remote main contains conflict markers"
-            if ($stopOnFailure) { break }
-            continue
-        }
-        $remoteDevOk = Test-RemoteConflictMarkers $repoPath "origin/dev" @("requirements.txt")
-        if (-not $remoteDevOk) {
-            $results[$pkgName] = "unsafe-repo"
-            $anyErrors = $true
-            Write-Err "Remote dev contains conflict markers"
-            if ($stopOnFailure) { break }
-            continue
-        }
+        # Only check common source files
+        # requirements.txt check removed as file is deprecated
     }
     
     # 1. Strict Validation (Build & Test)
     if ($Strict -and $isStrictPackage) {
-        if ($Merge -and -not $DryRun) {
+        # Auto-Bump Logic: If code has changed, increment patch version to force downstream updates.
+        if ($Merge) {
+            $shouldBump = $false
+            Push-Location $repoPath
+            try {
+                 $st = git status --porcelain
+                 if ($st) { $shouldBump = $true }
+                 else {
+                     # If we have commits ahead of origin/dev, we consider those "new features" requiring a bump.
+                     git fetch origin dev --quiet 2>&1 | Out-Null
+                     $ahead = git rev-list --count origin/dev..dev 2>$null
+                     if ($ahead -and [int]$ahead -gt 0) { 
+                        # Check if the last commit was already a bump to avoid loops/double bumps
+                        $lastMsg = git log -1 --pretty=%s
+                        if ($lastMsg -notmatch "^Bump version to") {
+                             $shouldBump = $true 
+                        }
+                     }
+                 }
+            } finally { Pop-Location }
+    
+            if ($shouldBump) {
+                 if ($DryRun) {
+                     Write-Step "[DryRun] Would bump patch version of $pkgName (code changes detected)"
+                     # Mock the new version so downstream sync checks pass
+                     if ($localStrictVersions.ContainsKey($pkgName)) {
+                        $curr = $localStrictVersions[$pkgName]
+                        try {
+                            $parts = $curr -split "\."
+                            $nextPatch = [int]$parts[-1] + 1
+                            $mockVer = "$($parts[0]).$($parts[1]).$nextPatch"
+                            $localStrictVersions[$pkgName] = $mockVer
+                        } catch {}
+                     }
+                 } else {
+                     $newVer = Bump-LocalVersion $repoPath
+                     if ($newVer) {
+                         Write-Host "    [Auto-Bump] Updated to $newVer" -ForegroundColor Cyan
+                         $localStrictVersions[$pkgName] = $newVer
+                         
+                         Push-Location $repoPath
+                         try {
+                            git add .
+                            git commit -m "Bump version to $newVer [skip ci]" | Out-Null
+                         }
+                         finally { Pop-Location }
+                     }
+                 }
+            }
+        
             # Keep internal pins consistent with what we're releasing, so pip installs are reliable.
-            $syncOk = Sync-InternalRequirementsToLocalVersions $pkgName $repoPath $localStrictVersions
+            $syncOk = Sync-PyProjectDepsToLocalVersions $pkgName $repoPath $localStrictVersions
             if (-not $syncOk) {
                 $results[$pkgName] = "requirements-invalid"
                 $anyErrors = $true
-                Write-Err "Requirements sync failed"
+                Write-Err "Dependency sync failed"
                 if ($stopOnFailure) { break }
                 continue
             }

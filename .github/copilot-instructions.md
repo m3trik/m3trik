@@ -22,4 +22,5 @@
 ---
 
 ## 3. Work Logs & History
+- [x] **Update Samba Credentials** — Created `update_samba_creds.ps1` to rotate Samba passwords using secure credential store.
 - [x] **Initial Setup** — Repository established.

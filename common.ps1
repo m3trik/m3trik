@@ -276,7 +276,11 @@ function Merge-ToMain {
         git pull origin main
         
         Write-Step "Merging dev into main..."
-        git merge dev --no-edit
+        # --no-ff: Force a merge commit even when fast-forward is possible.
+        # Without this, a fast-forward merge makes the HEAD commit on main
+        # the last dev commit (e.g. "Bump version to X.Y.Z [skip ci]"),
+        # which causes GitHub Actions to skip the publish workflow entirely.
+        git merge dev --no-edit --no-ff
         
         # Handle merge conflicts automatically
         if ($LASTEXITCODE -ne 0) {

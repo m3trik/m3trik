@@ -24,3 +24,4 @@
 ## 3. Work Logs & History
 - [x] **Update Samba Credentials** — Created `update_samba_creds.ps1` to rotate Samba passwords using secure credential store.
 - [x] **Initial Setup** — Repository established.
+- [x] **Workspace Repo Inventory** — Added `scripts/generate_workspace_inventory.py` plus `Generate-WorkspaceInventory.ps1` to scan direct child repositories under `_scripts` and generate Markdown/JSON inventory reports in `m3trik/docs` with repo breakdowns, package roots, code roots, and tracked LOC summaries.

@@ -1,0 +1,694 @@
+{
+  "generated_at": "2026-04-08T19:39:49.890280+00:00",
+  "workspace_root": "O:/Cloud/Code/_scripts",
+  "repo_count": 11,
+  "repos": [
+    {
+      "name": "comfyui",
+      "path": "comfyui",
+      "domain": "AI Custom Nodes",
+      "summary": "Workspace repo aligned with the AI Custom Nodes domain.",
+      "repo_kind": "Operations / scripts",
+      "manifests": [],
+      "root_scripts": [
+        "connect.ps1",
+        "remote_cmd.ps1",
+        "update.ps1"
+      ],
+      "package_roots": [],
+      "code_roots": [
+        {
+          "name": "comfyui",
+          "path": "comfyui",
+          "code_file_count": 43,
+          "dominant_suffixes": [
+            ".ps1 (20)",
+            ".py (14)",
+            ".sh (8)",
+            ".psm1 (1)"
+          ]
+        },
+        {
+          "name": "config",
+          "path": "config",
+          "code_file_count": 2,
+          "dominant_suffixes": [
+            ".yaml (2)"
+          ]
+        },
+        {
+          "name": "docker",
+          "path": "docker",
+          "code_file_count": 1,
+          "dominant_suffixes": [
+            ".yml (1)"
+          ]
+        },
+        {
+          "name": "test",
+          "path": "test",
+          "code_file_count": 10,
+          "dominant_suffixes": [
+            ".ps1 (8)",
+            ".sh (1)",
+            ".py (1)"
+          ]
+        },
+        {
+          "name": "workflows",
+          "path": "workflows",
+          "code_file_count": 21,
+          "dominant_suffixes": [
+            ".json (21)"
+          ]
+        }
+      ],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 80,
+      "tracked_total_lines": 15284,
+      "tracked_nonempty_lines": 14520
+    },
+    {
+      "name": "m3trik",
+      "path": "m3trik",
+      "domain": "DevOps & Powershell",
+      "summary": "Workspace repo aligned with the DevOps & Powershell domain.",
+      "repo_kind": "Operations / scripts",
+      "manifests": [],
+      "root_scripts": [
+        "common.ps1",
+        "Generate-WorkspaceInventory.ps1",
+        "push.ps1",
+        "push_creds_to_phone.ps1",
+        "update_samba_creds.ps1"
+      ],
+      "package_roots": [],
+      "code_roots": [
+        {
+          "name": "projects",
+          "path": "projects",
+          "code_file_count": 5,
+          "dominant_suffixes": [
+            ".py (5)"
+          ]
+        },
+        {
+          "name": "test",
+          "path": "test",
+          "code_file_count": 22,
+          "dominant_suffixes": [
+            ".py (20)",
+            ".ps1 (2)"
+          ]
+        },
+        {
+          "name": "update_wheel",
+          "path": "update_wheel",
+          "code_file_count": 4,
+          "dominant_suffixes": [
+            ".py (2)",
+            ".ps1 (1)",
+            ".cmd (1)"
+          ]
+        }
+      ],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 35,
+      "tracked_total_lines": 12773,
+      "tracked_nonempty_lines": 10671
+    },
+    {
+      "name": "map_compositor",
+      "path": "map_compositor",
+      "domain": "Image Processing",
+      "summary": "Workspace repo aligned with the Image Processing domain.",
+      "repo_kind": "Python package",
+      "manifests": [
+        "requirements.txt",
+        "setup.py"
+      ],
+      "root_scripts": [
+        "setup.py"
+      ],
+      "package_roots": [
+        {
+          "name": "map_compositor",
+          "path": "map_compositor",
+          "immediate_subpackages": [],
+          "immediate_modules": [
+            "_map_compositor"
+          ],
+          "recursive_module_count": 1
+        }
+      ],
+      "code_roots": [],
+      "has_docs": true,
+      "has_tests": false,
+      "has_examples": false,
+      "tracked_code_files": 4,
+      "tracked_total_lines": 953,
+      "tracked_nonempty_lines": 854
+    },
+    {
+      "name": "mayatk",
+      "path": "mayatk",
+      "domain": "Maya Utils",
+      "summary": "A comprehensive toolkit for Autodesk Maya providing utilities for modeling, animation, rigging, and UI management.",
+      "repo_kind": "Python package",
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "root_scripts": [],
+      "package_roots": [
+        {
+          "name": "mayatk",
+          "path": "mayatk",
+          "immediate_subpackages": [
+            "anim_utils",
+            "cam_utils",
+            "core_utils",
+            "display_utils",
+            "edit_utils",
+            "env_utils",
+            "light_utils",
+            "mat_utils",
+            "node_utils",
+            "nurbs_utils",
+            "rig_utils",
+            "ui_utils",
+            "uv_utils",
+            "xform_utils"
+          ],
+          "immediate_modules": [],
+          "recursive_module_count": 130
+        },
+        {
+          "name": "test",
+          "path": "test",
+          "immediate_subpackages": [],
+          "immediate_modules": [
+            "_run_hm_tests",
+            "_run_sequencer_tests",
+            "base_test",
+            "conftest",
+            "run_tests",
+            "test_anim_utils",
+            "test_attribute_manager",
+            "test_audio_events",
+            "test_auto_instancer",
+            "test_auto_instancer_scene",
+            "test_calculator",
+            "test_cam_utils",
+            "test_channel_box",
+            "test_components",
+            "test_controls",
+            "test_core_utils",
+            "test_display_utils",
+            "test_edit_utils",
+            "test_env_utils",
+            "test_game_shader",
+            "test_game_shader_config",
+            "test_group_combine",
+            "test_hierarchy_manager",
+            "test_image_to_plane",
+            "test_image_tracer",
+            "test_light_utils",
+            "test_marmoset_bridge",
+            "test_mat_utils",
+            "test_mat_utils_extended",
+            "test_material_updater",
+            "test_material_updater_diagnostics",
+            "test_maya_connection",
+            "test_maya_menu_handler",
+            "test_msao_fbx_export",
+            "test_namespace_alias_edge_cases",
+            "test_naming",
+            "test_node_utils",
+            "test_nurbs_utils",
+            "test_original_mesh_separated",
+            "test_pivot_rot_place",
+            "test_pivot_transfer_scenarios",
+            "test_playblast_exporter",
+            "test_preview",
+            "test_reference_manager",
+            "test_render_opacity",
+            "test_render_opacity_export",
+            "test_retro_alignment",
+            "test_rig_utils",
+            "test_scale_keys",
+            "test_scene_audit",
+            "test_scene_exporter",
+            "test_script_output",
+            "test_segment_keys",
+            "test_sequencer",
+            "test_sequencer_controller",
+            "test_sequencer_gui",
+            "test_sequencer_perf",
+            "test_sequencer_real_scene",
+            "test_shader_templates",
+            "test_shot_manifest",
+            "test_stagger_keys",
+            "test_telescope_rig",
+            "test_tentacle_editors",
+            "test_tube_rig_cleanliness",
+            "test_ui_utils",
+            "test_uv_cleanup_actions",
+            "test_uv_diagnostics",
+            "test_uv_utils",
+            "test_wheel_rig",
+            "test_xform_utils"
+          ],
+          "recursive_module_count": 105
+        }
+      ],
+      "code_roots": [],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 315,
+      "tracked_total_lines": 165228,
+      "tracked_nonempty_lines": 140831
+    },
+    {
+      "name": "metashape_workflow",
+      "path": "metashape_workflow",
+      "domain": "Photogrammetry",
+      "summary": "Workspace repo aligned with the Photogrammetry domain.",
+      "repo_kind": "Python package",
+      "manifests": [
+        "requirements.txt"
+      ],
+      "root_scripts": [],
+      "package_roots": [
+        {
+          "name": "metashape_workflow",
+          "path": "metashape_workflow",
+          "immediate_subpackages": [],
+          "immediate_modules": [
+            "_metashape_workflow",
+            "extract_frames_from_video",
+            "metashape_workflow_slots"
+          ],
+          "recursive_module_count": 3
+        }
+      ],
+      "code_roots": [],
+      "has_docs": true,
+      "has_tests": false,
+      "has_examples": false,
+      "tracked_code_files": 6,
+      "tracked_total_lines": 1543,
+      "tracked_nonempty_lines": 1334
+    },
+    {
+      "name": "pythontk",
+      "path": "pythontk",
+      "domain": "Core Utils (No Dependencies)",
+      "summary": "A modular Python toolkit providing utilities for file handling, string processing, iteration, math operations, and more.",
+      "repo_kind": "Python package",
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "root_scripts": [],
+      "package_roots": [
+        {
+          "name": "pythontk",
+          "path": "pythontk",
+          "immediate_subpackages": [
+            "audio_utils",
+            "color_utils",
+            "core_utils",
+            "file_utils",
+            "img_utils",
+            "iter_utils",
+            "math_utils",
+            "net_utils",
+            "str_utils",
+            "vid_utils"
+          ],
+          "immediate_modules": [],
+          "recursive_module_count": 42
+        },
+        {
+          "name": "test",
+          "path": "test",
+          "immediate_subpackages": [],
+          "immediate_modules": [
+            "conftest",
+            "manual_test_execution_monitor_integration",
+            "run_tests",
+            "test_all_packages_namespace_aliases",
+            "test_app_launcher",
+            "test_audio_utils",
+            "test_class_property",
+            "test_cli",
+            "test_color_utils",
+            "test_core",
+            "test_execution_monitor",
+            "test_execution_monitor_comprehensive",
+            "test_execution_monitor_maya",
+            "test_execution_monitor_refactor",
+            "test_file",
+            "test_fuzzy_matcher",
+            "test_help_mixin",
+            "test_hierarchy_diff",
+            "test_hierarchy_utils",
+            "test_html_presets",
+            "test_img",
+            "test_iter",
+            "test_logging_mixin",
+            "test_map_converter",
+            "test_map_factory",
+            "test_map_registry_ambiguity",
+            "test_math",
+            "test_module_reloader",
+            "test_module_resolver",
+            "test_namedtuple_container",
+            "test_namespace_handler",
+            "test_net_utils",
+            "test_package_manager",
+            "test_progression",
+            "test_singleton_mixin",
+            "test_str",
+            "test_texture_factory_non_greedy",
+            "test_vid"
+          ],
+          "recursive_module_count": 45
+        }
+      ],
+      "code_roots": [
+        {
+          "name": "examples",
+          "path": "examples",
+          "code_file_count": 2,
+          "dominant_suffixes": [
+            ".py (2)"
+          ]
+        }
+      ],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": true,
+      "tracked_code_files": 108,
+      "tracked_total_lines": 39628,
+      "tracked_nonempty_lines": 32990
+    },
+    {
+      "name": "server",
+      "path": "server",
+      "domain": "Infrastructure & Config",
+      "summary": "Workspace repo aligned with the Infrastructure & Config domain.",
+      "repo_kind": "Operations / scripts",
+      "manifests": [],
+      "root_scripts": [
+        "connect.ps1",
+        "credential-manager.ps1",
+        "diagnose.ps1",
+        "manage_db_secrets.py"
+      ],
+      "package_roots": [],
+      "code_roots": [
+        {
+          "name": "scripts",
+          "path": "scripts",
+          "code_file_count": 1,
+          "dominant_suffixes": [
+            ".sh (1)"
+          ]
+        },
+        {
+          "name": "server",
+          "path": "server",
+          "code_file_count": 40,
+          "dominant_suffixes": [
+            ".sh (13)",
+            ".yml (10)",
+            ".ps1 (7)",
+            ".conf (4)",
+            ".py (3)"
+          ]
+        },
+        {
+          "name": "test",
+          "path": "test",
+          "code_file_count": 8,
+          "dominant_suffixes": [
+            ".ps1 (8)"
+          ]
+        }
+      ],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 54,
+      "tracked_total_lines": 5286,
+      "tracked_nonempty_lines": 4556
+    },
+    {
+      "name": "tentacle",
+      "path": "tentacle",
+      "domain": "Desktop App",
+      "summary": "A multi-application marking menu and UI framework for Maya, 3ds Max, and Blender.",
+      "repo_kind": "Python package",
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "root_scripts": [],
+      "package_roots": [
+        {
+          "name": "tentacle",
+          "path": "tentacle",
+          "immediate_subpackages": [
+            "slots",
+            "ui"
+          ],
+          "immediate_modules": [
+            "tcl_blender",
+            "tcl_max",
+            "tcl_maya"
+          ],
+          "recursive_module_count": 63
+        }
+      ],
+      "code_roots": [
+        {
+          "name": "tentacletk-0.9.34",
+          "path": "tentacletk-0.9.34",
+          "code_file_count": 1,
+          "dominant_suffixes": [
+            ".py (1)"
+          ]
+        },
+        {
+          "name": "test",
+          "path": "test",
+          "code_file_count": 9,
+          "dominant_suffixes": [
+            ".py (9)"
+          ]
+        }
+      ],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 171,
+      "tracked_total_lines": 39923,
+      "tracked_nonempty_lines": 38200
+    },
+    {
+      "name": "uitk",
+      "path": "uitk",
+      "domain": "UI Library (Qt)",
+      "summary": "A comprehensive UI toolkit extending Qt Designer workflows with dynamic loading, custom widgets, and automatic signal-slot management.",
+      "repo_kind": "Python package",
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "root_scripts": [],
+      "package_roots": [
+        {
+          "name": "test",
+          "path": "test",
+          "immediate_subpackages": [],
+          "immediate_modules": [
+            "conftest",
+            "run_tests",
+            "test_color_swatch",
+            "test_events",
+            "test_expandable_list",
+            "test_file_manager",
+            "test_footer",
+            "test_header",
+            "test_hotkey_editor",
+            "test_hotkeys",
+            "test_mainwindow",
+            "test_marking_menu",
+            "test_menu",
+            "test_optionBox",
+            "test_sequencer",
+            "test_signals",
+            "test_spinbox",
+            "test_style_editor",
+            "test_style_sheet",
+            "test_switchboard",
+            "test_switchboard_sources",
+            "test_tree_column_config",
+            "test_widget_combobox",
+            "test_widgets"
+          ],
+          "recursive_module_count": 34
+        },
+        {
+          "name": "uitk",
+          "path": "uitk",
+          "immediate_subpackages": [
+            "examples",
+            "widgets"
+          ],
+          "immediate_modules": [
+            "events",
+            "file_manager",
+            "switchboard"
+          ],
+          "recursive_module_count": 74
+        }
+      ],
+      "code_roots": [],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 121,
+      "tracked_total_lines": 55810,
+      "tracked_nonempty_lines": 45974
+    },
+    {
+      "name": "unitytk",
+      "path": "unitytk",
+      "domain": "",
+      "summary": "A modular Python toolkit for Unity interaction.",
+      "repo_kind": "Python package",
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "root_scripts": [],
+      "package_roots": [
+        {
+          "name": "test",
+          "path": "test",
+          "immediate_subpackages": [],
+          "immediate_modules": [
+            "base_test",
+            "run_tests",
+            "test_audio_events_integration",
+            "test_audio_trigger_roundtrip",
+            "test_c130_fcr_integration",
+            "test_c5m_visibility",
+            "test_launcher",
+            "test_render_opacity_controller",
+            "test_render_opacity_integration",
+            "test_shared_material_standalone",
+            "test_standalone_enduser"
+          ],
+          "recursive_module_count": 11
+        },
+        {
+          "name": "unitytk",
+          "path": "unitytk",
+          "immediate_subpackages": [
+            "templates"
+          ],
+          "immediate_modules": [
+            "launcher",
+            "scene_builder"
+          ],
+          "recursive_module_count": 2
+        }
+      ],
+      "code_roots": [],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 18,
+      "tracked_total_lines": 7091,
+      "tracked_nonempty_lines": 6003
+    },
+    {
+      "name": "www",
+      "path": "www",
+      "domain": "Web",
+      "summary": "Workspace repo aligned with the Web domain.",
+      "repo_kind": "Operations / scripts",
+      "manifests": [],
+      "root_scripts": [
+        "connect.ps1"
+      ],
+      "package_roots": [],
+      "code_roots": [
+        {
+          "name": "test",
+          "path": "test",
+          "code_file_count": 3,
+          "dominant_suffixes": [
+            ".py (2)",
+            ".sh (1)"
+          ]
+        },
+        {
+          "name": "www",
+          "path": "www",
+          "code_file_count": 23,
+          "dominant_suffixes": [
+            ".js (18)",
+            ".html (3)",
+            ".css (2)"
+          ]
+        }
+      ],
+      "has_docs": true,
+      "has_tests": true,
+      "has_examples": false,
+      "tracked_code_files": 28,
+      "tracked_total_lines": 61494,
+      "tracked_nonempty_lines": 56377
+    }
+  ],
+  "non_repo_code_folders": [
+    {
+      "name": "androidtk",
+      "path": "androidtk",
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "package_roots": [
+        "androidtk"
+      ],
+      "root_scripts": [
+        "root_pixel7.py",
+        "run_tests.py"
+      ],
+      "code_file_count": 16
+    },
+    {
+      "name": "media_sorter",
+      "path": "media_sorter",
+      "manifests": [],
+      "package_roots": [],
+      "root_scripts": [
+        "fix_srts.py"
+      ],
+      "code_file_count": 1
+    },
+    {
+      "name": "test",
+      "path": "test",
+      "manifests": [],
+      "package_roots": [],
+      "root_scripts": [],
+      "code_file_count": 405
+    }
+  ]
+}

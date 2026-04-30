@@ -1,8 +1,39 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Dict, Sequence, Union
 from enum import Enum
-import pymel.core as pm
+from typing import List, Tuple, Optional, Dict, Sequence, Union
+
+import maya.cmds as cmds
+import maya.api.OpenMaya as om
+
+
+def _has_attr(node: str, attr: str) -> bool:
+    return cmds.attributeQuery(attr, node=node, exists=True)
+
+
+def _get_shape(node: str) -> Optional[str]:
+    shapes = cmds.listRelatives(node, shapes=True, noIntermediate=True, fullPath=True) or []
+    return shapes[0] if shapes else None
+
+
+def _num_vertices(node: str) -> int:
+    return cmds.polyEvaluate(node, vertex=True)
+
+
+def _list_history(node: str, type: Optional[str] = None) -> List[str]:
+    history = cmds.listHistory(node) or []
+    if type is not None:
+        history = cmds.ls(history, type=type) or []
+    return history
+
+
+def _get_parent(node: str) -> Optional[str]:
+    parents = cmds.listRelatives(node, parent=True) or []
+    return parents[0] if parents else None
+
+
+def _info(msg: str) -> None:
+    om.MGlobal.displayInfo(msg)
 
 
 # ===============================================================================
@@ -47,9 +78,9 @@ class TimeRange:
         return self.start_frame <= frame <= self.end_frame
 
     @classmethod
-    def from_blendshape_keyframes(cls, blendshape_node: pm.PyNode) -> TimeRange:
+    def from_blendshape_keyframes(cls, blendshape_node: str) -> TimeRange:
         """Extract time range from blendShape keyframe data."""
-        keyframe_times = pm.keyframe(f"{blendshape_node}.weight[0]", query=True)
+        keyframe_times = cmds.keyframe(f"{blendshape_node}.weight[0]", query=True)
         if not keyframe_times or len(keyframe_times) < 2:
             raise ValueError(f"Insufficient keyframe data in {blendshape_node}")
         return cls(int(min(keyframe_times)), int(max(keyframe_times)))
@@ -57,7 +88,7 @@ class TimeRange:
     @classmethod
     def from_weight_attr(cls, weight_attr: str) -> TimeRange:
         """Extract time range from specific weight attribute (weight-index aware)."""
-        keyframe_times = pm.keyframe(weight_attr, query=True)
+        keyframe_times = cmds.keyframe(weight_attr, query=True)
         if not keyframe_times or len(keyframe_times) < 2:
             raise ValueError(f"Insufficient keyframe data on {weight_attr}")
         return cls(int(min(keyframe_times)), int(max(keyframe_times)))
@@ -67,7 +98,7 @@ class TimeRange:
 class CorrectiveShape:
     """Represents a corrective blendShape target with comprehensive metadata."""
 
-    geometry_node: pm.PyNode
+    geometry_node: str
     deformation_weight: float = field(init=False)
     blendshape_node_name: str = field(init=False)
     base_geometry_name: str = field(init=False)
@@ -90,7 +121,7 @@ class CorrectiveShape:
             "baseGeometryReference",
         ]
         missing_attrs = [
-            attr for attr in required_attributes if not self.geometry_node.hasAttr(attr)
+            attr for attr in required_attributes if not _has_attr(self.geometry_node, attr)
         ]
         if missing_attrs:
             raise ValueError(
@@ -98,29 +129,29 @@ class CorrectiveShape:
             )
 
     def _extract_weight(self) -> float:
-        return round(float(pm.getAttr(f"{self.geometry_node}.deformationWeight")), 3)
+        return round(float(cmds.getAttr(f"{self.geometry_node}.deformationWeight")), 3)
 
     def _extract_blendshape_reference(self) -> str:
-        return str(pm.getAttr(f"{self.geometry_node}.blendShapeReference"))
+        return str(cmds.getAttr(f"{self.geometry_node}.blendShapeReference"))
 
     def _extract_base_reference(self) -> str:
-        return str(pm.getAttr(f"{self.geometry_node}.baseGeometryReference"))
+        return str(cmds.getAttr(f"{self.geometry_node}.baseGeometryReference"))
 
     def _extract_frame_reference(self) -> Optional[int]:
-        if self.geometry_node.hasAttr("creationFrame"):
-            return int(pm.getAttr(f"{self.geometry_node}.creationFrame"))
+        if _has_attr(self.geometry_node, "creationFrame"):
+            return int(cmds.getAttr(f"{self.geometry_node}.creationFrame"))
         return None
 
     def update_node_references(
-        self, new_blendshape: pm.PyNode, new_base: pm.PyNode
+        self, new_blendshape: str, new_base: str
     ) -> None:
         """Update corrective's node references for new deformation system."""
-        pm.setAttr(
+        cmds.setAttr(
             f"{self.geometry_node}.blendShapeReference",
             str(new_blendshape),
             type="string",
         )
-        pm.setAttr(
+        cmds.setAttr(
             f"{self.geometry_node}.baseGeometryReference", str(new_base), type="string"
         )
         self.blendshape_node_name = str(new_blendshape)
@@ -143,24 +174,24 @@ class GeometryValidator:
     """Comprehensive geometry validation for deformation systems."""
 
     @staticmethod
-    def validate_mesh_transform(node: pm.PyNode) -> pm.nt.Transform:
+    def validate_mesh_transform(node: str) -> str:
         """Ensure node is a valid polygon mesh transform."""
-        if not hasattr(node, "getShape"):
+        if not cmds.objExists(node) or cmds.nodeType(node) != "transform":
             raise TypeError(f"{node} is not a transform node")
 
-        shape_node = node.getShape()
-        if not shape_node or not isinstance(shape_node, pm.nodetypes.Mesh):
+        shape_node = _get_shape(node)
+        if not shape_node or cmds.nodeType(shape_node) != "mesh":
             raise TypeError(f"{node} does not contain polygon mesh geometry")
         return node
 
     @staticmethod
-    def get_vertex_count(mesh_transform: pm.PyNode) -> int:
+    def get_vertex_count(mesh_transform: str) -> int:
         """Extract vertex count from mesh geometry."""
         validated_mesh = GeometryValidator.validate_mesh_transform(mesh_transform)
-        return validated_mesh.getShape().numVertices()
+        return _num_vertices(validated_mesh)
 
     @staticmethod
-    def ensure_topology_compatibility(*mesh_transforms: pm.PyNode) -> None:
+    def ensure_topology_compatibility(*mesh_transforms: str) -> None:
         """Verify all meshes have identical vertex topology."""
         if len(mesh_transforms) < 2:
             return
@@ -177,19 +208,19 @@ class GeometryValidator:
             raise ValueError(f"Topology mismatch: {', '.join(mesh_info)}")
 
     @staticmethod
-    def validate_blendshape_node(blendshape_node: pm.PyNode) -> bool:
+    def validate_blendshape_node(blendshape_node: str) -> bool:
         """Validate blendShape deformer configuration."""
-        if not pm.objExists(blendshape_node):
+        if not cmds.objExists(blendshape_node):
             raise ValueError(f"BlendShape node {blendshape_node} does not exist")
 
         # Verify envelope setting
-        envelope_value = pm.getAttr(f"{blendshape_node}.envelope")
+        envelope_value = cmds.getAttr(f"{blendshape_node}.envelope")
         if envelope_value != 1.0:
-            pm.warning(f"BlendShape envelope is {envelope_value}, should be 1.0")
+            cmds.warning(f"BlendShape envelope is {envelope_value}, should be 1.0")
 
         # Check weight attribute accessibility
-        if pm.getAttr(f"{blendshape_node}.weight[0]", lock=True):
-            pm.warning(f"BlendShape weight attribute is locked")
+        if cmds.getAttr(f"{blendshape_node}.weight[0]", lock=True):
+            cmds.warning(f"BlendShape weight attribute is locked")
 
         return True
 
@@ -245,17 +276,17 @@ class AssetOrganizer:
     }
 
     @classmethod
-    def ensure_organization_group(cls, group_name: str) -> pm.nt.Transform:
+    def ensure_organization_group(cls, group_name: str) -> str:
         """Create or retrieve organizational group."""
-        if pm.objExists(group_name):
-            return pm.PyNode(group_name)
+        if cmds.objExists(group_name):
+            return group_name
 
         # Create group with proper organization
-        group = pm.group(empty=True, name=group_name)
+        group = cmds.group(empty=True, name=group_name)
 
         # Set group attributes for identification
-        if not group.hasAttr("isDeformationGroup"):
-            pm.addAttr(
+        if not _has_attr(group, "isDeformationGroup"):
+            cmds.addAttr(
                 group,
                 longName="isDeformationGroup",
                 attributeType="bool",
@@ -272,16 +303,16 @@ class AssetOrganizer:
         }
 
         if group_name in group_colors:
-            group.overrideEnabled.set(True)
-            group.overrideColor.set(group_colors[group_name])
+            cmds.setAttr(f"{group}.overrideEnabled", True)
+            cmds.setAttr(f"{group}.overrideColor", group_colors[group_name])
 
-        pm.displayInfo(f"Created organization group: {group_name}")
+        _info(f"Created organization group: {group_name}")
         return group
 
     @classmethod
     def organize_corrective_shapes(
-        cls, corrective_nodes: Sequence[pm.PyNode]
-    ) -> pm.nt.Transform:
+        cls, corrective_nodes: Sequence[str]
+    ) -> str:
         """Organize corrective shapes into structured hierarchy."""
         correctives_group = cls.ensure_organization_group(
             cls.ORGANIZATION_GROUPS["correctives"]
@@ -289,12 +320,12 @@ class AssetOrganizer:
 
         organized_count = 0
         for node in corrective_nodes:
-            if node.getParent() != correctives_group:
-                pm.parent(node, correctives_group)
+            if _get_parent(node) != correctives_group:
+                cmds.parent(node, correctives_group)
                 organized_count += 1
 
         if organized_count > 0:
-            pm.displayInfo(
+            _info(
                 f"Organized {organized_count} corrective shapes into {correctives_group}"
             )
 
@@ -302,8 +333,8 @@ class AssetOrganizer:
 
     @classmethod
     def organize_target_geometry(
-        cls, target_nodes: Sequence[pm.PyNode]
-    ) -> pm.nt.Transform:
+        cls, target_nodes: Sequence[str]
+    ) -> str:
         """Organize target geometry into structured hierarchy."""
         targets_group = cls.ensure_organization_group(
             cls.ORGANIZATION_GROUPS["targets"]
@@ -311,12 +342,12 @@ class AssetOrganizer:
 
         organized_count = 0
         for node in target_nodes:
-            if node.getParent() != targets_group:
-                pm.parent(node, targets_group)
+            if _get_parent(node) != targets_group:
+                cmds.parent(node, targets_group)
                 organized_count += 1
 
         if organized_count > 0:
-            pm.displayInfo(
+            _info(
                 f"Organized {organized_count} target geometries into {targets_group}"
             )
 
@@ -324,8 +355,8 @@ class AssetOrganizer:
 
     @classmethod
     def organize_source_geometry(
-        cls, source_nodes: Sequence[pm.PyNode]
-    ) -> pm.nt.Transform:
+        cls, source_nodes: Sequence[str]
+    ) -> str:
         """Organize source geometry into structured hierarchy."""
         sources_group = cls.ensure_organization_group(
             cls.ORGANIZATION_GROUPS["sources"]
@@ -333,12 +364,12 @@ class AssetOrganizer:
 
         organized_count = 0
         for node in source_nodes:
-            if node.getParent() != sources_group:
-                pm.parent(node, sources_group)
+            if _get_parent(node) != sources_group:
+                cmds.parent(node, sources_group)
                 organized_count += 1
 
         if organized_count > 0:
-            pm.displayInfo(
+            _info(
                 f"Organized {organized_count} source geometries into {sources_group}"
             )
 
@@ -346,49 +377,49 @@ class AssetOrganizer:
 
     @classmethod
     def organize_temporary_geometry(
-        cls, temp_nodes: Sequence[pm.PyNode]
-    ) -> pm.nt.Transform:
+        cls, temp_nodes: Sequence[str]
+    ) -> str:
         """Organize temporary geometry into structured hierarchy."""
         temp_group = cls.ensure_organization_group(cls.ORGANIZATION_GROUPS["temp"])
 
         organized_count = 0
         for node in temp_nodes:
-            if node.getParent() != temp_group:
-                pm.parent(node, temp_group)
+            if _get_parent(node) != temp_group:
+                cmds.parent(node, temp_group)
                 organized_count += 1
 
         if organized_count > 0:
-            pm.displayInfo(
+            _info(
                 f"Organized {organized_count} temporary items into {temp_group}"
             )
 
         return temp_group
 
     @classmethod
-    def archive_geometry_node(cls, geometry_node: pm.PyNode) -> None:
+    def archive_geometry_node(cls, geometry_node: str) -> None:
         """Move geometry to archive group."""
         archive_group = cls.ensure_organization_group(
             cls.ORGANIZATION_GROUPS["archive"]
         )
 
-        if geometry_node.getParent() != archive_group:
-            pm.parent(geometry_node, archive_group)
+        if _get_parent(geometry_node) != archive_group:
+            cmds.parent(geometry_node, archive_group)
             # Hide archived items
-            geometry_node.visibility.set(False)
-            pm.displayInfo(f"Archived: {geometry_node}")
+            cmds.setAttr(f"{geometry_node}.visibility", False)
+            _info(f"Archived: {geometry_node}")
 
     @classmethod
     def cleanup_empty_organization(cls) -> int:
         """Remove empty organizational groups from scene."""
         removed_count = 0
         for group_name in cls.ORGANIZATION_GROUPS.values():
-            if pm.objExists(group_name):
-                group_node = pm.PyNode(group_name)
-                child_nodes = pm.listRelatives(group_node, children=True) or []
+            if cmds.objExists(group_name):
+                group_node = group_name
+                child_nodes = cmds.listRelatives(group_node, children=True) or []
                 if not child_nodes:
-                    pm.delete(group_node)
+                    cmds.delete(group_node)
                     removed_count += 1
-                    pm.displayInfo(f"Removed empty group: {group_name}")
+                    _info(f"Removed empty group: {group_name}")
         return removed_count
 
     @classmethod
@@ -398,19 +429,19 @@ class AssetOrganizer:
 
         # Clean temporary group contents
         temp_group_name = cls.ORGANIZATION_GROUPS["temp"]
-        if pm.objExists(temp_group_name):
-            temp_group = pm.PyNode(temp_group_name)
-            temp_objects = pm.listRelatives(temp_group, children=True) or []
+        if cmds.objExists(temp_group_name):
+            temp_group = temp_group_name
+            temp_objects = cmds.listRelatives(temp_group, children=True) or []
 
             for obj in temp_objects:
-                pm.delete(obj)
+                cmds.delete(obj)
                 cleaned_count += 1
 
             # Remove the empty group
-            if not pm.listRelatives(temp_group, children=True):
-                pm.delete(temp_group)
+            if not cmds.listRelatives(temp_group, children=True):
+                cmds.delete(temp_group)
 
-        pm.displayInfo(f"Cleaned up {cleaned_count} temporary objects")
+        _info(f"Cleaned up {cleaned_count} temporary objects")
         return cleaned_count
 
     @classmethod
@@ -430,7 +461,7 @@ class AssetOrganizer:
             corrective_nodes = [c.geometry_node for c in correctives]
             cls.organize_corrective_shapes(corrective_nodes)
 
-        pm.displayInfo("All workflow objects organized into proper groups")
+        _info("All workflow objects organized into proper groups")
 
     @classmethod
     def get_organization_summary(cls) -> Dict[str, int]:
@@ -439,9 +470,9 @@ class AssetOrganizer:
 
         for category, group_name in cls.ORGANIZATION_GROUPS.items():
             count = 0
-            if pm.objExists(group_name):
-                group_node = pm.PyNode(group_name)
-                children = pm.listRelatives(group_node, children=True) or []
+            if cmds.objExists(group_name):
+                group_node = group_name
+                children = cmds.listRelatives(group_node, children=True) or []
                 count = len(children)
             summary[category] = count
 
@@ -453,21 +484,21 @@ class GeometryOperations:
 
     @staticmethod
     def create_clean_duplicate(
-        source_mesh: pm.PyNode, duplicate_name: str
-    ) -> pm.nt.Transform:
+        source_mesh: str, duplicate_name: str
+    ) -> str:
         """Create geometry duplicate without construction history."""
-        duplicate_node = pm.duplicate(
+        duplicate_node = cmds.duplicate(
             source_mesh, name=duplicate_name, returnRootsOnly=True
         )[0]
-        pm.delete(duplicate_node, constructionHistory=True)
+        cmds.delete(duplicate_node, constructionHistory=True)
         return duplicate_node
 
     @staticmethod
     def apply_corrective_metadata(
-        geometry_node: pm.PyNode,
+        geometry_node: str,
         deformation_weight: float,
-        blendshape_node: pm.PyNode,
-        base_geometry: pm.PyNode,
+        blendshape_node: str,
+        base_geometry: str,
         creation_frame: Optional[int] = None,
     ) -> None:
         """Apply comprehensive metadata to corrective shape geometry."""
@@ -482,13 +513,13 @@ class GeometryOperations:
             metadata_attributes["creationFrame"] = (creation_frame, "long")
 
         for attribute_name, (value, data_type) in metadata_attributes.items():
-            if not geometry_node.hasAttr(attribute_name):
+            if not _has_attr(geometry_node, attribute_name):
                 if data_type == "string":
-                    pm.addAttr(
+                    cmds.addAttr(
                         geometry_node, longName=attribute_name, dataType="string"
                     )
                 else:
-                    pm.addAttr(
+                    cmds.addAttr(
                         geometry_node,
                         longName=attribute_name,
                         attributeType=data_type,
@@ -496,11 +527,11 @@ class GeometryOperations:
                     )
 
             if data_type == "string":
-                pm.setAttr(
+                cmds.setAttr(
                     f"{geometry_node}.{attribute_name}", str(value), type="string"
                 )
             else:
-                pm.setAttr(f"{geometry_node}.{attribute_name}", value)
+                cmds.setAttr(f"{geometry_node}.{attribute_name}", value)
 
 
 # ===============================================================================
@@ -513,9 +544,9 @@ class DeformationController:
 
     def __init__(
         self,
-        base_geometry: pm.PyNode,
-        target_geometry: pm.PyNode,
-        blendshape_node: pm.PyNode,
+        base_geometry: str,
+        target_geometry: str,
+        blendshape_node: str,
     ):
         self.base_geometry = GeometryValidator.validate_mesh_transform(base_geometry)
         self.target_geometry = GeometryValidator.validate_mesh_transform(
@@ -535,7 +566,7 @@ class DeformationController:
     def _resolve_target_index(self) -> int:
         """Resolve the blendShape target index for self.target_geometry."""
         # Get alias pairs from blendShape node
-        alias_pairs = pm.aliasAttr(self.blendshape_node, query=True) or []
+        alias_pairs = cmds.aliasAttr(self.blendshape_node, query=True) or []
         alias_to_index = {}
 
         # Parse alias pairs into dictionary
@@ -556,7 +587,7 @@ class DeformationController:
 
         # Target missing: add it and create alias
         next_index = len(alias_to_index)
-        pm.blendShape(
+        cmds.blendShape(
             self.blendshape_node,
             edit=True,
             target=(self.base_geometry, next_index, self.target_geometry, 1.0),
@@ -564,7 +595,7 @@ class DeformationController:
 
         # Try to create alias (may fail if name conflicts exist)
         try:
-            pm.aliasAttr(target_alias, f"{self.blendshape_node}.weight[{next_index}]")
+            cmds.aliasAttr(target_alias, f"{self.blendshape_node}.weight[{next_index}]")
         except Exception:
             pass  # Alias creation is optional
 
@@ -572,23 +603,23 @@ class DeformationController:
 
     def get_current_weight(self) -> float:
         """Query current blendShape deformation weight."""
-        return float(pm.getAttr(self.weight_attr))
+        return float(cmds.getAttr(self.weight_attr))
 
     def set_deformation_weight(self, weight: float) -> None:
         """Set blendShape deformation weight with validation."""
         validated_weight = DeformationMath.clamp_weight(weight)
-        pm.setAttr(self.weight_attr, validated_weight)
+        cmds.setAttr(self.weight_attr, validated_weight)
 
     def create_linear_keyframe_animation(self, time_range: TimeRange) -> None:
         """Establish linear keyframe interpolation across time range."""
         # Clear existing keyframe data
-        pm.cutKey(
+        cmds.cutKey(
             self.blendshape_node, attribute=f"weight[{self.target_index}]", clear=True
         )
 
         # Set start keyframe (zero deformation)
-        pm.currentTime(time_range.start_frame)
-        pm.setKeyframe(
+        cmds.currentTime(time_range.start_frame)
+        cmds.setKeyframe(
             self.blendshape_node,
             attribute=f"weight[{self.target_index}]",
             value=0.0,
@@ -596,8 +627,8 @@ class DeformationController:
         )
 
         # Set end keyframe (full deformation)
-        pm.currentTime(time_range.end_frame)
-        pm.setKeyframe(
+        cmds.currentTime(time_range.end_frame)
+        cmds.setKeyframe(
             self.blendshape_node,
             attribute=f"weight[{self.target_index}]",
             value=1.0,
@@ -605,7 +636,7 @@ class DeformationController:
         )
 
         # Configure linear tangent interpolation
-        pm.keyTangent(
+        cmds.keyTangent(
             self.blendshape_node,
             attribute=f"weight[{self.target_index}]",
             time=(time_range.start_frame, time_range.end_frame),
@@ -618,7 +649,7 @@ class DeformationController:
         original_weight = self.get_current_weight()
         try:
             self.set_deformation_weight(preview_weight)
-            pm.refresh()
+            cmds.refresh()
             return True
         finally:
             self.set_deformation_weight(original_weight)
@@ -630,19 +661,19 @@ class DeformationController:
     @classmethod
     def create_deformation_system(
         cls,
-        base_geometry: pm.PyNode,
-        target_geometry: pm.PyNode,
+        base_geometry: str,
+        target_geometry: str,
         system_name: str = "deformationSystem",
     ) -> DeformationController:
         """Create new blendShape deformation system with proper configuration."""
         GeometryValidator.ensure_topology_compatibility(base_geometry, target_geometry)
 
         # Check for existing blendShape deformer
-        deformation_history = base_geometry.listHistory(type="blendShape")
+        deformation_history = _list_history(base_geometry, type="blendShape")
         if deformation_history:
             blendshape_node = deformation_history[0]
         else:
-            blendshape_node = pm.blendShape(
+            blendshape_node = cmds.blendShape(
                 target_geometry,
                 base_geometry,
                 name=system_name,
@@ -651,8 +682,8 @@ class DeformationController:
             )[0]
 
         # Configure deformer attributes
-        pm.setAttr(f"{blendshape_node}.envelope", 1.0)
-        pm.setAttr(f"{blendshape_node}.weight[0]", keyable=True, lock=False)
+        cmds.setAttr(f"{blendshape_node}.envelope", 1.0)
+        cmds.setAttr(f"{blendshape_node}.weight[0]", keyable=True, lock=False)
 
         # Create controller which will resolve/alias target index
         controller = cls(base_geometry, target_geometry, blendshape_node)
@@ -678,7 +709,7 @@ class CorrectiveShapeFactory:
 
                 # Apply deformation at target weight
                 self.deformation_controller.set_deformation_weight(normalized_weight)
-                pm.refresh()
+                cmds.refresh()
 
                 # Capture deformed geometry state
                 corrective_name = (
@@ -690,10 +721,10 @@ class CorrectiveShapeFactory:
 
                 # Reset to neutral for blendShape target creation
                 self.deformation_controller.set_deformation_weight(0.0)
-                pm.refresh()
+                cmds.refresh()
 
                 # Register as blendShape intermediate target using correct target index
-                pm.blendShape(
+                cmds.blendShape(
                     self.deformation_controller.blendshape_node,
                     edit=True,
                     inBetween=True,
@@ -732,13 +763,13 @@ class CorrectiveShapeFactory:
         """Create corrective shapes at specific animation frames."""
         animation_range = self.deformation_controller.extract_animation_time_range()
         original_weight = self.deformation_controller.get_current_weight()
-        original_time = pm.currentTime(query=True)
+        original_time = cmds.currentTime(query=True)
         created_correctives = []
 
         try:
             for frame_position in frame_positions:
                 if not animation_range.contains_frame(frame_position):
-                    pm.warning(
+                    cmds.warning(
                         f"Frame {frame_position} outside animation range "
                         f"{animation_range.start_frame}-{animation_range.end_frame}"
                     )
@@ -749,9 +780,9 @@ class CorrectiveShapeFactory:
                 )
 
                 # Set time and evaluate deformation
-                pm.currentTime(frame_position)
+                cmds.currentTime(frame_position)
                 self.deformation_controller.set_deformation_weight(interpolated_weight)
-                pm.refresh()
+                cmds.refresh()
 
                 # Capture temporal geometry state
                 corrective_name = f"{naming_prefix}_f{frame_position}_w{int(interpolated_weight * 1000):03d}"
@@ -761,10 +792,10 @@ class CorrectiveShapeFactory:
 
                 # Reset for target registration
                 self.deformation_controller.set_deformation_weight(0.0)
-                pm.refresh()
+                cmds.refresh()
 
                 # Register as blendShape intermediate target using correct target index
-                pm.blendShape(
+                cmds.blendShape(
                     self.deformation_controller.blendshape_node,
                     edit=True,
                     inBetween=True,
@@ -790,7 +821,7 @@ class CorrectiveShapeFactory:
 
         finally:
             self.deformation_controller.set_deformation_weight(original_weight)
-            pm.currentTime(original_time)
+            cmds.currentTime(original_time)
 
         # Organize created correctives
         AssetOrganizer.organize_corrective_shapes(
@@ -818,17 +849,17 @@ class CorrectiveManager:
 
         # Search organized groups
         for group_name in cls.LEGACY_GROUP_NAMES:
-            if pm.objExists(group_name):
+            if cmds.objExists(group_name):
                 group_children = (
-                    pm.listRelatives(group_name, children=True, type="transform") or []
+                    cmds.listRelatives(group_name, children=True, type="transform") or []
                 )
                 corrective_nodes.extend(group_children)
 
         # Search loose corrective shapes
         loose_correctives = [
             node
-            for node in pm.ls(type="transform")
-            if node.hasAttr("isCorrectiveShape")
+            for node in cmds.ls(type="transform")
+            if _has_attr(node, "isCorrectiveShape")
         ]
         corrective_nodes.extend(loose_correctives)
 
@@ -839,13 +870,13 @@ class CorrectiveManager:
                 continue
             discovered_nodes.add(node)
 
-            if node.hasAttr("isCorrectiveShape") and pm.getAttr(
+            if _has_attr(node, "isCorrectiveShape") and cmds.getAttr(
                 f"{node}.isCorrectiveShape"
             ):
                 try:
                     validated_correctives.append(CorrectiveShape(node))
                 except ValueError:
-                    pm.warning(f"Invalid corrective shape: {node}")
+                    cmds.warning(f"Invalid corrective shape: {node}")
                     continue
 
         return sorted(validated_correctives, key=lambda c: c.deformation_weight)
@@ -885,13 +916,13 @@ class CorrectiveManager:
                 primary_corrective = corrective_group[-1]
 
                 if len(corrective_group) > 1 and not skip_weight_conflicts:
-                    pm.warning(
+                    cmds.warning(
                         f"Multiple correctives at weight {weight}, "
                         f"using: {primary_corrective.geometry_node}"
                     )
 
                 try:
-                    pm.blendShape(
+                    cmds.blendShape(
                         deformation_controller.blendshape_node,
                         edit=True,
                         inBetween=True,
@@ -907,7 +938,7 @@ class CorrectiveManager:
                     if "Weights must be unique" in str(e) and skip_weight_conflicts:
                         continue  # Skip conflicting weights
                     else:
-                        pm.warning(
+                        cmds.warning(
                             f"Failed to apply {primary_corrective.geometry_node}: {e}"
                         )
 
@@ -918,7 +949,7 @@ class CorrectiveManager:
 
     @classmethod
     def update_corrective_references(
-        cls, new_blendshape: pm.PyNode, new_base_geometry: pm.PyNode
+        cls, new_blendshape: str, new_base_geometry: str
     ) -> List[CorrectiveShape]:
         """Update all corrective references for new deformation system."""
         correctives = cls.discover_scene_correctives()
@@ -951,8 +982,8 @@ class BlendShapeDeformationWorkflow:
 
     def initialize_deformation_system(
         self,
-        base_geometry: Optional[pm.PyNode] = None,
-        target_geometry: Optional[pm.PyNode] = None,
+        base_geometry: Optional[str] = None,
+        target_geometry: Optional[str] = None,
         animation_range: Union[TimeRange, Tuple[int, int]] = (5500, 5800),
         system_name: str = "deformationSystem",
         enable_preview: bool = True,
@@ -973,9 +1004,9 @@ class BlendShapeDeformationWorkflow:
         try:
             # Handle selection-based input
             if base_geometry is None or target_geometry is None:
-                selection = pm.selected()
+                selection = cmds.ls(selection=True)
                 if len(selection) != 2:
-                    pm.error(
+                    cmds.error(
                         "Please select exactly 2 meshes or provide both parameters"
                     )
                     return False
@@ -1011,14 +1042,14 @@ class BlendShapeDeformationWorkflow:
             # Auto-organize workflow objects after initialization
             self._auto_organize_if_needed()
 
-            pm.displayInfo(
+            _info(
                 f"Deformation system initialized: {base_geometry} → {target_geometry} "
                 f"({animation_range.start_frame}-{animation_range.end_frame})"
             )
             return True
 
         except Exception as e:
-            pm.error(f"Failed to initialize deformation system: {e}")
+            cmds.error(f"Failed to initialize deformation system: {e}")
             return False
 
     def create_corrective_shapes(
@@ -1100,11 +1131,11 @@ class BlendShapeDeformationWorkflow:
         self._auto_organize_if_needed()
 
         if applied_correctives:
-            pm.displayInfo(
+            _info(
                 f"Applied {len(applied_correctives)} corrective modifications"
             )
         else:
-            pm.warning("No corrective modifications found to apply")
+            cmds.warning("No corrective modifications found to apply")
 
         return applied_correctives
 
@@ -1133,25 +1164,25 @@ class BlendShapeDeformationWorkflow:
                 break
 
         if not target_corrective:
-            pm.warning(f"No corrective found at weight {target_weight}")
+            cmds.warning(f"No corrective found at weight {target_weight}")
             return None
 
         if edit_mode:
             # Enter edit mode: set deformation weight and make corrective visible
             self.deformation_controller.set_deformation_weight(target_weight)
-            pm.refresh()
+            cmds.refresh()
 
             # Make corrective geometry visible and selectable
-            if target_corrective.geometry_node.visibility.get() == False:
-                target_corrective.geometry_node.visibility.set(True)
+            if cmds.getAttr(f"{target_corrective.geometry_node}.visibility") == False:
+                cmds.setAttr(f"{target_corrective.geometry_node}.visibility", True)
 
-            pm.select(target_corrective.geometry_node, replace=True)
+            cmds.select(target_corrective.geometry_node, replace=True)
 
-            pm.displayInfo(
+            _info(
                 f"Editing corrective at weight {target_weight}. "
                 f"Edit geometry: {target_corrective.geometry_node}"
             )
-            pm.displayInfo(
+            _info(
                 "When finished editing, call workflow.apply_corrective_edits() "
                 "or workflow.edit_corrective_frame(weight, edit_mode=False)"
             )
@@ -1177,16 +1208,16 @@ class BlendShapeDeformationWorkflow:
 
         if target_corrective is None:
             # Try to find corrective from current selection
-            selected = pm.selected()
+            selected = cmds.ls(selection=True)
             if not selected:
-                pm.warning(
+                cmds.warning(
                     "No corrective selected. Please select a corrective geometry."
                 )
                 return False
 
             selected_node = selected[0]
-            if not selected_node.hasAttr("isCorrectiveShape"):
-                pm.warning(f"{selected_node} is not a corrective shape.")
+            if not _has_attr(selected_node, "isCorrectiveShape"):
+                cmds.warning(f"{selected_node} is not a corrective shape.")
                 return False
 
             target_corrective = CorrectiveShape(selected_node)
@@ -1200,7 +1231,7 @@ class BlendShapeDeformationWorkflow:
             self._remove_intermediate_target(corrective.deformation_weight)
 
             # Re-add the corrective with updated geometry
-            pm.blendShape(
+            cmds.blendShape(
                 self.deformation_controller.blendshape_node,
                 edit=True,
                 inBetween=True,
@@ -1212,13 +1243,13 @@ class BlendShapeDeformationWorkflow:
                 ),
             )
 
-            pm.displayInfo(
+            _info(
                 f"Applied edits for corrective at weight {corrective.deformation_weight}"
             )
             return True
 
         except Exception as e:
-            pm.error(f"Failed to apply corrective edits: {e}")
+            cmds.error(f"Failed to apply corrective edits: {e}")
             return False
 
     def _remove_intermediate_target(self, weight: float) -> None:
@@ -1226,7 +1257,7 @@ class BlendShapeDeformationWorkflow:
         try:
             # Query existing intermediate targets
             intermediate_info = (
-                pm.blendShape(
+                cmds.blendShape(
                     self.deformation_controller.blendshape_node,
                     query=True,
                     inBetween=True,
@@ -1240,7 +1271,7 @@ class BlendShapeDeformationWorkflow:
                 if i + 1 < len(intermediate_info):
                     target_weight = intermediate_info[i + 1]
                     if abs(target_weight - weight) < 0.001:
-                        pm.blendShape(
+                        cmds.blendShape(
                             self.deformation_controller.blendshape_node,
                             edit=True,
                             remove=True,
@@ -1272,17 +1303,17 @@ class BlendShapeDeformationWorkflow:
                 "weight": corrective.deformation_weight,
                 "geometry": str(corrective.geometry_node),
                 "frame": corrective.creation_frame,
-                "visible": corrective.geometry_node.visibility.get(),
+                "visible": cmds.getAttr(f"{corrective.geometry_node}.visibility"),
             }
             frame_info.append(info)
 
         # Sort by weight
         frame_info.sort(key=lambda x: x["weight"])
 
-        pm.displayInfo(f"Found {len(frame_info)} corrective frames:")
+        _info(f"Found {len(frame_info)} corrective frames:")
         for info in frame_info:
             frame_str = f" (frame {info['frame']})" if info["frame"] else ""
-            pm.displayInfo(f"  Weight {info['weight']}: {info['geometry']}{frame_str}")
+            _info(f"  Weight {info['weight']}: {info['geometry']}{frame_str}")
 
         return frame_info
 
@@ -1310,26 +1341,26 @@ class BlendShapeDeformationWorkflow:
             correctives = CorrectiveManager.discover_scene_correctives()
             for corrective in correctives:
                 AssetOrganizer.archive_geometry_node(corrective.geometry_node)
-            pm.displayInfo(f"Archived {len(correctives)} corrective shapes")
+            _info(f"Archived {len(correctives)} corrective shapes")
 
         if cleanup_temporary:
             cleaned_count = AssetOrganizer.cleanup_temporary_objects()
             if cleaned_count > 0:
-                pm.displayInfo(f"Cleaned up {cleaned_count} temporary objects")
+                _info(f"Cleaned up {cleaned_count} temporary objects")
 
         if cleanup_organization:
             removed_count = AssetOrganizer.cleanup_empty_organization()
             if removed_count:
-                pm.displayInfo(f"Cleaned up {removed_count} empty groups")
+                _info(f"Cleaned up {removed_count} empty groups")
 
         # Show final organization summary
-        pm.displayInfo("\n=== Final Organization Summary ===")
+        _info("\n=== Final Organization Summary ===")
         org_summary = AssetOrganizer.get_organization_summary()
         for category, count in org_summary.items():
             if count > 0:
-                pm.displayInfo(f"{category.title()}: {count} objects")
+                _info(f"{category.title()}: {count} objects")
 
-        pm.displayInfo("Workflow finalization complete!")
+        _info("Workflow finalization complete!")
 
     def cleanup_workflow_objects(self) -> None:
         """Clean up all objects created by this workflow. Organization is automatic."""
@@ -1343,7 +1374,7 @@ class BlendShapeDeformationWorkflow:
         # Clean temporary objects
         AssetOrganizer.cleanup_temporary_objects()
 
-        pm.displayInfo(
+        _info(
             f"Cleaned up workflow objects: {len(correctives)} correctives archived"
         )
 
@@ -1353,7 +1384,7 @@ class BlendShapeDeformationWorkflow:
         Note: Organization now happens automatically in most operations.
         """
         self._auto_organize_if_needed()
-        pm.displayInfo("Manual organization completed")
+        _info("Manual organization completed")
 
     # ===========================================================================
     # Workflow Recovery and Loading
@@ -1361,7 +1392,7 @@ class BlendShapeDeformationWorkflow:
 
     @classmethod
     def get_workflow(
-        cls, base_geometry: Optional[pm.PyNode] = None
+        cls, base_geometry: Optional[str] = None
     ) -> BlendShapeDeformationWorkflow:
         """
         Retrieve an existing workflow from a base mesh with blendShape deformation.
@@ -1377,7 +1408,7 @@ class BlendShapeDeformationWorkflow:
             RuntimeError: If workflow configuration fails
         """
         if base_geometry is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if not selection:
                 raise ValueError(
                     "Please select base geometry or provide base_geometry parameter"
@@ -1391,7 +1422,7 @@ class BlendShapeDeformationWorkflow:
             raise ValueError(f"Invalid base geometry: {e}")
 
         # Locate blendShape deformer
-        deformation_history = base_geometry.listHistory(type="blendShape")
+        deformation_history = _list_history(base_geometry, type="blendShape")
         if not deformation_history:
             raise ValueError(f"No blendShape deformer found on {base_geometry}")
 
@@ -1399,15 +1430,15 @@ class BlendShapeDeformationWorkflow:
 
         # Locate target geometry from blendShape targets
         target_geometries = (
-            pm.blendShape(blendshape_node, query=True, target=True) or []
+            cmds.blendShape(blendshape_node, query=True, target=True) or []
         )
         if not target_geometries:
             raise ValueError(f"No target geometries found in {blendshape_node}")
 
-        target_geometry = pm.PyNode(target_geometries[0])
+        target_geometry = target_geometries[0]
 
         # Validate target geometry exists and is accessible
-        if not pm.objExists(target_geometry):
+        if not cmds.objExists(target_geometry):
             raise ValueError(f"Target geometry {target_geometry} no longer exists")
 
         try:
@@ -1430,7 +1461,7 @@ class BlendShapeDeformationWorkflow:
             existing_correctives = CorrectiveManager.discover_scene_correctives()
             corrective_count = len(existing_correctives)
 
-            pm.displayInfo(
+            _info(
                 f"Retrieved workflow: {base_geometry} → {target_geometry} "
                 f"({corrective_count} correctives found)"
             )
@@ -1443,7 +1474,7 @@ class BlendShapeDeformationWorkflow:
 
     @classmethod
     def load_existing_deformation_system(
-        cls, base_geometry: Optional[pm.PyNode] = None
+        cls, base_geometry: Optional[str] = None
     ) -> BlendShapeDeformationWorkflow:
         """
         Load existing deformation system for additional editing.
@@ -1458,7 +1489,7 @@ class BlendShapeDeformationWorkflow:
             ValueError: If no valid blendShape system is found
         """
         if base_geometry is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if not selection:
                 raise ValueError(
                     "Please select base geometry or provide base_geometry parameter"
@@ -1466,7 +1497,7 @@ class BlendShapeDeformationWorkflow:
             base_geometry = selection[0]
 
         # Locate blendShape deformer
-        deformation_history = base_geometry.listHistory(type="blendShape")
+        deformation_history = _list_history(base_geometry, type="blendShape")
         if not deformation_history:
             raise ValueError(f"No blendShape deformer found on {base_geometry}")
 
@@ -1474,12 +1505,12 @@ class BlendShapeDeformationWorkflow:
 
         # Locate target geometry
         target_geometries = (
-            pm.blendShape(blendshape_node, query=True, target=True) or []
+            cmds.blendShape(blendshape_node, query=True, target=True) or []
         )
         if not target_geometries:
             raise ValueError(f"No target geometries found in {blendshape_node}")
 
-        target_geometry = pm.PyNode(target_geometries[0])
+        target_geometry = target_geometries[0]
 
         # Configure workflow
         workflow = cls()
@@ -1491,7 +1522,7 @@ class BlendShapeDeformationWorkflow:
         )
         workflow._workflow_initialized = True
 
-        pm.displayInfo(
+        _info(
             f"Loaded existing deformation system: {base_geometry} → {target_geometry}"
         )
         return workflow
@@ -1499,8 +1530,8 @@ class BlendShapeDeformationWorkflow:
     @classmethod
     def recover_corrupted_deformation_system(
         cls,
-        base_geometry: Optional[pm.PyNode] = None,
-        target_geometry: Optional[pm.PyNode] = None,
+        base_geometry: Optional[str] = None,
+        target_geometry: Optional[str] = None,
     ) -> BlendShapeDeformationWorkflow:
         """
         Recover corrupted deformation system while preserving correctives.
@@ -1517,26 +1548,26 @@ class BlendShapeDeformationWorkflow:
             RuntimeError: If recovery process fails
         """
         if base_geometry is None or target_geometry is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if len(selection) != 2:
                 raise ValueError("Please select 2 meshes or provide both parameters")
             base_geometry, target_geometry = selection
 
         try:
             # Preserve existing keyframe data and correctives
-            deformation_history = base_geometry.listHistory(type="blendShape")
+            deformation_history = _list_history(base_geometry, type="blendShape")
             keyframe_data = []
             if deformation_history:
                 old_blendshape = deformation_history[0]
                 try:
                     keyframe_times = (
-                        pm.keyframe(
+                        cmds.keyframe(
                             f"{old_blendshape}.weight[0]", query=True, timeChange=True
                         )
                         or []
                     )
                     keyframe_values = (
-                        pm.keyframe(
+                        cmds.keyframe(
                             f"{old_blendshape}.weight[0]", query=True, valueChange=True
                         )
                         or []
@@ -1544,7 +1575,7 @@ class BlendShapeDeformationWorkflow:
                     keyframe_data = list(zip(keyframe_times, keyframe_values))
                 except:
                     pass
-                pm.delete(old_blendshape)
+                cmds.delete(old_blendshape)
 
             existing_correctives = CorrectiveManager.discover_scene_correctives()
 
@@ -1569,13 +1600,13 @@ class BlendShapeDeformationWorkflow:
 
             # Restore keyframe animation
             if keyframe_data:
-                pm.cutKey(
+                cmds.cutKey(
                     workflow.deformation_controller.blendshape_node,
                     attribute="weight[0]",
                     clear=True,
                 )
                 for time, value in keyframe_data:
-                    pm.setKeyframe(
+                    cmds.setKeyframe(
                         workflow.deformation_controller.blendshape_node,
                         attribute="weight[0]",
                         time=time,
@@ -1590,7 +1621,7 @@ class BlendShapeDeformationWorkflow:
                 )
                 workflow.apply_corrective_modifications(existing_correctives)
 
-            pm.displayInfo(
+            _info(
                 f"Recovery complete: {len(existing_correctives)} correctives restored"
             )
             return workflow
@@ -1635,8 +1666,8 @@ class BlendShapeDeformationWorkflow:
         try:
             for weight in preview_weights:
                 self.deformation_controller.set_deformation_weight(weight)
-                pm.refresh()
-                pm.pause(sec=0.2)  # Brief pause for visual feedback
+                cmds.refresh()
+                cmds.pause(sec=0.2)  # Brief pause for visual feedback
         finally:
             self.deformation_controller.set_deformation_weight(original_weight)
 
@@ -1649,7 +1680,7 @@ class BlendShapeDeformationWorkflow:
         ):
             # Try to auto-initialize workflow from selection or scene
             try:
-                pm.displayInfo("Auto-initializing workflow...")
+                _info("Auto-initializing workflow...")
                 workflow = self.__class__.get_or_create_workflow()
 
                 # Copy the initialized state to this instance
@@ -1692,7 +1723,7 @@ class BlendShapeDeformationWorkflow:
             # Organization is handled automatically in _ensure_workflow_ready
             return workflow
         except Exception as e:
-            pm.error(f"Auto-workflow failed: {e}")
+            cmds.error(f"Auto-workflow failed: {e}")
             raise
 
     # ===========================================================================
@@ -1716,45 +1747,45 @@ class BlendShapeDeformationWorkflow:
                 # Corrupted system - check for existing correctives before repair
                 existing_correctives = CorrectiveManager.discover_scene_correctives()
                 if existing_correctives:
-                    pm.warning(
+                    cmds.warning(
                         f"Found corrupted blendShape system with {len(existing_correctives)} correctives. Using restoration workflow..."
                     )
                     return cls.restore_editable_morph_system()
                 else:
                     # No correctives, use standard repair
-                    pm.warning(
+                    cmds.warning(
                         "Found corrupted blendShape system. Attempting automatic repair..."
                     )
                     return cls._auto_repair_corrupted_system()
             elif "No blendShape deformer found" in str(e):
                 # No blendShape at all - check for previous animation data
-                pm.warning("No blendShape system found on selected mesh.")
+                cmds.warning("No blendShape system found on selected mesh.")
 
                 # Check if there might be animation data we should preserve
-                selection = pm.selected()
+                selection = cmds.ls(selection=True)
                 if selection:
                     base_geometry = selection[0]
 
                     # Check if user selected a target mesh instead of base mesh
                     if cls._is_likely_target_mesh(base_geometry):
-                        pm.warning(
+                        cmds.warning(
                             "It looks like you selected a target mesh instead of the base mesh."
                         )
                         original_base = cls._find_original_base_mesh(base_geometry)
                         if original_base:
-                            pm.displayInfo(
+                            _info(
                                 f"Found likely original base mesh: {original_base}"
                             )
-                            pm.displayInfo(
+                            _info(
                                 "Attempting to recover workflow from original base..."
                             )
                             try:
                                 # Try to get workflow from the original base
-                                pm.select(original_base, replace=True)
+                                cmds.select(original_base, replace=True)
                                 return cls.get_workflow()
                             except ValueError:
                                 # Original base also has issues, proceed with recovery
-                                pm.warning(
+                                cmds.warning(
                                     "Original base mesh also has issues. Proceeding with recovery..."
                                 )
                                 base_geometry = original_base
@@ -1763,7 +1794,7 @@ class BlendShapeDeformationWorkflow:
                         base_geometry
                     )
                     if existing_animation:
-                        pm.warning(
+                        cmds.warning(
                             "Found existing animation data! Attempting to preserve it..."
                         )
                         return cls._create_system_with_preserved_animation(
@@ -1776,7 +1807,7 @@ class BlendShapeDeformationWorkflow:
                 raise RuntimeError(f"Cannot create workflow: {e}")
 
     @classmethod
-    def _check_for_existing_animation(cls, geometry_node: pm.PyNode) -> Optional[Dict]:
+    def _check_for_existing_animation(cls, geometry_node: str) -> Optional[Dict]:
         """Check for existing animation data on a geometry node."""
         animation_data = {"keyframes": [], "time_range": None, "has_animation": False}
 
@@ -1785,7 +1816,7 @@ class BlendShapeDeformationWorkflow:
             attrs_to_check = []
 
             # Get all attributes on the node
-            all_attrs = pm.listAttr(geometry_node, keyable=True) or []
+            all_attrs = cmds.listAttr(geometry_node, keyable=True) or []
 
             # Look for blendShape-related or weight-related attributes
             for attr in all_attrs:
@@ -1799,16 +1830,16 @@ class BlendShapeDeformationWorkflow:
 
             # Also check connected nodes for animation
             connections = (
-                pm.listConnections(geometry_node, source=True, type="animCurve") or []
+                cmds.listConnections(geometry_node, source=True, type="animCurve") or []
             )
 
             for connection in connections:
                 try:
                     keyframe_times = (
-                        pm.keyframe(connection, query=True, timeChange=True) or []
+                        cmds.keyframe(connection, query=True, timeChange=True) or []
                     )
                     keyframe_values = (
-                        pm.keyframe(connection, query=True, valueChange=True) or []
+                        cmds.keyframe(connection, query=True, valueChange=True) or []
                     )
 
                     if keyframe_times and keyframe_values:
@@ -1840,11 +1871,11 @@ class BlendShapeDeformationWorkflow:
 
     @classmethod
     def _create_system_with_preserved_animation(
-        cls, base_geometry: pm.PyNode, animation_data: Dict
+        cls, base_geometry: str, animation_data: Dict
     ) -> BlendShapeDeformationWorkflow:
         """Create a new system while preserving existing animation data."""
         try:
-            pm.displayInfo("Creating new system with preserved animation...")
+            _info("Creating new system with preserved animation...")
 
             # Create the new system first
             workflow = cls._guide_new_system_creation()
@@ -1855,7 +1886,7 @@ class BlendShapeDeformationWorkflow:
                 and len(animation_data["time_range"]) == 2
             ):
                 start_frame, end_frame = animation_data["time_range"]
-                pm.displayInfo(
+                _info(
                     f"Preserving animation range: {start_frame} - {end_frame}"
                 )
 
@@ -1865,25 +1896,25 @@ class BlendShapeDeformationWorkflow:
                     workflow.deformation_controller.create_linear_keyframe_animation(
                         preserved_range
                     )
-                    pm.displayInfo("Animation range preserved!")
+                    _info("Animation range preserved!")
 
             # If we have specific keyframes, try to apply them
             if animation_data.get("keyframes"):
-                pm.displayInfo(
+                _info(
                     f"Attempting to restore {len(animation_data['keyframes'])} keyframes..."
                 )
                 # This is a best-effort attempt - may not work perfectly depending on the original setup
 
-            pm.displayInfo("System created with preserved animation data!")
+            _info("System created with preserved animation data!")
             return workflow
 
         except Exception as e:
-            pm.warning(f"Failed to preserve animation data: {e}")
-            pm.displayInfo("Creating standard new system...")
+            cmds.warning(f"Failed to preserve animation data: {e}")
+            _info("Creating standard new system...")
             return cls._guide_new_system_creation()
 
     @classmethod
-    def _is_likely_target_mesh(cls, mesh: pm.PyNode) -> bool:
+    def _is_likely_target_mesh(cls, mesh: str) -> bool:
         """Check if a mesh is likely a target mesh based on naming patterns."""
         mesh_name = str(mesh).lower()
         target_indicators = [
@@ -1897,7 +1928,7 @@ class BlendShapeDeformationWorkflow:
         return any(indicator in mesh_name for indicator in target_indicators)
 
     @classmethod
-    def _find_original_base_mesh(cls, target_mesh: pm.PyNode) -> Optional[pm.PyNode]:
+    def _find_original_base_mesh(cls, target_mesh: str) -> Optional[str]:
         """Try to find the original base mesh from a target mesh."""
         mesh_name = str(target_mesh)
 
@@ -1927,9 +1958,9 @@ class BlendShapeDeformationWorkflow:
 
         # Check if any of these possible names exist
         for name in possible_base_names:
-            if pm.objExists(name):
+            if cmds.objExists(name):
                 try:
-                    base_node = pm.PyNode(name)
+                    base_node = name
                     # Verify it's a valid mesh
                     GeometryValidator.validate_mesh_transform(base_node)
                     return base_node
@@ -1942,7 +1973,7 @@ class BlendShapeDeformationWorkflow:
     def _auto_repair_corrupted_system(cls) -> BlendShapeDeformationWorkflow:
         """Automatically repair a corrupted blendShape system, preserving work via resampling."""
         try:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if not selection:
                 raise RuntimeError(
                     "Please select the mesh with the corrupted blendShape"
@@ -1955,7 +1986,7 @@ class BlendShapeDeformationWorkflow:
             existing_correctives = CorrectiveManager.discover_scene_correctives()
 
             if existing_correctives:
-                pm.displayInfo(
+                _info(
                     f"Found {len(existing_correctives)} existing correctives to preserve"
                 )
                 resampled_correctives = (
@@ -1963,13 +1994,13 @@ class BlendShapeDeformationWorkflow:
                 )
             else:
                 # Try to resample only if we have a working blendShape with keyframes
-                blendshape_history = base_geometry.listHistory(type="blendShape")
+                blendshape_history = _list_history(base_geometry, type="blendShape")
                 if blendshape_history:
                     try:
                         blendshape_node = blendshape_history[0]
                         # Check if blendShape has any targets before attempting resample
                         targets = (
-                            pm.blendShape(blendshape_node, query=True, target=True)
+                            cmds.blendShape(blendshape_node, query=True, target=True)
                             or []
                         )
 
@@ -1979,32 +2010,32 @@ class BlendShapeDeformationWorkflow:
                             temp_workflow.deformation_controller = (
                                 DeformationController(
                                     base_geometry,
-                                    pm.PyNode(targets[0]),  # Use first valid target
+                                    targets[0],  # Use first valid target
                                     blendshape_node,
                                 )
                             )
                             temp_workflow._workflow_initialized = True
 
-                            pm.displayInfo(
+                            _info(
                                 "Attempting to preserve existing work via resampling..."
                             )
                             resampled_correctives = temp_workflow.resample_animation(
                                 resolution=8, preserve_existing=True, cleanup_temp=False
                             )
-                            pm.displayInfo(
+                            _info(
                                 f"Preserved {len(resampled_correctives)} animation samples"
                             )
                         else:
-                            pm.displayInfo("No valid targets found - skipping resample")
+                            _info("No valid targets found - skipping resample")
 
                     except Exception as resample_error:
-                        pm.warning(
+                        cmds.warning(
                             f"Could not resample existing work: {resample_error}"
                         )
-                        pm.displayInfo("Proceeding with standard repair...")
+                        _info("Proceeding with standard repair...")
 
             # Delete the corrupted blendShape and create a fresh one
-            pm.displayInfo("Repairing corrupted system...")
+            _info("Repairing corrupted system...")
 
             # Clean up the name for Maya deformer naming (remove pipes and invalid chars)
             base_name = str(base_geometry).split("|")[-1]  # Get just the object name
@@ -2012,12 +2043,12 @@ class BlendShapeDeformationWorkflow:
 
             # Create a duplicate to use as target for now
             target_name = f"{clean_name}_target"
-            target_geometry = pm.duplicate(base_geometry, name=target_name)[0]
+            target_geometry = cmds.duplicate(base_geometry, name=target_name)[0]
 
             # Remove any existing blendShape
-            history = base_geometry.listHistory(type="blendShape")
+            history = _list_history(base_geometry, type="blendShape")
             if history:
-                pm.delete(history[0])
+                cmds.delete(history[0])
 
             # Create new workflow with clean system name
             workflow = cls()
@@ -2029,7 +2060,7 @@ class BlendShapeDeformationWorkflow:
             if success:
                 # Apply resampled correctives if we have them
                 if resampled_correctives:
-                    pm.displayInfo("Applying preserved animation samples...")
+                    _info("Applying preserved animation samples...")
                     try:
                         # Update corrective references to new system
                         updated_correctives = (
@@ -2043,20 +2074,20 @@ class BlendShapeDeformationWorkflow:
                         applied_correctives = workflow.apply_corrective_modifications(
                             updated_correctives
                         )
-                        pm.displayInfo(
+                        _info(
                             f"Restored {len(applied_correctives)} preserved animation samples"
                         )
 
                     except Exception as apply_error:
-                        pm.warning(f"Could not apply preserved samples: {apply_error}")
+                        cmds.warning(f"Could not apply preserved samples: {apply_error}")
 
-                pm.displayInfo("System repaired! You can now edit correctives.")
-                pm.displayInfo(f"Note: Created temporary target '{target_geometry}'")
+                _info("System repaired! You can now edit correctives.")
+                _info(f"Note: Created temporary target '{target_geometry}'")
                 if resampled_correctives:
-                    pm.displayInfo(
+                    _info(
                         "Previous animation work has been preserved and applied."
                     )
-                pm.displayInfo("Replace with your actual morph target when ready.")
+                _info("Replace with your actual morph target when ready.")
                 return workflow
             else:
                 raise RuntimeError("Failed to repair system")
@@ -2067,22 +2098,22 @@ class BlendShapeDeformationWorkflow:
     @classmethod
     def _guide_new_system_creation(cls) -> BlendShapeDeformationWorkflow:
         """Guide user through creating a new system."""
-        selection = pm.selected()
+        selection = cmds.ls(selection=True)
 
         if len(selection) == 2:
             # User has base and target selected
-            pm.displayInfo("Creating new blendShape system from selection...")
+            _info("Creating new blendShape system from selection...")
             workflow = cls()
             success = workflow.initialize_deformation_system()
             if success:
-                pm.displayInfo("New blendShape system created successfully!")
+                _info("New blendShape system created successfully!")
                 return workflow
             else:
                 raise RuntimeError("Failed to create new system")
 
         elif len(selection) == 1:
             # Only base selected - create target automatically
-            pm.displayInfo("Creating new blendShape system with automatic target...")
+            _info("Creating new blendShape system with automatic target...")
             base_geometry = selection[0]
 
             # Clean up the name for Maya deformer naming
@@ -2090,7 +2121,7 @@ class BlendShapeDeformationWorkflow:
             clean_name = base_name.replace("|", "_").replace(":", "_").replace(" ", "_")
 
             target_name = f"{clean_name}_morph"
-            target_geometry = pm.duplicate(base_geometry, name=target_name)[0]
+            target_geometry = cmds.duplicate(base_geometry, name=target_name)[0]
 
             # Organization is now automatic
 
@@ -2100,8 +2131,8 @@ class BlendShapeDeformationWorkflow:
             )
             if success:
                 # Organization is now automatic in initialize_deformation_system
-                pm.displayInfo(f"New blendShape system created!")
-                pm.displayInfo(f"Edit '{target_geometry}' to create your morph target.")
+                _info(f"New blendShape system created!")
+                _info(f"Edit '{target_geometry}' to create your morph target.")
                 return workflow
             else:
                 raise RuntimeError("Failed to create new system")
@@ -2129,7 +2160,7 @@ class BlendShapeDeformationWorkflow:
         workflow = cls()
 
         if base_geometry is None or target_geometry is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if len(selection) >= 1:
                 base_geometry = selection[0]
                 if len(selection) >= 2:
@@ -2143,7 +2174,7 @@ class BlendShapeDeformationWorkflow:
                         base_name.replace("|", "_").replace(":", "_").replace(" ", "_")
                     )
                     target_name = f"{clean_name}_target"
-                    target_geometry = pm.duplicate(base_geometry, name=target_name)[0]
+                    target_geometry = cmds.duplicate(base_geometry, name=target_name)[0]
 
                     # Organization is now automatic
             else:
@@ -2154,7 +2185,7 @@ class BlendShapeDeformationWorkflow:
             raise RuntimeError("Failed to create new workflow")
 
         # Organization is now automatic in initialize_deformation_system
-        pm.displayInfo("New workflow created and ready!")
+        _info("New workflow created and ready!")
         return workflow
 
     @classmethod
@@ -2171,8 +2202,8 @@ class BlendShapeDeformationWorkflow:
         workflow = cls.create_new()
         correctives = workflow.create_corrective_shapes(count=corrective_count)
 
-        pm.displayInfo(f"Quick setup complete! Created {len(correctives)} correctives.")
-        pm.displayInfo(
+        _info(f"Quick setup complete! Created {len(correctives)} correctives.")
+        _info(
             "Edit the corrective shapes, then run workflow.apply_corrective_edits()"
         )
         return workflow
@@ -2180,38 +2211,38 @@ class BlendShapeDeformationWorkflow:
     def show_status(self) -> None:
         """Show current workflow status in a user-friendly way."""
         if not self._workflow_initialized:
-            pm.displayInfo("Workflow Status: NOT INITIALIZED")
-            pm.displayInfo("Use workflow.initialize_deformation_system() first")
+            _info("Workflow Status: NOT INITIALIZED")
+            _info("Use workflow.initialize_deformation_system() first")
             return
 
         info = self.get_workflow_information()
 
-        pm.displayInfo("=== Workflow Status ===")
-        pm.displayInfo(f"Base Mesh: {info['base_geometry']}")
-        pm.displayInfo(f"Target Mesh: {info['target_geometry']}")
-        pm.displayInfo(f"BlendShape: {info['blendshape_node']}")
-        pm.displayInfo(
+        _info("=== Workflow Status ===")
+        _info(f"Base Mesh: {info['base_geometry']}")
+        _info(f"Target Mesh: {info['target_geometry']}")
+        _info(f"BlendShape: {info['blendshape_node']}")
+        _info(
             f"Animation: frames {info['animation_range'][0]}-{info['animation_range'][1]}"
         )
-        pm.displayInfo(f"Current Weight: {info['current_weight']:.3f}")
-        pm.displayInfo(f"Correctives: {info['corrective_count']} found")
+        _info(f"Current Weight: {info['current_weight']:.3f}")
+        _info(f"Correctives: {info['corrective_count']} found")
 
         if info["corrective_count"] > 0:
-            pm.displayInfo("Weight distribution:")
+            _info("Weight distribution:")
             for weight, count in info["weight_distribution"].items():
-                pm.displayInfo(f"  {weight:.3f}: {count} corrective(s)")
+                _info(f"  {weight:.3f}: {count} corrective(s)")
 
         # Show organization status
-        pm.displayInfo("\n=== Organization Status ===")
+        _info("\n=== Organization Status ===")
         org_summary = AssetOrganizer.get_organization_summary()
         for category, count in org_summary.items():
             if count > 0:
-                pm.displayInfo(f"{category.title()}: {count} objects")
+                _info(f"{category.title()}: {count} objects")
 
         if sum(org_summary.values()) == 0:
-            pm.displayInfo("No organized objects found")
+            _info("No organized objects found")
         else:
-            pm.displayInfo(f"Total organized objects: {sum(org_summary.values())}")
+            _info(f"Total organized objects: {sum(org_summary.values())}")
 
     def create_corrective_shapes(
         self, count: int = 3, weights: List[float] = None
@@ -2266,7 +2297,7 @@ class BlendShapeDeformationWorkflow:
         new_range = TimeRange(start_frame, end_frame)
         self.deformation_controller.create_linear_keyframe_animation(new_range)
 
-        pm.displayInfo(f"Animation range updated to: {start_frame} - {end_frame}")
+        _info(f"Animation range updated to: {start_frame} - {end_frame}")
 
     def restore_animation_from_range(self, start_frame: int, end_frame: int) -> None:
         """
@@ -2277,9 +2308,9 @@ class BlendShapeDeformationWorkflow:
             start_frame: Starting frame of your previous animation
             end_frame: Ending frame of your previous animation
         """
-        pm.displayInfo(f"Restoring animation for range: {start_frame} - {end_frame}")
+        _info(f"Restoring animation for range: {start_frame} - {end_frame}")
         self.update_animation_range(start_frame, end_frame)
-        pm.displayInfo("Animation restored! Your previous frame range is now active.")
+        _info("Animation restored! Your previous frame range is now active.")
 
     def resample_animation(
         self,
@@ -2313,19 +2344,19 @@ class BlendShapeDeformationWorkflow:
 
         sample_range = TimeRange(start_frame, end_frame)
 
-        pm.displayInfo(
+        _info(
             f"Resampling animation with {resolution} samples over frames {start_frame}-{end_frame}"
         )
 
         # Store current state
-        original_frame = pm.currentTime(query=True)
+        original_frame = cmds.currentTime(query=True)
         original_weight = self.deformation_controller.get_current_weight()
 
         # Preserve existing correctives if requested
         existing_correctives = []
         if preserve_existing:
             existing_correctives = CorrectiveManager.discover_scene_correctives()
-            pm.displayInfo(
+            _info(
                 f"Preserving {len(existing_correctives)} existing correctives"
             )
 
@@ -2346,11 +2377,11 @@ class BlendShapeDeformationWorkflow:
 
                 # Sample at the corresponding frame for temporal information
                 sample_frame = sample_range.denormalize_weight_to_frame(weight)
-                pm.currentTime(sample_frame)
-                pm.refresh()
+                cmds.currentTime(sample_frame)
+                cmds.refresh()
 
                 # Create a corrective shape at this weight
-                pm.displayInfo(
+                _info(
                     f"Sampling at weight {weight:.3f} (frame {sample_frame})"
                 )
 
@@ -2359,7 +2390,7 @@ class BlendShapeDeformationWorkflow:
 
                 # Create a snapshot of the current deformed state
                 sample_name = f"resample_{weight:.3f}".replace(".", "_")
-                sample_geometry = pm.duplicate(base_mesh, name=sample_name)[0]
+                sample_geometry = cmds.duplicate(base_mesh, name=sample_name)[0]
 
                 # Create corrective shape object
                 corrective = CorrectiveShape(sample_geometry, weight, sample_frame)
@@ -2378,25 +2409,25 @@ class BlendShapeDeformationWorkflow:
             # Auto-organize the created samples
             self._auto_organize_if_needed()
 
-            pm.displayInfo(f"Created {len(created_correctives)} resampled correctives")
+            _info(f"Created {len(created_correctives)} resampled correctives")
 
             # Optionally clean up temporary objects
             if cleanup_temp:
                 temp_cleaned = AssetOrganizer.cleanup_temporary_objects()
                 if temp_cleaned > 0:
-                    pm.displayInfo(f"Cleaned up {temp_cleaned} temporary objects")
+                    _info(f"Cleaned up {temp_cleaned} temporary objects")
 
             return created_correctives
 
         except Exception as e:
-            pm.error(f"Animation resampling failed: {e}")
+            cmds.error(f"Animation resampling failed: {e}")
             return []
 
         finally:
             # Restore original state
             try:
                 self.deformation_controller.set_deformation_weight(original_weight)
-                pm.currentTime(original_frame)
+                cmds.currentTime(original_frame)
             except:
                 pass
 
@@ -2416,7 +2447,7 @@ class BlendShapeDeformationWorkflow:
         """
         self._ensure_workflow_ready()
 
-        pm.displayInfo("Resampling current animation before rebuilding...")
+        _info("Resampling current animation before rebuilding...")
 
         # Resample the current animation
         resampled_correctives = self.resample_animation(
@@ -2438,12 +2469,12 @@ class BlendShapeDeformationWorkflow:
             new_system_name = f"{clean_name}_resampled"
 
         # Archive the old system
-        pm.displayInfo("Archiving old system...")
+        _info("Archiving old system...")
         old_blendshape = self.deformation_controller.blendshape_node
         AssetOrganizer.archive_geometry_node(old_blendshape)
 
         # Create new clean system
-        pm.displayInfo("Creating new clean system...")
+        _info("Creating new clean system...")
         new_workflow = self.__class__()
         success = new_workflow.initialize_deformation_system(
             base_geometry,
@@ -2456,7 +2487,7 @@ class BlendShapeDeformationWorkflow:
             raise RuntimeError("Failed to create new system during rebuild")
 
         # Apply the resampled correctives to the new system
-        pm.displayInfo("Applying resampled correctives to new system...")
+        _info("Applying resampled correctives to new system...")
 
         # Update corrective references to point to new system
         updated_correctives = CorrectiveManager.update_corrective_references(
@@ -2469,10 +2500,10 @@ class BlendShapeDeformationWorkflow:
             updated_correctives
         )
 
-        pm.displayInfo(
+        _info(
             f"Rebuild complete! Applied {len(applied_correctives)} resampled correctives"
         )
-        pm.displayInfo(f"New system: {new_system_name}")
+        _info(f"New system: {new_system_name}")
 
         return new_workflow
 
@@ -2482,43 +2513,43 @@ class BlendShapeDeformationWorkflow:
         Find and recover workflow when you're not sure which mesh to select.
         This method searches the scene for likely base meshes with blendShapes.
         """
-        pm.displayInfo("Searching scene for existing blendShape systems...")
+        _info("Searching scene for existing blendShape systems...")
 
         # Find all meshes with blendShape deformers
         meshes_with_blendshapes = []
-        for node in pm.ls(type="transform"):
+        for node in cmds.ls(type="transform"):
             try:
-                if hasattr(node, "getShape") and node.getShape():
-                    history = node.listHistory(type="blendShape")
+                if _get_shape(node):
+                    history = _list_history(node, type="blendShape")
                     if history:
                         meshes_with_blendshapes.append(node)
             except:
                 continue
 
         if not meshes_with_blendshapes:
-            pm.warning("No meshes with blendShape deformers found in scene.")
-            pm.displayInfo("You may need to:")
-            pm.displayInfo("1. Select your original base mesh (not target)")
-            pm.displayInfo("2. Create a new workflow")
+            cmds.warning("No meshes with blendShape deformers found in scene.")
+            _info("You may need to:")
+            _info("1. Select your original base mesh (not target)")
+            _info("2. Create a new workflow")
             raise RuntimeError("No blendShape systems found")
 
-        pm.displayInfo(f"Found {len(meshes_with_blendshapes)} meshes with blendShapes:")
+        _info(f"Found {len(meshes_with_blendshapes)} meshes with blendShapes:")
         for i, mesh in enumerate(meshes_with_blendshapes):
-            pm.displayInfo(f"  {i+1}. {mesh}")
+            _info(f"  {i+1}. {mesh}")
 
         # Try to get workflow from the first valid one
         for mesh in meshes_with_blendshapes:
             try:
-                pm.select(mesh, replace=True)
+                cmds.select(mesh, replace=True)
                 workflow = cls.get_workflow()
-                pm.displayInfo(f"Successfully recovered workflow from: {mesh}")
+                _info(f"Successfully recovered workflow from: {mesh}")
                 return workflow
             except Exception:
                 continue
 
         # If we get here, all have issues - try repair on the first one
-        pm.warning("All blendShape systems appear corrupted. Attempting repair...")
-        pm.select(meshes_with_blendshapes[0], replace=True)
+        cmds.warning("All blendShape systems appear corrupted. Attempting repair...")
+        cmds.select(meshes_with_blendshapes[0], replace=True)
         return cls.get_or_create_workflow()
 
     # ===========================================================================
@@ -2556,10 +2587,10 @@ class BlendShapeDeformationWorkflow:
         # Create corrective shapes - use sample_count parameter
         correctives = workflow.create_corrective_shapes(sample_count=corrective_count)
 
-        pm.displayInfo(
+        _info(
             f"Quick setup complete: {len(correctives)} correctives ready for editing"
         )
-        pm.displayInfo(
+        _info(
             "Edit corrective geometry, then call workflow.apply_corrective_modifications()"
         )
 
@@ -2570,7 +2601,7 @@ class BlendShapeDeformationWorkflow:
         """Apply corrective modifications to all selected base geometries with blendShapes."""
         application_count = 0
 
-        for geometry_node in pm.selected():
+        for geometry_node in cmds.ls(selection=True):
             try:
                 workflow = (
                     BlendShapeDeformationWorkflow.load_existing_deformation_system(
@@ -2581,11 +2612,11 @@ class BlendShapeDeformationWorkflow:
                     correctives = workflow.apply_corrective_modifications()
                     application_count += len(correctives)
             except Exception as e:
-                pm.warning(f"Failed to process {geometry_node}: {e}")
+                cmds.warning(f"Failed to process {geometry_node}: {e}")
 
-        pm.displayInfo(
+        _info(
             f"Batch applied {application_count} correctives across "
-            f"{len(pm.selected())} geometry objects"
+            f"{len(cmds.ls(selection=True))} geometry objects"
         )
         return application_count
 
@@ -2605,7 +2636,7 @@ class BlendShapeDeformationWorkflow:
             workflow = BlendShapeDeformationWorkflow.get_workflow_auto()
             return workflow.resample_animation(resolution=resolution)
         except Exception as e:
-            pm.error(f"Quick resample failed: {e}")
+            cmds.error(f"Quick resample failed: {e}")
             return []
 
     @staticmethod
@@ -2626,7 +2657,7 @@ class BlendShapeDeformationWorkflow:
             workflow = BlendShapeDeformationWorkflow.get_workflow_auto()
             return workflow.resample_and_rebuild(resolution=resolution)
         except Exception as e:
-            pm.error(f"Resample and rebuild failed: {e}")
+            cmds.error(f"Resample and rebuild failed: {e}")
             raise
 
     @staticmethod
@@ -2641,16 +2672,16 @@ class BlendShapeDeformationWorkflow:
             Ready-to-edit workflow with preserved correctives
         """
         try:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if not selection:
                 raise RuntimeError("Please select the base mesh to restore")
 
             base_mesh = selection[0]
-            pm.displayInfo(f"Restoring editable morph system for: {base_mesh}")
+            _info(f"Restoring editable morph system for: {base_mesh}")
 
             # Step 1: Discover existing correctives in the scene
             existing_correctives = CorrectiveManager.discover_scene_correctives()
-            pm.displayInfo(
+            _info(
                 f"Found {len(existing_correctives)} existing correctives to preserve"
             )
 
@@ -2668,18 +2699,18 @@ class BlendShapeDeformationWorkflow:
             ]
 
             for target_name in possible_targets:
-                if pm.objExists(target_name):
-                    original_target = pm.PyNode(target_name)
-                    pm.displayInfo(f"Found original target: {original_target}")
+                if cmds.objExists(target_name):
+                    original_target = target_name
+                    _info(f"Found original target: {original_target}")
                     break
 
             # Step 3: Clean up any corrupted blendShape deformers
-            history = base_mesh.listHistory(type="blendShape")
+            history = _list_history(base_mesh, type="blendShape")
             if history:
-                pm.displayInfo("Removing corrupted blendShape deformers...")
+                _info("Removing corrupted blendShape deformers...")
                 for old_bs in history:
                     try:
-                        pm.delete(old_bs)
+                        cmds.delete(old_bs)
                     except:
                         pass
 
@@ -2690,8 +2721,8 @@ class BlendShapeDeformationWorkflow:
                     base_name.replace("|", "_").replace(":", "_").replace(" ", "_")
                 )
                 target_name = f"{clean_name}_morph"
-                original_target = pm.duplicate(base_mesh, name=target_name)[0]
-                pm.displayInfo(f"Created new target: {original_target}")
+                original_target = cmds.duplicate(base_mesh, name=target_name)[0]
+                _info(f"Created new target: {original_target}")
 
             # Step 5: Create clean workflow
             workflow = BlendShapeDeformationWorkflow()
@@ -2706,7 +2737,7 @@ class BlendShapeDeformationWorkflow:
 
             # Step 6: Restore existing correctives if we have them
             if existing_correctives:
-                pm.displayInfo("Restoring existing correctives...")
+                _info("Restoring existing correctives...")
                 try:
                     # Update corrective references to new system
                     updated_correctives = (
@@ -2720,52 +2751,52 @@ class BlendShapeDeformationWorkflow:
                     applied_correctives = workflow.apply_corrective_modifications(
                         updated_correctives
                     )
-                    pm.displayInfo(f"Restored {len(applied_correctives)} correctives")
+                    _info(f"Restored {len(applied_correctives)} correctives")
 
                 except Exception as restore_error:
-                    pm.warning(f"Could not restore all correctives: {restore_error}")
-                    pm.displayInfo("You may need to recreate some correctives manually")
+                    cmds.warning(f"Could not restore all correctives: {restore_error}")
+                    _info("You may need to recreate some correctives manually")
 
             # Step 7: Organize everything
             workflow._auto_organize_if_needed()
 
-            pm.displayInfo("=== RESTORATION COMPLETE ===")
-            pm.displayInfo(f"✓ Clean blendShape system created")
-            pm.displayInfo(f"✓ Target mesh: {original_target}")
-            pm.displayInfo(f"✓ Preserved {len(existing_correctives)} correctives")
-            pm.displayInfo("✓ System ready for editing")
-            pm.displayInfo("")
-            pm.displayInfo("Next steps:")
-            pm.displayInfo("1. Edit your target mesh for the main morph shape")
-            pm.displayInfo(
+            _info("=== RESTORATION COMPLETE ===")
+            _info(f"✓ Clean blendShape system created")
+            _info(f"✓ Target mesh: {original_target}")
+            _info(f"✓ Preserved {len(existing_correctives)} correctives")
+            _info("✓ System ready for editing")
+            _info("")
+            _info("Next steps:")
+            _info("1. Edit your target mesh for the main morph shape")
+            _info(
                 "2. Edit correctives: workflow.edit_corrective_frame(weight)"
             )
-            pm.displayInfo(
+            _info(
                 "3. Create new correctives: workflow.create_corrective_shapes()"
             )
 
             return workflow
 
         except Exception as e:
-            pm.error(f"Morph system restoration failed: {e}")
+            cmds.error(f"Morph system restoration failed: {e}")
             raise
 
     @staticmethod
     def safe_get_workflow(
-        base_geometry: Optional[pm.PyNode] = None,
+        base_geometry: Optional[str] = None,
     ) -> BlendShapeDeformationWorkflow:
         """
         DEPRECATED: Use get_or_create_workflow() instead.
         This method is kept for backward compatibility.
         """
-        pm.warning(
+        cmds.warning(
             "safe_get_workflow() is deprecated. Use get_or_create_workflow() instead."
         )
         return BlendShapeDeformationWorkflow.get_or_create_workflow()
 
     @classmethod
     def diagnose_blendshape_system(
-        cls, base_geometry: Optional[pm.PyNode] = None
+        cls, base_geometry: Optional[str] = None
     ) -> Dict:
         """
         Diagnose a blendShape system and return detailed information about its state.
@@ -2777,7 +2808,7 @@ class BlendShapeDeformationWorkflow:
             Dictionary with diagnostic information
         """
         if base_geometry is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if not selection:
                 return {"error": "No objects selected"}
             base_geometry = selection[0]
@@ -2803,7 +2834,7 @@ class BlendShapeDeformationWorkflow:
             return diagnostic_info
 
         # Check for blendShape deformers
-        deformation_history = base_geometry.listHistory(type="blendShape")
+        deformation_history = _list_history(base_geometry, type="blendShape")
         if deformation_history:
             diagnostic_info["has_blendshape"] = True
             diagnostic_info["blendshape_nodes"] = [
@@ -2815,7 +2846,7 @@ class BlendShapeDeformationWorkflow:
             # Check targets
             try:
                 target_geometries = (
-                    pm.blendShape(blendshape_node, query=True, target=True) or []
+                    cmds.blendShape(blendshape_node, query=True, target=True) or []
                 )
                 diagnostic_info["target_count"] = len(target_geometries)
                 diagnostic_info["targets"] = target_geometries
@@ -2828,7 +2859,7 @@ class BlendShapeDeformationWorkflow:
                 else:
                     # Check if targets still exist
                     for target in target_geometries:
-                        if not pm.objExists(target):
+                        if not cmds.objExists(target):
                             diagnostic_info["issues"].append(
                                 f"Target geometry '{target}' no longer exists"
                             )
@@ -2857,12 +2888,12 @@ if __name__ == "__main__":
 
     try:
         # Check if we need restoration first
-        selection = pm.selected()
+        selection = cmds.ls(selection=True)
         existing_correctives = CorrectiveManager.discover_scene_correctives()
 
         if existing_correctives and selection:
             # We have correctives but might have system issues - use restoration
-            pm.displayInfo(
+            _info(
                 f"Found {len(existing_correctives)} existing correctives - using restoration workflow..."
             )
             workflow = BlendShapeDeformationWorkflow.restore_editable_morph_system()
@@ -2877,25 +2908,25 @@ if __name__ == "__main__":
         correctives = workflow.list_corrective_frames()
 
         if correctives:
-            pm.displayInfo("Ready to edit existing correctives!")
-            pm.displayInfo("Use: workflow.edit_corrective_frame(weight)")
+            _info("Ready to edit existing correctives!")
+            _info("Use: workflow.edit_corrective_frame(weight)")
         else:
-            pm.displayInfo("No correctives found. Create some first:")
-            pm.displayInfo("Use: workflow.create_corrective_shapes()")
+            _info("No correctives found. Create some first:")
+            _info("Use: workflow.create_corrective_shapes()")
 
     except Exception as e:
-        pm.error(f"Workflow failed: {e}")
-        pm.displayInfo("=== RECOVERY OPTIONS ===")
-        pm.displayInfo(
+        cmds.error(f"Workflow failed: {e}")
+        _info("=== RECOVERY OPTIONS ===")
+        _info(
             "1. RESTORE CORRUPTED SYSTEM: BlendShapeDeformationWorkflow.restore_editable_morph_system()"
         )
-        pm.displayInfo(
+        _info(
             "2. WRONG SELECTION? Select your ORIGINAL BASE MESH (not target)"
         )
-        pm.displayInfo(
+        _info(
             "3. LOST WORKFLOW? Try: BlendShapeDeformationWorkflow.find_and_recover_workflow()"
         )
-        pm.displayInfo(
+        _info(
             "4. START FRESH? Try: BlendShapeDeformationWorkflow.create_new()"
         )
 

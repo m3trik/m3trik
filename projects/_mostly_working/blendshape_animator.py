@@ -1,27 +1,48 @@
-from email.mime import base
-import pymel.core as pm
-from typing import List, Tuple, Optional, Union
-from abc import ABC, abstractmethod
-from functools import partial
+from typing import List, Tuple, Optional
+
+import maya.cmds as cmds
+
+
+def _has_attr(node: str, attr: str) -> bool:
+    return cmds.attributeQuery(attr, node=node, exists=True)
+
+
+def _get_shape(node: str) -> Optional[str]:
+    shapes = cmds.listRelatives(node, shapes=True, noIntermediate=True, fullPath=True) or []
+    return shapes[0] if shapes else None
+
+
+def _num_vertices(node: str) -> int:
+    return cmds.polyEvaluate(node, vertex=True)
+
+
+def _num_faces(node: str) -> int:
+    return cmds.polyEvaluate(node, face=True)
+
+
+def _list_history(node: str, type: Optional[str] = None) -> List[str]:
+    history = cmds.listHistory(node) or []
+    if type is not None:
+        history = cmds.ls(history, type=type) or []
+    return history
 
 
 class Validator:
     """Handles validation of meshes and blendShape setups."""
 
     @staticmethod
-    def validate_meshes(mesh1: pm.PyNode, mesh2: pm.PyNode) -> bool:
+    def validate_meshes(mesh1: str, mesh2: str) -> bool:
         """Validate that both objects are compatible meshes."""
         # Check if objects are mesh transforms
         for i, mesh in enumerate([mesh1, mesh2], 1):
-            if not mesh.getShape() or not isinstance(
-                mesh.getShape(), pm.nodetypes.Mesh
-            ):
+            shape = _get_shape(mesh)
+            if not shape or cmds.nodeType(shape) != "mesh":
                 print(f"ERROR: Object {i} ({mesh}) is not a polygon mesh")
                 return False
 
         # Check vertex counts match
-        verts1 = mesh1.getShape().numVertices()
-        verts2 = mesh2.getShape().numVertices()
+        verts1 = _num_vertices(mesh1)
+        verts2 = _num_vertices(mesh2)
 
         if verts1 != verts2:
             print(
@@ -33,20 +54,20 @@ class Validator:
         return True
 
     @staticmethod
-    def validate_blendshape(blendshape: pm.PyNode) -> bool:
+    def validate_blendshape(blendshape: str) -> bool:
         """Validate blendShape node configuration."""
-        if not pm.objExists(blendshape):
+        if not cmds.objExists(blendshape):
             print(f"ERROR: BlendShape {blendshape} does not exist")
             return False
 
         # Check envelope
-        envelope = pm.getAttr(f"{blendshape}.envelope")
+        envelope = cmds.getAttr(f"{blendshape}.envelope")
         if envelope != 1.0:
             print(f"WARNING: BlendShape envelope is {envelope}, should be 1.0")
 
         # Check weight attribute
         weight_attr = f"{blendshape}.weight[0]"
-        if pm.getAttr(weight_attr, lock=True):
+        if cmds.getAttr(weight_attr, lock=True):
             print(f"WARNING: BlendShape weight is locked")
 
         return True
@@ -98,7 +119,7 @@ class Weights:
 class Target:
     """Represents a single target/in-between target mesh."""
 
-    def __init__(self, mesh: pm.PyNode):
+    def __init__(self, mesh: str):
         self.mesh = mesh
         self._validate_target_mesh()
 
@@ -111,36 +132,36 @@ class Target:
             "baseMesh",
         ]
         for attr in required_attrs:
-            if not self.mesh.hasAttr(attr):
+            if not _has_attr(self.mesh, attr):
                 raise ValueError(f"Mesh {self.mesh} missing required attribute: {attr}")
 
     @property
     def weight(self) -> float:
         """Get the weight value for this tween."""
-        return Weights.round_weight(pm.getAttr(f"{self.mesh}.inbetweenWeight"))
+        return Weights.round_weight(cmds.getAttr(f"{self.mesh}.inbetweenWeight"))
 
     @property
     def blendshape_name(self) -> str:
         """Get the blendShape node name this tween targets."""
-        return str(pm.getAttr(f"{self.mesh}.blendShapeNode"))
+        return str(cmds.getAttr(f"{self.mesh}.blendShapeNode"))
 
     @property
     def base_mesh_name(self) -> str:
         """Get the base mesh name this tween applies to."""
-        return str(pm.getAttr(f"{self.mesh}.baseMesh"))
+        return str(cmds.getAttr(f"{self.mesh}.baseMesh"))
 
     @property
     def target_frame(self) -> Optional[int]:
         """Get target frame if this tween was created from a specific frame."""
-        if self.mesh.hasAttr("targetFrame"):
-            return int(pm.getAttr(f"{self.mesh}.targetFrame"))
+        if _has_attr(self.mesh, "targetFrame"):
+            return int(cmds.getAttr(f"{self.mesh}.targetFrame"))
         return None
 
-    def update_references(self, new_blendshape: pm.PyNode, new_base_mesh: pm.PyNode):
+    def update_references(self, new_blendshape: str, new_base_mesh: str):
         """Update this tween's references to new blendShape/base mesh."""
-        pm.setAttr(f"{self.mesh}.blendShapeNode", str(new_blendshape), type="string")
-        pm.setAttr(f"{self.mesh}.baseMesh", str(new_base_mesh), type="string")
-        print(f"  Updated {self.mesh.name()} references")
+        cmds.setAttr(f"{self.mesh}.blendShapeNode", str(new_blendshape), type="string")
+        cmds.setAttr(f"{self.mesh}.baseMesh", str(new_base_mesh), type="string")
+        print(f"  Updated {self.mesh} references")
 
 
 class Targets:
@@ -155,16 +176,16 @@ class Targets:
 
         # Check in known groups
         for group_name in cls.DEFAULT_GROUPS:
-            if pm.objExists(group_name):
-                group = pm.PyNode(group_name)
+            if cmds.objExists(group_name):
+                group = group_name
                 children = (
-                    pm.listRelatives(group, children=True, type="transform") or []
+                    cmds.listRelatives(group, children=True, type="transform") or []
                 )
                 candidates.extend(children)
 
         # Check loose tween meshes
         loose_tweens = [
-            n for n in pm.ls(type="transform") if n.hasAttr("isInbetweenTarget")
+            n for n in cmds.ls(type="transform") if _has_attr(n, "isInbetweenTarget")
         ]
         candidates.extend(loose_tweens)
 
@@ -172,7 +193,7 @@ class Targets:
         tweens = []
         for mesh in candidates:
             try:
-                if mesh.hasAttr("isInbetweenTarget") and pm.getAttr(
+                if _has_attr(mesh, "isInbetweenTarget") and cmds.getAttr(
                     f"{mesh}.isInbetweenTarget"
                 ):
                     tweens.append(Target(mesh))
@@ -195,7 +216,7 @@ class Targets:
 
     @classmethod
     def update_all_references(
-        cls, new_blendshape: pm.PyNode, new_base_mesh: pm.PyNode
+        cls, new_blendshape: str, new_base_mesh: str
     ) -> int:
         """Update all tween mesh references to new nodes."""
         tweens = cls.find_all_targets()
@@ -209,7 +230,7 @@ class Keyframes:
     """Core blendShape animation functionality."""
 
     def __init__(
-        self, base_mesh: pm.PyNode, target_mesh: pm.PyNode, blendshape: pm.PyNode
+        self, base_mesh: str, target_mesh: str, blendshape: str
     ):
         self.base_mesh = base_mesh
         self.target_mesh = target_mesh
@@ -220,22 +241,22 @@ class Keyframes:
         """Create linear keyframe animation."""
         try:
             # Clear existing keys
-            pm.cutKey(self.blendshape, attribute="weight[0]", clear=True)
+            cmds.cutKey(self.blendshape, attribute="weight[0]", clear=True)
 
             # Set start key (weight = 0)
-            pm.currentTime(start_frame)
-            pm.setKeyframe(
+            cmds.currentTime(start_frame)
+            cmds.setKeyframe(
                 self.blendshape, attribute="weight[0]", value=0.0, time=start_frame
             )
 
             # Set end key (weight = 1)
-            pm.currentTime(end_frame)
-            pm.setKeyframe(
+            cmds.currentTime(end_frame)
+            cmds.setKeyframe(
                 self.blendshape, attribute="weight[0]", value=1.0, time=end_frame
             )
 
             # Set linear tangents
-            pm.keyTangent(
+            cmds.keyTangent(
                 self.blendshape,
                 attribute="weight[0]",
                 time=(start_frame, end_frame),
@@ -255,20 +276,20 @@ class Keyframes:
         if not self.validator.validate_blendshape(self.blendshape):
             return False
 
-        original_weight = pm.getAttr(f"{self.blendshape}.weight[0]")
+        original_weight = cmds.getAttr(f"{self.blendshape}.weight[0]")
 
         try:
-            pm.setAttr(f"{self.blendshape}.weight[0]", 0.5)
-            pm.refresh()
+            cmds.setAttr(f"{self.blendshape}.weight[0]", 0.5)
+            cmds.refresh()
             print(f"BlendShape test: weight set to 0.5")
             print(f"Check if {self.base_mesh} changed shape (should morph, not move)")
             return True
         finally:
-            pm.setAttr(f"{self.blendshape}.weight[0]", original_weight)
+            cmds.setAttr(f"{self.blendshape}.weight[0]", original_weight)
 
     def get_frame_range(self) -> Tuple[int, int]:
         """Get the current animation frame range from keyframes."""
-        keys = pm.keyframe(f"{self.blendshape}.weight[0]", query=True)
+        keys = cmds.keyframe(f"{self.blendshape}.weight[0]", query=True)
         if not keys or len(keys) < 2:
             raise ValueError("No valid keyframe range found")
         return int(min(keys)), int(max(keys))
@@ -287,39 +308,39 @@ class Creator:
         name_prefix: str = "morph_ib",
     ) -> List[Target]:
         """Create tween meshes at specific weight values."""
-        original_weight = pm.getAttr(f"{self.animator.blendshape}.weight[0]")
+        original_weight = cmds.getAttr(f"{self.animator.blendshape}.weight[0]")
         created_tweens = []
 
         # Create/get group
-        if not pm.objExists(group_name):
-            group = pm.group(empty=True, name=group_name)
+        if not cmds.objExists(group_name):
+            group = cmds.group(empty=True, name=group_name)
         else:
-            group = pm.PyNode(group_name)
+            group = group_name
 
         try:
             for weight in weights:
                 weight = Weights.round_weight(weight)
 
                 # Set weight and capture shape
-                pm.setAttr(f"{self.animator.blendshape}.weight[0]", weight)
-                pm.refresh()
+                cmds.setAttr(f"{self.animator.blendshape}.weight[0]", weight)
+                cmds.refresh()
 
                 # Create duplicate
                 tween_name = f"{name_prefix}_w{int(weight * 1000):03d}"
-                dup = pm.duplicate(
+                dup = cmds.duplicate(
                     self.animator.base_mesh, name=tween_name, returnRootsOnly=True
                 )[0]
-                pm.delete(dup, constructionHistory=True)
+                cmds.delete(dup, constructionHistory=True)
 
                 # Reset weight before creating in-between target
-                pm.setAttr(f"{self.animator.blendshape}.weight[0]", 0.0)
-                pm.refresh()
+                cmds.setAttr(f"{self.animator.blendshape}.weight[0]", 0.0)
+                cmds.refresh()
 
                 # Parent to group
-                pm.parent(dup, group)
+                cmds.parent(dup, group)
 
                 # Create in-between target
-                pm.blendShape(
+                cmds.blendShape(
                     self.animator.blendshape,
                     edit=True,
                     inBetween=True,
@@ -331,7 +352,7 @@ class Creator:
                 created_tweens.append(Target(dup))
 
         finally:
-            pm.setAttr(f"{self.animator.blendshape}.weight[0]", original_weight)
+            cmds.setAttr(f"{self.animator.blendshape}.weight[0]", original_weight)
 
         print(
             f"Created {len(created_tweens)} tween meshes at weights: {[t.weight for t in created_tweens]}"
@@ -371,28 +392,28 @@ class Creator:
                 print("Cannot find suitable alternative weight")
                 return None
 
-        original_weight = pm.getAttr(f"{self.animator.blendshape}.weight[0]")
-        original_time = pm.currentTime(query=True)
+        original_weight = cmds.getAttr(f"{self.animator.blendshape}.weight[0]")
+        original_time = cmds.currentTime(query=True)
 
         try:
             # Go to target frame and set weight
-            pm.currentTime(target_frame)
-            pm.setAttr(f"{self.animator.blendshape}.weight[0]", weight)
-            pm.refresh()
+            cmds.currentTime(target_frame)
+            cmds.setAttr(f"{self.animator.blendshape}.weight[0]", weight)
+            cmds.refresh()
 
             # Create tween
             tween_name = f"tween_f{target_frame}_w{int(weight * 1000):03d}"
-            dup = pm.duplicate(
+            dup = cmds.duplicate(
                 self.animator.base_mesh, name=tween_name, returnRootsOnly=True
             )[0]
-            pm.delete(dup, constructionHistory=True)
+            cmds.delete(dup, constructionHistory=True)
 
             # Reset and create in-between
-            pm.setAttr(f"{self.animator.blendshape}.weight[0]", 0.0)
-            pm.refresh()
+            cmds.setAttr(f"{self.animator.blendshape}.weight[0]", 0.0)
+            cmds.refresh()
 
             try:
-                pm.blendShape(
+                cmds.blendShape(
                     self.animator.blendshape,
                     edit=True,
                     inBetween=True,
@@ -401,7 +422,7 @@ class Creator:
             except Exception as e:
                 if "Weights must be unique" in str(e):
                     print(f"ERROR: Weight {weight:.3f} already exists in blendShape")
-                    pm.delete(dup)  # Clean up the duplicate
+                    cmds.delete(dup)  # Clean up the duplicate
                     return None
                 else:
                     raise e
@@ -411,11 +432,11 @@ class Creator:
 
             # Group it
             group_name = "_morphInbetweens_GRP"
-            if not pm.objExists(group_name):
-                group = pm.group(empty=True, name=group_name)
+            if not cmds.objExists(group_name):
+                group = cmds.group(empty=True, name=group_name)
             else:
-                group = pm.PyNode(group_name)
-            pm.parent(dup, group)
+                group = group_name
+            cmds.parent(dup, group)
 
             print(
                 f"Created frame-based tween: {tween_name} (frame {target_frame}, weight {weight:.3f})"
@@ -423,38 +444,38 @@ class Creator:
             return Target(dup)
 
         finally:
-            pm.setAttr(f"{self.animator.blendshape}.weight[0]", original_weight)
-            pm.currentTime(original_time)
+            cmds.setAttr(f"{self.animator.blendshape}.weight[0]", original_weight)
+            cmds.currentTime(original_time)
 
     def _tag_tween_mesh(
-        self, mesh: pm.PyNode, weight: float, target_frame: Optional[int] = None
+        self, mesh: str, weight: float, target_frame: Optional[int] = None
     ):
         """Add metadata attributes to tween mesh."""
         # Basic tween attributes
-        pm.addAttr(
+        cmds.addAttr(
             mesh, longName="isInbetweenTarget", attributeType="bool", keyable=False
         )
-        pm.setAttr(f"{mesh}.isInbetweenTarget", True)
+        cmds.setAttr(f"{mesh}.isInbetweenTarget", True)
 
-        pm.addAttr(
+        cmds.addAttr(
             mesh, longName="inbetweenWeight", attributeType="double", keyable=False
         )
-        pm.setAttr(f"{mesh}.inbetweenWeight", weight)
+        cmds.setAttr(f"{mesh}.inbetweenWeight", weight)
 
-        pm.addAttr(mesh, longName="blendShapeNode", dataType="string")
-        pm.setAttr(
+        cmds.addAttr(mesh, longName="blendShapeNode", dataType="string")
+        cmds.setAttr(
             f"{mesh}.blendShapeNode", str(self.animator.blendshape), type="string"
         )
 
-        pm.addAttr(mesh, longName="baseMesh", dataType="string")
-        pm.setAttr(f"{mesh}.baseMesh", str(self.animator.base_mesh), type="string")
+        cmds.addAttr(mesh, longName="baseMesh", dataType="string")
+        cmds.setAttr(f"{mesh}.baseMesh", str(self.animator.base_mesh), type="string")
 
         # Optional frame information
         if target_frame is not None:
-            pm.addAttr(
+            cmds.addAttr(
                 mesh, longName="targetFrame", attributeType="long", keyable=False
             )
-            pm.setAttr(f"{mesh}.targetFrame", target_frame)
+            cmds.setAttr(f"{mesh}.targetFrame", target_frame)
 
     def _get_existing_weights(self) -> set:
         """Get all existing in-between weights for the current blendShape."""
@@ -463,11 +484,11 @@ class Creator:
             existing_weights = set()
 
             # Check for in-between targets using Maya's blendShape query
-            targets = pm.blendShape(self.animator.blendshape, query=True, target=True)
+            targets = cmds.blendShape(self.animator.blendshape, query=True, target=True)
             if targets:
                 # Query in-between weights for the first target (index 0)
                 try:
-                    inbetween_weights = pm.blendShape(
+                    inbetween_weights = cmds.blendShape(
                         self.animator.blendshape,
                         query=True,
                         inBetween=True,
@@ -509,23 +530,23 @@ class Applicator:
         """Validate and filter tweens that match base mesh topology."""
         print("Validating tween mesh topology...")
 
-        base_vert_count = self.animator.base_mesh.getShape().numVertices()
+        base_vert_count = _num_vertices(self.animator.base_mesh)
         valid_tweens = []
 
         for tween in tweens:
             try:
-                tween_vert_count = tween.mesh.getShape().numVertices()
+                tween_vert_count = _num_vertices(tween.mesh)
                 if tween_vert_count == base_vert_count:
                     valid_tweens.append(tween)
                     print(
-                        f"  ✓ {tween.mesh.name()}: {tween_vert_count} vertices (valid)"
+                        f"  ✓ {tween.mesh}: {tween_vert_count} vertices (valid)"
                     )
                 else:
                     print(
-                        f"  ✗ {tween.mesh.name()}: {tween_vert_count} vs {base_vert_count} vertices (topology mismatch)"
+                        f"  ✗ {tween.mesh}: {tween_vert_count} vs {base_vert_count} vertices (topology mismatch)"
                     )
             except Exception as e:
-                print(f"  ✗ {tween.mesh.name()}: Error checking topology - {e}")
+                print(f"  ✗ {tween.mesh}: Error checking topology - {e}")
 
         if len(valid_tweens) != len(tweens):
             print(
@@ -558,7 +579,7 @@ class Applicator:
         # Group by weight to handle duplicates
         weight_groups = Targets.group_by_weight(tweens)
         applied_results = []
-        original_weight = pm.getAttr(f"{self.animator.blendshape}.weight[0]")
+        original_weight = cmds.getAttr(f"{self.animator.blendshape}.weight[0]")
 
         try:
             for weight, tween_group in sorted(weight_groups.items()):
@@ -567,7 +588,7 @@ class Applicator:
 
                 if len(tween_group) > 1:
                     print(
-                        f"  Found {len(tween_group)} tweens at weight {weight:.3f}, using: {target_tween.mesh.name()}"
+                        f"  Found {len(tween_group)} tweens at weight {weight:.3f}, using: {target_tween.mesh}"
                     )
 
                 # Apply this tween
@@ -575,12 +596,12 @@ class Applicator:
                 applied_results.append((target_tween, success))
 
                 if success:
-                    print(f"Applied {target_tween.mesh.name()} at weight {weight:.3f}")
+                    print(f"Applied {target_tween.mesh} at weight {weight:.3f}")
                 else:
-                    print(f"Failed to apply {target_tween.mesh.name()}")
+                    print(f"Failed to apply {target_tween.mesh}")
 
         finally:
-            pm.setAttr(f"{self.animator.blendshape}.weight[0]", original_weight)
+            cmds.setAttr(f"{self.animator.blendshape}.weight[0]", original_weight)
 
         successful_count = sum(1 for _, success in applied_results if success)
         print(f"Applied {successful_count}/{len(applied_results)} tween edits")
@@ -589,7 +610,7 @@ class Applicator:
     def _apply_single_tween(self, tween: Target, skip_duplicates: bool) -> bool:
         """Apply a single tween mesh to the blendShape."""
         try:
-            pm.blendShape(
+            cmds.blendShape(
                 self.animator.blendshape,
                 edit=True,
                 inBetween=True,
@@ -600,10 +621,10 @@ class Applicator:
         except Exception as e:
             error_msg = str(e)
             if "Weights must be unique" in error_msg and skip_duplicates:
-                print(f"    Skipped {tween.mesh.name()} (duplicate weight)")
+                print(f"    Skipped {tween.mesh} (duplicate weight)")
                 return False  # Not applied, but not an error
             else:
-                print(f"    Error applying {tween.mesh.name()}: {e}")
+                print(f"    Error applying {tween.mesh}: {e}")
                 return False
 
 
@@ -611,17 +632,17 @@ class Animator:
     """Main workflow class for blendShape animations."""
 
     def __init__(self):
-        self.base_mesh: Optional[pm.PyNode] = None
-        self.target_mesh: Optional[pm.PyNode] = None
-        self.blendshape: Optional[pm.PyNode] = None
+        self.base_mesh: Optional[str] = None
+        self.target_mesh: Optional[str] = None
+        self.blendshape: Optional[str] = None
         self.animator: Optional[Keyframes] = None
         self.tween_creator: Optional[Creator] = None
         self.tween_applicator: Optional[Applicator] = None
 
     def create(
         self,
-        base_mesh: pm.PyNode = None,
-        target_mesh: pm.PyNode = None,
+        base_mesh: str = None,
+        target_mesh: str = None,
         start_frame: int = 5500,
         end_frame: int = 5800,
         name: str = "morph",
@@ -645,7 +666,7 @@ class Animator:
 
         # Get meshes from selection if not provided
         if base_mesh is None or target_mesh is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if len(selection) != 2:
                 print(
                     "ERROR: Please select exactly 2 meshes (source first, target second)"
@@ -662,13 +683,13 @@ class Animator:
 
         # Create or find blendShape
         try:
-            history = base_mesh.listHistory(type="blendShape")
+            history = _list_history(base_mesh, type="blendShape")
             if history:
                 self.blendshape = history[0]
                 print(f"Found existing blendShape: {self.blendshape}")
             else:
                 blendshape_name = f"{name}_BS"
-                self.blendshape = pm.blendShape(
+                self.blendshape = cmds.blendShape(
                     target_mesh,
                     base_mesh,
                     name=blendshape_name,
@@ -678,8 +699,8 @@ class Animator:
                 print(f"Created blendShape: {self.blendshape}")
 
             # Configure blendShape
-            pm.setAttr(f"{self.blendshape}.weight[0]", keyable=True, lock=False)
-            pm.setAttr(f"{self.blendshape}.envelope", 1.0)
+            cmds.setAttr(f"{self.blendshape}.weight[0]", keyable=True, lock=False)
+            cmds.setAttr(f"{self.blendshape}.envelope", 1.0)
 
             # Create animator and sub-components
             self.animator = Keyframes(self.base_mesh, self.target_mesh, self.blendshape)
@@ -797,7 +818,7 @@ class Animator:
             return False
         return True
 
-    def _process_existing_inbetweens(self, inbetween_meshes: List[pm.PyNode]):
+    def _process_existing_inbetweens(self, inbetween_meshes: List[str]):
         """Process existing in-between meshes and add them to the blendShape."""
         if not self._validate_setup():
             return
@@ -811,7 +832,7 @@ class Animator:
         for i, (mesh, weight) in enumerate(zip(inbetween_meshes, weights)):
             try:
                 # Add as in-between target
-                pm.blendShape(
+                cmds.blendShape(
                     self.blendshape,
                     edit=True,
                     inBetween=True,
@@ -821,10 +842,10 @@ class Animator:
                 # Tag the mesh with metadata
                 self.tween_creator._tag_tween_mesh(mesh, weight)
 
-                print(f"  Added {mesh.name()} as in-between at weight {weight:.3f}")
+                print(f"  Added {mesh} as in-between at weight {weight:.3f}")
 
             except Exception as e:
-                print(f"  Failed to add {mesh.name()}: {e}")
+                print(f"  Failed to add {mesh}: {e}")
 
         print("Existing in-between meshes processed!")
         print("You can now edit these meshes and run: animator.apply_all_edits()")
@@ -959,7 +980,7 @@ class Animator:
             # Hide/delete target mesh
             if hide_target_mesh and self.target_mesh:
                 try:
-                    pm.setAttr(f"{self.target_mesh}.visibility", False)
+                    cmds.setAttr(f"{self.target_mesh}.visibility", False)
                     print(f"  Hidden target mesh: {self.target_mesh}")
                 except:
                     print(f"  Could not hide target mesh: {self.target_mesh}")
@@ -970,7 +991,7 @@ class Animator:
                 deleted_count = 0
                 for tween in tweens:
                     try:
-                        pm.delete(tween.mesh)
+                        cmds.delete(tween.mesh)
                         deleted_count += 1
                     except:
                         print(f"  Could not delete: {tween.mesh}")
@@ -980,21 +1001,21 @@ class Animator:
 
                 # Clean up empty groups
                 for group_name in Targets.DEFAULT_GROUPS:
-                    if pm.objExists(group_name):
-                        group = pm.PyNode(group_name)
-                        children = pm.listRelatives(group, children=True) or []
+                    if cmds.objExists(group_name):
+                        group = group_name
+                        children = cmds.listRelatives(group, children=True) or []
                         if not children:  # Empty group
                             try:
-                                pm.delete(group)
+                                cmds.delete(group)
                                 print(f"  Deleted empty group: {group_name}")
                             except:
                                 pass
             else:
                 # Just hide the groups
                 for group_name in Targets.DEFAULT_GROUPS:
-                    if pm.objExists(group_name):
+                    if cmds.objExists(group_name):
                         try:
-                            pm.setAttr(f"{group_name}.visibility", False)
+                            cmds.setAttr(f"{group_name}.visibility", False)
                             print(f"  Hidden group: {group_name}")
                         except:
                             pass
@@ -1004,14 +1025,14 @@ class Animator:
             print("Step 3: Cleaning construction history...")
             try:
                 # Don't delete the blendShape - only clean other history
-                history = self.base_mesh.listHistory()
+                history = _list_history(self.base_mesh)
                 to_delete = []
                 for node in history:
-                    if node.nodeType() not in ["blendShape", "mesh", "transform"]:
+                    if cmds.nodeType(node) not in ["blendShape", "mesh", "transform"]:
                         to_delete.append(node)
 
                 if to_delete:
-                    pm.delete(to_delete)
+                    cmds.delete(to_delete)
                     print(
                         f"  Cleaned {len(to_delete)} history nodes (preserved blendShape)"
                     )
@@ -1024,10 +1045,10 @@ class Animator:
         print("Step 4: Final validation...")
         try:
             # Test the blendShape one more time
-            original_weight = pm.getAttr(f"{self.blendshape}.weight[0]")
-            pm.setAttr(f"{self.blendshape}.weight[0]", 0.5)
-            pm.refresh()
-            pm.setAttr(f"{self.blendshape}.weight[0]", original_weight)
+            original_weight = cmds.getAttr(f"{self.blendshape}.weight[0]")
+            cmds.setAttr(f"{self.blendshape}.weight[0]", 0.5)
+            cmds.refresh()
+            cmds.setAttr(f"{self.blendshape}.weight[0]", original_weight)
             print("  ✓ BlendShape validation passed")
         except Exception as e:
             print(f"  ⚠ BlendShape validation warning: {e}")
@@ -1037,7 +1058,7 @@ class Animator:
         print(f"✓ Base mesh: {self.base_mesh}")
         print(f"✓ BlendShape: {self.blendshape}")
         print(
-            f"✓ Animation keyframes: {len(pm.keyframe(f'{self.blendshape}.weight[0]', query=True) or [])} keys"
+            f"✓ Animation keyframes: {len(cmds.keyframe(f'{self.blendshape}.weight[0]', query=True) or [])} keys"
         )
         print("✓ Scene cleaned and ready for baking/export")
         print("\nYou can now:")
@@ -1054,7 +1075,7 @@ class Animator:
 
         # Use provided base_mesh or fallback to selection
         if base_mesh is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if selection:
                 base_mesh = selection[0]
             else:
@@ -1062,7 +1083,7 @@ class Animator:
                 return None
 
         # Find blendShape
-        history = base_mesh.listHistory(type="blendShape")
+        history = _list_history(base_mesh, type="blendShape")
         if not history:
             print(f"No blendShape found on {base_mesh}")
             return None
@@ -1070,7 +1091,7 @@ class Animator:
         blendshape = history[0]
 
         # Find target mesh from blendShape - look for the original target, not in-betweens
-        targets = pm.blendShape(blendshape, query=True, target=True)
+        targets = cmds.blendShape(blendshape, query=True, target=True)
         if not targets:
             print(f"No targets found in blendShape {blendshape}")
             return None
@@ -1078,17 +1099,17 @@ class Animator:
         # Try to find the main target (not an in-between mesh)
         target_mesh = None
         for target_name in targets:
-            candidate = pm.PyNode(target_name)
+            candidate = target_name
             # Skip if it looks like an in-between mesh (has specific naming patterns)
             if not any(
-                pattern in candidate.name() for pattern in ["tween_f", "_w0", "_ib_"]
+                pattern in candidate for pattern in ["tween_f", "_w0", "_ib_"]
             ):
                 target_mesh = candidate
                 break
 
         # If no good target found, use the first one but warn
         if target_mesh is None:
-            target_mesh = pm.PyNode(targets[0])
+            target_mesh = targets[0]
             print(
                 f"WARNING: Using {target_mesh} as target - might be an in-between mesh"
             )
@@ -1103,7 +1124,7 @@ class Animator:
         animator.tween_applicator = Applicator(animator.animator)
 
         # Check for existing keyframes
-        existing_keys = pm.keyframe(f"{blendshape}.weight[0]", query=True) or []
+        existing_keys = cmds.keyframe(f"{blendshape}.weight[0]", query=True) or []
         if existing_keys:
             print(f"Found {len(existing_keys)} existing keyframes")
         else:
@@ -1120,7 +1141,7 @@ class Animator:
             return False
 
         # Check current keyframes
-        current_keys = pm.keyframe(f"{self.blendshape}.weight[0]", query=True) or []
+        current_keys = cmds.keyframe(f"{self.blendshape}.weight[0]", query=True) or []
 
         if len(current_keys) >= 2:
             print(f"Animation already exists with {len(current_keys)} keyframes")
@@ -1169,8 +1190,8 @@ class Animator:
         if not self._validate_setup():
             return False
 
-        base_vert_count = self.base_mesh.getShape().numVertices()
-        base_face_count = self.base_mesh.getShape().numFaces()
+        base_vert_count = _num_vertices(self.base_mesh)
+        base_face_count = _num_faces(self.base_mesh)
 
         print(
             f"Base mesh '{self.base_mesh}': {base_vert_count} vertices, {base_face_count} faces"
@@ -1178,8 +1199,8 @@ class Animator:
 
         # Check target mesh
         try:
-            target_vert_count = self.target_mesh.getShape().numVertices()
-            target_face_count = self.target_mesh.getShape().numFaces()
+            target_vert_count = _num_vertices(self.target_mesh)
+            target_face_count = _num_faces(self.target_mesh)
             print(
                 f"Target mesh '{self.target_mesh}': {target_vert_count} vertices, {target_face_count} faces"
             )
@@ -1200,23 +1221,23 @@ class Animator:
         mismatched_count = 0
         for tween in tweens:
             try:
-                tween_vert_count = tween.mesh.getShape().numVertices()
-                tween_face_count = tween.mesh.getShape().numFaces()
+                tween_vert_count = _num_vertices(tween.mesh)
+                tween_face_count = _num_faces(tween.mesh)
 
                 if (
                     tween_vert_count == base_vert_count
                     and tween_face_count == base_face_count
                 ):
                     print(
-                        f"  ✓ {tween.mesh.name()}: {tween_vert_count}v, {tween_face_count}f (MATCH)"
+                        f"  ✓ {tween.mesh}: {tween_vert_count}v, {tween_face_count}f (MATCH)"
                     )
                 else:
                     print(
-                        f"  ✗ {tween.mesh.name()}: {tween_vert_count}v, {tween_face_count}f (MISMATCH)"
+                        f"  ✗ {tween.mesh}: {tween_vert_count}v, {tween_face_count}f (MISMATCH)"
                     )
                     mismatched_count += 1
             except Exception as e:
-                print(f"  ✗ {tween.mesh.name()}: Error - {e}")
+                print(f"  ✗ {tween.mesh}: Error - {e}")
                 mismatched_count += 1
 
         if mismatched_count > 0:
@@ -1241,11 +1262,11 @@ class Animator:
             return False
 
         # Check target mesh topology first
-        base_vert_count = self.base_mesh.getShape().numVertices()
+        base_vert_count = _num_vertices(self.base_mesh)
         target_topology_mismatch = False
 
         try:
-            target_vert_count = self.target_mesh.getShape().numVertices()
+            target_vert_count = _num_vertices(self.target_mesh)
             if target_vert_count != base_vert_count:
                 print(
                     f"Target mesh topology mismatch: {target_vert_count}v vs {base_vert_count}v"
@@ -1289,21 +1310,21 @@ class Animator:
 
             for tween in invalid_tweens:
                 try:
-                    mesh_name = tween.mesh.name()
-                    pm.delete(tween.mesh)
+                    mesh_name = tween.mesh
+                    cmds.delete(tween.mesh)
                     print(f"  Deleted: {mesh_name}")
                     deleted_count += 1
                 except Exception as e:
-                    print(f"  Failed to delete {tween.mesh.name()}: {e}")
+                    print(f"  Failed to delete {tween.mesh}: {e}")
 
             # Clean up empty groups
             for group_name in Targets.DEFAULT_GROUPS:
-                if pm.objExists(group_name):
-                    group = pm.PyNode(group_name)
-                    children = pm.listRelatives(group, children=True) or []
+                if cmds.objExists(group_name):
+                    group = group_name
+                    children = cmds.listRelatives(group, children=True) or []
                     if not children:
                         try:
-                            pm.delete(group)
+                            cmds.delete(group)
                             print(f"  Deleted empty group: {group_name}")
                         except:
                             pass
@@ -1330,10 +1351,10 @@ class Animator:
     def _cleanup_target_mesh(self):
         """Handle problematic target mesh by hiding it and updating reference."""
         try:
-            old_target_name = self.target_mesh.name()
+            old_target_name = self.target_mesh
 
             # Hide the old target instead of deleting (safer)
-            pm.setAttr(f"{self.target_mesh}.visibility", False)
+            cmds.setAttr(f"{self.target_mesh}.visibility", False)
             print(f"  Hidden problematic target mesh: {old_target_name}")
 
             # Update target reference to None (blendShape will still work)
@@ -1351,15 +1372,15 @@ class Animator:
             return False
 
         # Check if target mesh exists and remove it
-        if self.target_mesh and pm.objExists(self.target_mesh):
+        if self.target_mesh and cmds.objExists(self.target_mesh):
             try:
-                target_name = self.target_mesh.name()
-                pm.delete(self.target_mesh)
+                target_name = self.target_mesh
+                cmds.delete(self.target_mesh)
                 print(f"Removed target mesh: {target_name}")
                 self.target_mesh = None
 
                 # Verify blendShape still works
-                if self.blendshape and pm.objExists(self.blendshape):
+                if self.blendshape and cmds.objExists(self.blendshape):
                     print(f"BlendShape {self.blendshape} preserved - animation intact")
                 else:
                     print("WARNING: BlendShape not found - animation may be lost")
@@ -1383,7 +1404,7 @@ class Animator:
 
         # Use provided objects or fallback to selection
         if base_mesh is None or target_mesh is None:
-            selection = pm.selected()
+            selection = cmds.ls(selection=True)
             if len(selection) >= 2:
                 base_mesh = selection[0] if base_mesh is None else base_mesh
                 target_mesh = selection[1] if target_mesh is None else target_mesh
@@ -1407,11 +1428,11 @@ class Recovery:
     """Utilities for recovering from corrupted blendShape setups."""
 
     @staticmethod
-    def fix_corrupted_animation(base_mesh: pm.PyNode, target_mesh: pm.PyNode) -> bool:
+    def fix_corrupted_animation(base_mesh: str, target_mesh: str) -> bool:
         """Rebuild corrupted blendShape animation."""
         print("=== RECOVERY: Fixing corrupted animation ===")
 
-        history = base_mesh.listHistory(type="blendShape")
+        history = _list_history(base_mesh, type="blendShape")
         if not history:
             print("No blendShape found to fix")
             return False
@@ -1421,10 +1442,10 @@ class Recovery:
         # Save keyframes
         keyframes = []
         try:
-            times = pm.keyframe(
+            times = cmds.keyframe(
                 f"{old_blendshape}.weight[0]", query=True, timeChange=True
             )
-            values = pm.keyframe(
+            values = cmds.keyframe(
                 f"{old_blendshape}.weight[0]", query=True, valueChange=True
             )
             if times and values:
@@ -1434,12 +1455,12 @@ class Recovery:
             print("No keyframes found to preserve")
 
         # Delete corrupted blendShape
-        pm.delete(old_blendshape)
+        cmds.delete(old_blendshape)
         print("Removed corrupted blendShape")
 
         # Create fresh blendShape
-        new_name = f"{base_mesh.name()}_BS_fixed"
-        new_blendshape = pm.blendShape(
+        new_name = f"{base_mesh}_BS_fixed"
+        new_blendshape = cmds.blendShape(
             target_mesh, base_mesh, name=new_name, frontOfChain=True, origin="world"
         )[0]
         print(f"Created fresh blendShape: {new_blendshape}")
@@ -1447,7 +1468,7 @@ class Recovery:
         # Restore keyframes
         if keyframes:
             for time_val, weight_val in keyframes:
-                pm.setKeyframe(
+                cmds.setKeyframe(
                     new_blendshape,
                     attribute="weight[0]",
                     time=time_val,
@@ -1456,7 +1477,7 @@ class Recovery:
 
             # Set linear tangents
             start_time, end_time = keyframes[0][0], keyframes[-1][0]
-            pm.keyTangent(
+            cmds.keyTangent(
                 new_blendshape,
                 attribute="weight[0]",
                 time=(start_time, end_time),
@@ -1470,7 +1491,7 @@ class Recovery:
         return True
 
     @staticmethod
-    def recover_with_targets(base_mesh: pm.PyNode, target_mesh: pm.PyNode) -> bool:
+    def recover_with_targets(base_mesh: str, target_mesh: str) -> bool:
         """Complete recovery: fix animation AND restore tween customizations."""
         print("=== COMPLETE RECOVERY ===")
 
@@ -1479,7 +1500,7 @@ class Recovery:
             return False
 
         # Step 2: Update tween references and apply
-        history = base_mesh.listHistory(type="blendShape")
+        history = _list_history(base_mesh, type="blendShape")
         if history:
             new_blendshape = history[0]
             count = Targets.update_all_references(new_blendshape, base_mesh)
@@ -1504,7 +1525,7 @@ class Recovery:
 
 if __name__ == "__main__":
     # Example workflow:
-    selection = pm.selected()
+    selection = cmds.ls(selection=True)
 
     if len(selection) < 1:
         print("ERROR: Please select at least 1 mesh object")
@@ -1514,7 +1535,7 @@ if __name__ == "__main__":
         animator = Animator.from_existing(base)
         if animator:
             # Add additional in-betweens
-            current_time = pm.currentTime(query=True)
+            current_time = cmds.currentTime(query=True)
             # new_tweens = animator.edit(mode="frames", target_frame=current_time)
             # Custom cleanup
             # animator.diagnose_topology_issues()

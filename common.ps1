@@ -281,36 +281,70 @@ function Merge-ToMain {
         # the last dev commit (e.g. "Bump version to X.Y.Z [skip ci]"),
         # which causes GitHub Actions to skip the publish workflow entirely.
         git merge dev --no-edit --no-ff
-        
-        # Handle merge conflicts automatically
+
+        # Handle merge conflicts automatically. Every release predictably
+        # touches the same set of files (version bumps + dep pin syncs +
+        # readme badge), so we explicitly take dev's version for those —
+        # the post-publish state is always what dev says it is.
         if ($LASTEXITCODE -ne 0) {
             Write-Host "    Resolving conflicts..." -ForegroundColor Yellow
-            
-            # Accept dev version for workflows and __init__.py (suppress stderr)
+
             $ErrorActionPreference = "SilentlyContinue"
             git checkout --theirs ".github/workflows/*.yml" *>&1 | Out-Null
-            git checkout --theirs "*/__init__.py" *>&1 | Out-Null
+            git checkout --theirs "*/__init__.py"          *>&1 | Out-Null
+            git checkout --theirs "pyproject.toml"          *>&1 | Out-Null
+            git checkout --theirs "docs/README.md"          *>&1 | Out-Null
             $ErrorActionPreference = "Continue"
-            
+
+            # Hard guard: anything still in conflict means we'd be staging a
+            # half-resolved tree. Refuse to commit; abort cleanly so the
+            # operator can resolve manually instead of producing a corrupt
+            # main (e.g. an empty pyproject.toml getting committed by
+            # `git add -A`).
+            $unresolved = git diff --name-only --diff-filter=U
+            if ($unresolved) {
+                git merge --abort *>&1 | Out-Null
+                Write-Err "Merge has unresolved paths after auto-resolution:"
+                $unresolved | ForEach-Object {
+                    Write-Host "    $_" -ForegroundColor DarkGray
+                }
+                Write-Host "    Resolve manually, then push again." -ForegroundColor DarkGray
+                return $false
+            }
+
             git add -A
             git commit --no-edit
-            
+
             if ($LASTEXITCODE -ne 0) {
                 Write-Err "Merge failed - could not auto-resolve conflicts"
                 return $false
             }
         }
-        
+
+        # Sanity-check the merged tree before pushing. Catches silently
+        # corrupted blobs (e.g. an empty pyproject.toml staged by an
+        # earlier `git add -A` over an unresolved merge) before they
+        # land on origin/main and trigger a doomed publish workflow.
+        $tomlBlob = git show "HEAD:pyproject.toml" 2>$null
+        if (Test-Path "pyproject.toml") {
+            if (-not $tomlBlob -or $tomlBlob.Length -lt 50) {
+                Write-Err "pyproject.toml on merged main is empty or truncated"
+                Write-Host "    Refusing to push a broken pyproject.toml." -ForegroundColor DarkGray
+                Write-Host "    Recover with: git reset --hard origin/main" -ForegroundColor DarkGray
+                return $false
+            }
+        }
+
         Write-Step "Pushing main..."
         git push origin main
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Push main failed"
             return $false
         }
-        
+
         Write-Step "Switching back to dev..."
         git checkout dev
-        
+
         Write-Success "Merged and pushed to main"
         return $true
     }

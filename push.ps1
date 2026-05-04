@@ -848,6 +848,15 @@ foreach ($repo in $reposToProcess) {
             }
         }
         if (-not $DryRun -and -not $SkipBuild) {
+            # Known transient: `[Errno 13] Permission denied` with no path.
+            # Repo lives under o:\Cloud\... (sync-managed) — likely a sync
+            # agent or AV briefly holding a file in dist/ or build/ during
+            # cleanup. Re-running usually succeeds; -SkipBuild is the
+            # operator escape hatch. Before adding retry/temp-build logic,
+            # capture the FULL stderr on next occurrence (the path in the
+            # Permission denied message tells you whether it's dist/,
+            # build/, .egg-info, or something else) — until we have that,
+            # we don't know what to retry or where to relocate.
             $buildOk = Test-Build $pkgName $repoPath
             if (-not $buildOk) {
                 $results[$pkgName] = "build-failed"

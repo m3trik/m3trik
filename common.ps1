@@ -325,9 +325,13 @@ function Merge-ToMain {
         # corrupted blobs (e.g. an empty pyproject.toml staged by an
         # earlier `git add -A` over an unresolved merge) before they
         # land on origin/main and trigger a doomed publish workflow.
-        $tomlBlob = git show "HEAD:pyproject.toml" 2>$null
+        # Note: `git show` output in PowerShell is an array of lines, so we
+        # join back to a single string before measuring bytes — otherwise
+        # `.Length` is the line count and a normal ~40-line pyproject.toml
+        # falsely trips the < 50 byte guard.
         if (Test-Path "pyproject.toml") {
-            if (-not $tomlBlob -or $tomlBlob.Length -lt 50) {
+            $tomlText = (git show "HEAD:pyproject.toml" 2>$null) -join "`n"
+            if (-not $tomlText -or $tomlText.Length -lt 50) {
                 Write-Err "pyproject.toml on merged main is empty or truncated"
                 Write-Host "    Refusing to push a broken pyproject.toml." -ForegroundColor DarkGray
                 Write-Host "    Recover with: git reset --hard origin/main" -ForegroundColor DarkGray

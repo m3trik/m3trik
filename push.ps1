@@ -235,6 +235,10 @@ function Sync-PyProjectDepsToLocalVersions {
     $newVer = Bump-LocalVersion $RepoPath
     if ($newVer) {
         Write-Host "    [Dependency Cascading] Bumped $PackageName to $newVer" -ForegroundColor Cyan
+        # Propagate the cascade bump to the shared version map so downstream
+        # packages pin against the version we actually publish, not the
+        # pre-cascade intermediate.
+        $LocalVersions[$PackageName] = $newVer
     } else {
         Write-Err "    Failed to bump version for $PackageName after dependency update"
     }

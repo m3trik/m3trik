@@ -239,6 +239,10 @@ function Sync-PyProjectDepsToLocalVersions {
         $LocalVersions[$PackageName] = $newVer
     } else {
         Write-Err "    Failed to bump version for $PackageName after dependency update"
+        # Abort: writing the new toml + committing without a version bump produces
+        # a "version to  [skip ci]" commit that PyPI will reject (changed metadata,
+        # unchanged version). Let the caller mark this package failed.
+        return $false
     }
 
     Set-Content -Path $tomlFile -Value $newContent -NoNewline

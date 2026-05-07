@@ -59,10 +59,9 @@ function Test-RepoOperationSafe {
             Write-Err "Merge in progress (MERGE_HEAD present)"
             return $false
         }
-        if (Test-Path (Join-Path $gitDir "REBASE_HEAD")) {
-            Write-Err "Rebase in progress (REBASE_HEAD present)"
-            return $false
-        }
+        # Note: REBASE_HEAD is a backref that lingers after a successful rebase, not a
+        # progress indicator. The active-rebase signals are the rebase-apply / rebase-merge
+        # directories below.
         if (Test-Path (Join-Path $gitDir "rebase-apply")) {
             Write-Err "Rebase in progress (rebase-apply present)"
             return $false

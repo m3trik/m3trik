@@ -219,6 +219,16 @@ function Sync-PyProjectDepsToLocalVersions {
         if ($changed) {
             Write-Step "[DryRun] Would bump local version of $PackageName (dependency sync)"
             Write-Step "[DryRun] Would sync pyproject.toml dependencies"
+            # Mirror the auto-bump DryRun mock so downstream pin simulations see the
+            # cascaded version, not the pre-cascade one.
+            if ($LocalVersions.ContainsKey($PackageName)) {
+                $curr = $LocalVersions[$PackageName]
+                try {
+                    $parts = $curr -split "\."
+                    $nextPatch = [int]$parts[-1] + 1
+                    $LocalVersions[$PackageName] = "$($parts[0]).$($parts[1]).$nextPatch"
+                } catch {}
+            }
         } else {
             Write-Step "[DryRun] Dependencies already in sync"
         }
@@ -297,45 +307,63 @@ function Test-OnlyDevBumpChanges {
 
 function Test-Build {
     param([string]$PackageName, [string]$RepoPath)
-    
+
     Write-Step "Validating build..."
     Push-Location $RepoPath
     try {
-        if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
-        if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
-        $eggInfo = "$PackageName.egg-info"
-        if (Test-Path $eggInfo) { Remove-Item -Recurse -Force $eggInfo }
-        
         $oldErrorAction = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        
-        # Run build with timeout (60 seconds)
-        $buildJob = Start-Job -ScriptBlock { 
-            param($path)
-            Set-Location $path
-            python -m build --wheel 2>&1
-        } -ArgumentList $RepoPath
-        
-        Wait-Job $buildJob -Timeout 60 | Out-Null
-        if ($buildJob.State -eq 'Running') {
-            Stop-Job $buildJob
+
+        # Cloud-sync clients (OneDrive/Dropbox) on O:\Cloud\ intermittently lock the
+        # final wheel write, surfacing as "Permission denied" / Errno 13. Retry on
+        # that signature; bail immediately on real build errors.
+        $maxAttempts = 3
+        $filteredOutput = $null
+        $buildOk = $false
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" -ErrorAction SilentlyContinue }
+            if (Test-Path "build") { Remove-Item -Recurse -Force "build" -ErrorAction SilentlyContinue }
+            $eggInfo = "$PackageName.egg-info"
+            if (Test-Path $eggInfo) { Remove-Item -Recurse -Force $eggInfo -ErrorAction SilentlyContinue }
+
+            $buildJob = Start-Job -ScriptBlock {
+                param($path)
+                Set-Location $path
+                python -m build --wheel 2>&1
+            } -ArgumentList $RepoPath
+
+            Wait-Job $buildJob -Timeout 60 | Out-Null
+            if ($buildJob.State -eq 'Running') {
+                Stop-Job $buildJob
+                Remove-Job $buildJob
+                $ErrorActionPreference = $oldErrorAction
+                Write-Err "Build timed out (60s)!"
+                return $false
+            }
+
+            $buildOutput = Receive-Job $buildJob
             Remove-Job $buildJob
-            $ErrorActionPreference = $oldErrorAction
-            Write-Err "Build timed out (60s)!"
-            return $false
+
+            $filteredOutput = $buildOutput | Where-Object {
+                $_ -notmatch "^\s*(copying|creating|reading|writing|hard linking|adding|removing)"
+            }
+
+            $buildCode = $filteredOutput | Select-String -Pattern "error|ERROR|failed|FAILED" -Quiet
+            if (-not $buildCode) {
+                $buildOk = $true
+                break
+            }
+
+            $transient = $filteredOutput | Select-String -Pattern "Permission denied|Errno 13" -Quiet
+            if ($transient -and $attempt -lt $maxAttempts) {
+                Write-Host "    Build attempt $attempt hit cloud-sync lock; retrying..." -ForegroundColor DarkGray
+                Start-Sleep -Seconds 5
+                continue
+            }
+            break
         }
-        
-        $buildOutput = Receive-Job $buildJob
-        Remove-Job $buildJob
-        
-        # Filter out benign build lines that might contain "error" in filenames (e.g. error.svg)
-        $filteredOutput = $buildOutput | Where-Object { 
-            $_ -notmatch "^\s*(copying|creating|reading|writing|hard linking|adding|removing)" 
-        }
-        
-        $buildCode = $filteredOutput | Select-String -Pattern "error|ERROR|failed|FAILED" -Quiet
-        
-        if ($buildCode) {
+
+        if (-not $buildOk) {
             $ErrorActionPreference = $oldErrorAction
             Write-Err "Build failed!"
             Write-Host "    $($filteredOutput | Select-String -Pattern 'error|ERROR|failed|FAILED' | Select-Object -First 1)" -ForegroundColor DarkGray
@@ -360,16 +388,24 @@ function Test-Build {
         
         $twineOutput = Receive-Job $twineJob
         Remove-Job $twineJob
-        $twineCode = $twineOutput | Select-String -Pattern "error|ERROR|failed|FAILED|warning|WARNING" -Quiet
-        
+
+        # Negative signals: import errors, tracebacks, twine's own error/warning lines.
+        $twineErrPattern = "ModuleNotFoundError|ImportError|Traceback|error|ERROR|failed|FAILED|warning|WARNING"
+        # Positive signal: every wheel must show "PASSED". If twine never ran (e.g. the
+        # module is missing from this venv), we won't see PASSED and treat it as failure.
+        $twineCode = $twineOutput | Select-String -Pattern $twineErrPattern -Quiet
+        $passedCount = ($twineOutput | Select-String -Pattern ":\s*PASSED").Count
+
         $ErrorActionPreference = $oldErrorAction
-        
-        if ($twineCode) {
+
+        if ($twineCode -or $passedCount -lt 1) {
             Write-Err "Twine validation failed!"
-            Write-Host "    $($twineOutput | Select-String -Pattern 'error|ERROR|failed|FAILED|warning|WARNING' | Select-Object -First 1)" -ForegroundColor DarkGray
+            $firstHit = $twineOutput | Select-String -Pattern $twineErrPattern | Select-Object -First 1
+            if (-not $firstHit) { $firstHit = "no PASSED line in twine output" }
+            Write-Host "    $firstHit" -ForegroundColor DarkGray
             return $false
         }
-        
+
         Write-Success "Build validated"
         return $true
     }
@@ -762,6 +798,20 @@ foreach ($repo in $reposToProcess) {
     
     # 1. Strict Validation (Build & Test)
     if ($Strict -and $isStrictPackage) {
+        # Sync local dev with origin BEFORE auto-bumping. Without this, a bump
+        # computed against a stale local __init__.py can land below origin's
+        # current version, producing an unrebasable conflict on push.
+        if ($Merge -and -not $DryRun) {
+            $syncOk = Sync-DevWithOrigin $repoPath
+            if (-not $syncOk) {
+                $results[$pkgName] = "sync-failed"
+                $anyErrors = $true
+                Write-Err "Pre-bump sync failed"
+                if ($stopOnFailure) { break }
+                continue
+            }
+        }
+
         # Auto-Bump Logic: If code has changed, increment patch version to force downstream updates.
         if ($Merge) {
             $shouldBump = $false
@@ -1002,6 +1052,7 @@ foreach ($repo in $reposToProcess) {
         "workflow-failed" { Write-Err "$pkg - Workflow failed/timed out" }
         "unsafe-repo" { Write-Err "$pkg - Unsafe repo state" }
         "pypi-missing" { Write-Err "$pkg - Upstream version not on PyPI" }
+        "sync-failed" { Write-Err "$pkg - Pre-bump sync with origin failed" }
         default { 
             if ($DryRun) { Write-Host "  o $pkg - Dry Run OK" -ForegroundColor Cyan }
             else { Write-Host "  ? $pkg - Not processed" -ForegroundColor DarkGray }

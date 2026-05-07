@@ -203,6 +203,60 @@ function Test-HasChanges {
     }
 }
 
+function Sync-DevWithOrigin {
+    # Commit any local work then rebase local dev onto origin/dev. Run this BEFORE
+    # auto-bumping so the bump applies on top of the latest published version, not
+    # a stale local baseline.
+    param(
+        [string]$RepoPath,
+        [string]$CommitMessage = "Update"
+    )
+
+    Push-Location $RepoPath
+    try {
+        $devExists = git branch --list dev
+        if (-not $devExists) { return $true }
+
+        git checkout dev --quiet 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Checkout dev failed (pre-sync)"
+            return $false
+        }
+
+        # Absorb uncommitted changes so the rebase doesn't refuse on a dirty tree.
+        $st = git status --porcelain
+        if ($st) {
+            Write-Step "Committing local changes before sync..."
+            git add -A
+            git commit -m $CommitMessage | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "Pre-sync commit failed"
+                return $false
+            }
+        }
+
+        git fetch origin dev --quiet 2>&1 | Out-Null
+        $behind = git rev-list --count "HEAD..origin/dev" 2>$null
+        if ($behind -and [int]$behind -gt 0) {
+            Write-Step "Rebasing local dev onto origin/dev (behind by $behind)..."
+            $oldEap = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            $pullOut = git pull --rebase origin dev --quiet 2>&1
+            $pullCode = $LASTEXITCODE
+            $ErrorActionPreference = $oldEap
+            if ($pullCode -ne 0) {
+                Write-Err "Pre-sync rebase failed; resolve manually then re-run"
+                if ($pullOut) { Write-Host "    $pullOut" -ForegroundColor DarkGray }
+                return $false
+            }
+        }
+        return $true
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 function Push-DevBranch {
     param([string]$RepoPath)
     

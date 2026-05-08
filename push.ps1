@@ -34,6 +34,8 @@ Key flags
 -UsePR                Uses GitHub PRs (via gh) to merge dev -> main (recommended).
 -SkipBuild            Skip python build/twine validation.
 -SkipWorkflowWait     Skip waiting for the publish workflow on main.
+-CommitMessage        Message for the auto-commit Sync-DevWithOrigin makes when
+                              absorbing local changes (defaults to "Update").
 -WorkflowTimeoutSeconds / -WorkflowPollSeconds
                               Control workflow wait behavior.
 
@@ -56,7 +58,8 @@ param(
     [int]$WorkflowTimeoutSeconds = 900,
     [int]$WorkflowPollSeconds = 15,
     [string]$WorkflowFile = "publish.yml",
-    [string]$Root = "O:\Cloud\Code\_scripts"
+    [string]$Root = "O:\Cloud\Code\_scripts",
+    [string]$CommitMessage = "Update"
 )
 
 $ErrorActionPreference = "Continue"
@@ -802,7 +805,7 @@ foreach ($repo in $reposToProcess) {
         # computed against a stale local __init__.py can land below origin's
         # current version, producing an unrebasable conflict on push.
         if ($Merge -and -not $DryRun) {
-            $syncOk = Sync-DevWithOrigin $repoPath
+            $syncOk = Sync-DevWithOrigin $repoPath -CommitMessage $CommitMessage
             if (-not $syncOk) {
                 $results[$pkgName] = "sync-failed"
                 $anyErrors = $true

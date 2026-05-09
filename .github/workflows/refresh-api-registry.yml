@@ -20,11 +20,12 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout m3trik
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: main
           path: m3trik
           token: ${{ secrets.REPO_DISPATCH_TOKEN }}
 
@@ -75,7 +76,7 @@ jobs:
           if git status --porcelain docs/API_SHADOWS.md | grep -q .; then
             git add docs/API_SHADOWS.md
             git commit -m "chore: refresh API shadow report [skip ci]"
-            git push origin dev
+            git push origin main
             echo "m3trik: pushed"
           else
             echo "m3trik: no changes"

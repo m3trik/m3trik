@@ -11,8 +11,9 @@ per line and is suitable for piping into a GitHub Actions log or an issue body.
 
 Usage:
 
-    python check_doc_line_refs.py --root <repo>          # scan all .md
-    python check_doc_line_refs.py --root <repo> a.md b.md  # scan specific files
+    python check_doc_line_refs.py --root <repo>                # scan all .md
+    python check_doc_line_refs.py --root <repo> a.md b.md      # scan specific files
+    python check_doc_line_refs.py --root <repo> --exclude 'API_REGISTRY.md'
 
 This is the deterministic subset of the prior LLM-based drift check; it covers
 the highest-priority class of drift (line numbers) without requiring an LLM
@@ -22,10 +23,11 @@ in CI. Cross-document and factual-claim checks are intentionally not handled.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import re
 import sys
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 
 # [text](relative/path.py#Lstart) or [text](relative/path.py#Lstart-Lend)
@@ -35,17 +37,60 @@ REF_PATTERN = re.compile(
 
 DEFAULT_DOC_GLOBS = ("*.md", "docs/**/*.md")
 
+# Auto-generated docs that the API registry generator emits with paths assuming
+# the cross-package sibling layout (e.g. uitk/uitk/file.py). Those refs look
+# "broken" when the script runs from inside a single repo but are correct under
+# the layout the generator targets. Excluding by default keeps the deterministic
+# check focused on hand-written docs.
+DEFAULT_EXCLUDES = ("API_REGISTRY.md", "API_CHANGES.md")
 
-def iter_docs(root: Path, explicit: Iterable[Path]) -> List[Path]:
+
+def _exclude_matches(rel_path: Path, pat: str) -> bool:
+    # Match against both the basename (so 'API_REGISTRY.md' catches the file
+    # anywhere under root) and the full relative path (so 'docs/internal.md'
+    # targets a specific location). Python 3.11's fnmatch has no recursive
+    # '**' semantics, so we cover both shapes explicitly.
+    return fnmatch.fnmatch(rel_path.name, pat) or fnmatch.fnmatch(
+        rel_path.as_posix(), pat
+    )
+
+
+def iter_docs(
+    root: Path, explicit: Iterable[Path], excludes: Iterable[str]
+) -> List[Path]:
     if explicit:
-        return [p.resolve() for p in explicit if p.suffix == ".md"]
-    found: List[Path] = []
-    for pattern in DEFAULT_DOC_GLOBS:
-        found.extend(root.glob(pattern))
-    return sorted({p.resolve() for p in found})
+        candidates = [p.resolve() for p in explicit if p.suffix == ".md"]
+    else:
+        found: List[Path] = []
+        for pattern in DEFAULT_DOC_GLOBS:
+            found.extend(root.glob(pattern))
+        candidates = sorted({p.resolve() for p in found})
+
+    if not excludes:
+        return candidates
+
+    filtered: List[Path] = []
+    for doc in candidates:
+        try:
+            rel = doc.relative_to(root)
+        except ValueError:
+            rel = doc
+        if any(_exclude_matches(rel, pat) for pat in excludes):
+            continue
+        filtered.append(doc)
+    return filtered
 
 
-def scan_doc(doc_path: Path, repo_root: Path) -> List[Tuple[Path, int, str, str]]:
+def _line_count(path: Path, cache: Dict[Path, int]) -> int:
+    if path not in cache:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            cache[path] = sum(1 for _ in fh)
+    return cache[path]
+
+
+def scan_doc(
+    doc_path: Path, repo_root: Path, line_cache: Dict[Path, int]
+) -> List[Tuple[Path, int, str, str]]:
     issues: List[Tuple[Path, int, str, str]] = []
     text = doc_path.read_text(encoding="utf-8", errors="replace")
     for line_no, line in enumerate(text.splitlines(), start=1):
@@ -78,7 +123,7 @@ def scan_doc(doc_path: Path, repo_root: Path) -> List[Tuple[Path, int, str, str]
                 continue
 
             try:
-                target_line_count = sum(1 for _ in target.open(encoding="utf-8", errors="replace"))
+                target_line_count = _line_count(target, line_cache)
             except OSError as exc:
                 issues.append(
                     (doc_path, line_no, m.group(0), f"unreadable target: {exc}")
@@ -86,13 +131,13 @@ def scan_doc(doc_path: Path, repo_root: Path) -> List[Tuple[Path, int, str, str]
                 continue
 
             if start > target_line_count or end > target_line_count:
+                bad = start if start > target_line_count else end
                 issues.append(
                     (
                         doc_path,
                         line_no,
                         m.group(0),
-                        f"line {start if start > target_line_count else end} > "
-                        f"file length {target_line_count} in "
+                        f"line {bad} > file length {target_line_count} in "
                         f"{target.relative_to(repo_root)}",
                     )
                 )
@@ -108,6 +153,18 @@ def main(argv: List[str] | None = None) -> int:
         help="Repository root (default: cwd).",
     )
     parser.add_argument(
+        "--exclude",
+        action="append",
+        default=None,
+        help=(
+            "Glob to skip. Matched against both the basename and the path "
+            "relative to --root, so 'API_REGISTRY.md' catches the file under "
+            "any directory while 'docs/internal.md' targets one location. "
+            f"Repeatable. Defaults to {list(DEFAULT_EXCLUDES)} when no "
+            "--exclude is passed; pass '--exclude=' (empty) to disable defaults."
+        ),
+    )
+    parser.add_argument(
         "paths",
         nargs="*",
         type=Path,
@@ -115,15 +172,22 @@ def main(argv: List[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if args.exclude is None:
+        excludes = list(DEFAULT_EXCLUDES)
+    else:
+        # Empty strings disable the defaults; non-empty entries add to the list.
+        excludes = [e for e in args.exclude if e]
+
     repo_root = args.root.resolve()
-    docs = iter_docs(repo_root, args.paths)
+    docs = iter_docs(repo_root, args.paths, excludes)
     if not docs:
         print(f"No markdown files found under {repo_root}.")
         return 0
 
+    line_cache: Dict[Path, int] = {}
     all_issues: List[Tuple[Path, int, str, str]] = []
     for doc in docs:
-        all_issues.extend(scan_doc(doc, repo_root))
+        all_issues.extend(scan_doc(doc, repo_root, line_cache))
 
     if not all_issues:
         print(f"Scanned {len(docs)} doc(s). No broken line refs.")

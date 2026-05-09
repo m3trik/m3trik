@@ -78,15 +78,14 @@ PACKAGES = {
         name="mayatk",
         license="MIT",
         depends_on=["pythontk", "uitk"],
-        exclude_deps=["pymel", "qtpy"],
-        exclude_packages=["pymel", "pymel.*"],
+        exclude_deps=["qtpy"],
     ),
     "tentacle": PackageConfig(
         name="tentacle",
         license="LGPLv3",
         pypi_name="tentacletk",
         depends_on=["pythontk", "uitk", "mayatk"],
-        exclude_deps=["Pillow", "qtpy", "numpy", "shiboken6", "pymel"],
+        exclude_deps=["Pillow", "qtpy", "numpy", "shiboken6"],
     ),
 }
 

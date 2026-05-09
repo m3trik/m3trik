@@ -1,0 +1,82 @@
+name: Refresh API Registry
+
+# Triggered by each ecosystem repo's publish.yml after a successful PyPI upload
+# (via repository_dispatch event_type "refresh_api_registry"). Also runs monthly
+# as a backstop for any missed dispatches, and supports manual workflow_dispatch.
+on:
+  repository_dispatch:
+    types: [refresh_api_registry]
+  schedule:
+    - cron: '7 13 1 * *'  # Monthly safety net (1st @ 13:07 UTC, off the :00 mark)
+  workflow_dispatch:
+
+# Latest-wins: if 4 ecosystem packages publish in quick succession during a
+# normal release cascade, only the last refresh has the full picture; cancel
+# in-flight refreshes so we don't burn 4 runners producing the same artifact.
+concurrency:
+  group: refresh-api-registry
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout m3trik
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: m3trik
+          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "agent@m3trik.dev"
+          git config --global user.name "api-registry-bot"
+
+      - name: Clone ecosystem repos as siblings of m3trik
+        env:
+          TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
+        run: |
+          for repo in pythontk uitk mayatk tentacle unitytk; do
+            git clone --branch dev \
+              "https://oauth2:${TOKEN}@github.com/m3trik/${repo}.git" \
+              "${repo}"
+          done
+
+      - name: Run generator
+        run: python m3trik/scripts/generate_api_registry.py
+
+      - name: Commit and push per-package registries
+        env:
+          DISPATCH_PACKAGE: ${{ github.event.client_payload.package }}
+        run: |
+          set -e
+          for repo in pythontk uitk mayatk tentacle unitytk; do
+            cd "${repo}"
+            if git status --porcelain API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
+              git add API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
+              git commit -m "chore: refresh API registry [skip ci]"
+              git push origin dev
+              echo "${repo}: pushed"
+            else
+              echo "${repo}: no changes"
+            fi
+            cd ..
+          done
+
+      - name: Commit and push m3trik shadow report
+        run: |
+          cd m3trik
+          if git status --porcelain docs/API_SHADOWS.md | grep -q .; then
+            git add docs/API_SHADOWS.md
+            git commit -m "chore: refresh API shadow report [skip ci]"
+            git push origin dev
+            echo "m3trik: pushed"
+          else
+            echo "m3trik: no changes"
+          fi

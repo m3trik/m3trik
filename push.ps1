@@ -156,13 +156,26 @@ function Bump-LocalVersion {
 }
 
 function Get-LocalStrictVersions {
+    # Read each strict package's local __init__.py version, then clamp against
+    # PyPI: if the local version isn't actually published (e.g. bump-dev left a
+    # next-version placeholder), use PyPI's latest instead. This way every
+    # consumer of the version map (cascade pins, PyPI check, etc.) sees the
+    # version that's actually installable.
     $versions = @{}
     foreach ($pkg in $STRICT_PACKAGES) {
         $pkgPath = Join-Path (Join-Path $ROOT $pkg) $pkg
         $ver = Get-PackageVersion $pkgPath
-        if ($ver -and $ver -ne "unknown") {
-            $versions[$pkg] = $ver
+        if (-not $ver -or $ver -eq "unknown") { continue }
+
+        $pypiName = Get-PypiProjectName $pkg
+        if (-not (Test-PypiHasVersion $pypiName $ver)) {
+            $latest = Get-PypiLatestVersion $pypiName
+            if ($latest) {
+                Write-Host "  > $pkg local $ver is unpublished; using PyPI latest $latest" -ForegroundColor DarkGray
+                $ver = $latest
+            }
         }
+        $versions[$pkg] = $ver
     }
     return $versions
 }
@@ -213,24 +226,9 @@ function Sync-PyProjectDepsToLocalVersions {
             Write-Err "Cannot sync toml: missing local version for '$dep'"
             return $false
         }
+        # $LocalVersions is pre-clamped against PyPI in Get-LocalStrictVersions,
+        # so this is the actually-published version to pin against.
         $ver = $LocalVersions[$dep]
-
-        # If local is ahead of PyPI (e.g. bump-dev workflow placed a next-version
-        # placeholder in __init__.py but no release happened), pin against PyPI's
-        # actual latest. Otherwise downstream installs would fail until the
-        # placeholder is published.
-        $depPypi = Get-PypiProjectName $dep
-        if (-not (Test-PypiHasVersion $depPypi $ver)) {
-            $latest = Get-PypiLatestVersion $depPypi
-            if ($latest) {
-                Write-Host "    [Pin] Local $dep is $ver (unpublished); pinning against PyPI latest $latest" -ForegroundColor DarkGray
-                $ver = $latest
-            }
-        }
-
-        # Regex to find: "dep>=..." inside dependencies list
-        # We look for: "dep>=[0-9.]+"
-        # And replace with: "dep>=$ver"
 
         $pattern = '"' + $dep + '>=[0-9.]+"'
         $replacement = '"' + $dep + '>=' + $ver + '"'

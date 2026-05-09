@@ -111,6 +111,20 @@ function Test-PypiHasVersion {
     }
 }
 
+function Get-PypiLatestVersion {
+    param([string]$ProjectName)
+
+    try {
+        $url = "https://pypi.org/pypi/$ProjectName/json"
+        $data = Invoke-RestMethod -Uri $url -Method Get -ErrorAction Stop
+        if ($data -and $data.info -and $data.info.version) {
+            return [string]$data.info.version
+        }
+    }
+    catch {}
+    return $null
+}
+
 function Bump-LocalVersion {
     param(
         [string]$PackagePath
@@ -200,11 +214,24 @@ function Sync-PyProjectDepsToLocalVersions {
             return $false
         }
         $ver = $LocalVersions[$dep]
-        
+
+        # If local is ahead of PyPI (e.g. bump-dev workflow placed a next-version
+        # placeholder in __init__.py but no release happened), pin against PyPI's
+        # actual latest. Otherwise downstream installs would fail until the
+        # placeholder is published.
+        $depPypi = Get-PypiProjectName $dep
+        if (-not (Test-PypiHasVersion $depPypi $ver)) {
+            $latest = Get-PypiLatestVersion $depPypi
+            if ($latest) {
+                Write-Host "    [Pin] Local $dep is $ver (unpublished); pinning against PyPI latest $latest" -ForegroundColor DarkGray
+                $ver = $latest
+            }
+        }
+
         # Regex to find: "dep>=..." inside dependencies list
         # We look for: "dep>=[0-9.]+"
         # And replace with: "dep>=$ver"
-        
+
         $pattern = '"' + $dep + '>=[0-9.]+"'
         $replacement = '"' + $dep + '>=' + $ver + '"'
         

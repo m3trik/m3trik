@@ -60,9 +60,10 @@ jobs:
           # Tolerate per-repo auth/clone failures: the token may lack scope
           # for newer repos, but the refresh should still cover the rest.
           # The generator skips missing siblings gracefully.
+          # x-access-token works for both classic PATs and installation tokens.
           for repo in pythontk uitk mayatk tentacle unitytk; do
             if ! git clone --branch dev \
-                "https://oauth2:${TOKEN}@github.com/m3trik/${repo}.git" \
+                "https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git" \
                 "${repo}"; then
               echo "::warning::Failed to clone ${repo} (token may lack scope) — skipping"
             fi
@@ -92,7 +93,7 @@ jobs:
               git add API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
               git commit -m "chore: refresh API registry [skip ci]"
               git -c http."https://github.com/".extraheader= \
-                  push "https://oauth2:${TOKEN}@github.com/m3trik/${repo}.git" \
+                  push "https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git" \
                   HEAD:dev
               echo "${repo}: pushed"
             else

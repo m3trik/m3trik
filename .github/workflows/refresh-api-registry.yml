@@ -21,13 +21,27 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # ``contents: write`` lets the default GITHUB_TOKEN push the m3trik
+    # shadow report. Cross-repo pushes to the ecosystem packages still
+    # need REPO_DISPATCH_TOKEN (set as a repo secret).
+    permissions:
+      contents: write
     steps:
+      - name: Verify cross-repo token
+        env:
+          TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::REPO_DISPATCH_TOKEN is not set on this repository."
+            echo "::error::Add it under Settings → Secrets → Actions with cross-repo push scope to pythontk/uitk/mayatk/tentacle/unitytk."
+            exit 1
+          fi
+
       - name: Checkout m3trik
         uses: actions/checkout@v4
         with:
           ref: main
           path: m3trik
-          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5

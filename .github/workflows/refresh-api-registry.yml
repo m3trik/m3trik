@@ -73,9 +73,15 @@ jobs:
 
       - name: Commit and push per-package registries
         env:
+          TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
           DISPATCH_PACKAGE: ${{ github.event.client_payload.package }}
         run: |
           set -e
+          # actions/checkout installs a global http.extraheader for
+          # github.com that points at m3trik's GITHUB_TOKEN — it overrides
+          # the per-clone oauth2:TOKEN credential when pushing, so
+          # cross-repo pushes fail. Push via an explicit token-bearing URL
+          # to bypass the global header.
           for repo in pythontk uitk mayatk tentacle unitytk; do
             if [ ! -d "${repo}" ]; then
               echo "${repo}: skipped (not cloned)"
@@ -85,7 +91,9 @@ jobs:
             if git status --porcelain API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
               git add API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
               git commit -m "chore: refresh API registry [skip ci]"
-              git push origin dev
+              git -c http."https://github.com/".extraheader= \
+                  push "https://oauth2:${TOKEN}@github.com/m3trik/${repo}.git" \
+                  HEAD:dev
               echo "${repo}: pushed"
             else
               echo "${repo}: no changes"

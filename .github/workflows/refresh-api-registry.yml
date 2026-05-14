@@ -57,10 +57,15 @@ jobs:
         env:
           TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
         run: |
+          # Tolerate per-repo auth/clone failures: the token may lack scope
+          # for newer repos, but the refresh should still cover the rest.
+          # The generator skips missing siblings gracefully.
           for repo in pythontk uitk mayatk tentacle unitytk; do
-            git clone --branch dev \
-              "https://oauth2:${TOKEN}@github.com/m3trik/${repo}.git" \
-              "${repo}"
+            if ! git clone --branch dev \
+                "https://oauth2:${TOKEN}@github.com/m3trik/${repo}.git" \
+                "${repo}"; then
+              echo "::warning::Failed to clone ${repo} (token may lack scope) — skipping"
+            fi
           done
 
       - name: Run generator
@@ -72,6 +77,10 @@ jobs:
         run: |
           set -e
           for repo in pythontk uitk mayatk tentacle unitytk; do
+            if [ ! -d "${repo}" ]; then
+              echo "${repo}: skipped (not cloned)"
+              continue
+            fi
             cd "${repo}"
             if git status --porcelain API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
               git add API_REGISTRY.md API_REGISTRY.json API_CHANGES.md

@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-05-14_
+_Generated: 2026-05-16_
 
 ## `AudioUtils` (2 definitions)
 
@@ -19,8 +19,9 @@ _Generated: 2026-05-14_
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L18)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
-## `main` (3 definitions)
+## `main` (4 definitions)
 
 - `uitk` — [`main`](uitk/compile.py#L526)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset/templates/bake.py#L20)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset/templates/import.py#L53)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L99)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L48)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L113)

@@ -19,6 +19,6 @@
 
 ## Sub-scripts
 
-- [scripts/](scripts/CLAUDE.md) — Python repo-maintenance helpers (inventory, linting).
+- [scripts/](scripts/CLAUDE.md) — Repo-maintenance helpers (inventory, API registry, credential rotation).
 
 See [CHANGELOG.md](CHANGELOG.md) for history.

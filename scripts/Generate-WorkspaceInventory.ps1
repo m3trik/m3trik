@@ -1,14 +1,14 @@
 param(
-    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string]$OutputDir = (Join-Path $PSScriptRoot "docs")
+    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
+    [string]$OutputDir = (Resolve-Path (Join-Path $PSScriptRoot "..\docs")).Path
 )
 
 $ErrorActionPreference = "Stop"
 
-. "$PSScriptRoot\common.ps1"
+. "$PSScriptRoot\..\common.ps1"
 
 $pythonExe = Join-Path $WorkspaceRoot ".venv\Scripts\python.exe"
-$generatorScript = Join-Path $PSScriptRoot "scripts\generate_workspace_inventory.py"
+$generatorScript = Join-Path $PSScriptRoot "generate_workspace_inventory.py"
 
 Write-Header "Generate Workspace Inventory"
 

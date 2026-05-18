@@ -1,7 +1,7 @@
 """
-Test suite for update_wheel scripts.
+Test suite for push.ps1.
 
-Tests the push.ps1 functionality and package structure
+Tests push.ps1 functionality and package structure
 without actually publishing to PyPI.
 """
 

@@ -19,12 +19,32 @@ _Generated: 2026-05-19_
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L18)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
+## `defaults` (4 definitions)
+
+- `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
+- `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L284)
+- `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L253)
+- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L210)
+
 ## `main` (4 definitions)
 
 - `uitk` — [`main`](uitk/compile.py#L526)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L118)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L25)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L34)
+
+## `referenced_keys` (4 definitions)
+
+- `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
+- `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L267)
+- `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L242)
+- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L193)
+
+## `render_context` (3 definitions)
+
+- `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
+- `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L289)
+- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L215)
 
 ## `run_batch` (2 definitions)
 

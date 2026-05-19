@@ -22,29 +22,29 @@ _Generated: 2026-05-19_
 ## `defaults` (4 definitions)
 
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
-- `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L284)
-- `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L253)
-- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L210)
+- `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
+- `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L207)
+- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L171)
 
 ## `main` (4 definitions)
 
 - `uitk` — [`main`](uitk/compile.py#L526)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L118)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L25)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L34)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L123)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L31)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
 
 ## `referenced_keys` (4 definitions)
 
 - `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
-- `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L267)
-- `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L242)
-- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L193)
+- `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
+- `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L202)
+- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L166)
 
 ## `render_context` (3 definitions)
 
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
-- `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L289)
-- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L215)
+- `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
+- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L176)
 
 ## `run_batch` (2 definitions)
 

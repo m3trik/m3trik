@@ -22,6 +22,11 @@ _Generated: 2026-05-19_
 ## `main` (4 definitions)
 
 - `uitk` — [`main`](uitk/compile.py#L526)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L99)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L48)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L113)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L118)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L25)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L34)
+
+## `run_batch` (2 definitions)
+
+- `pythontk` — [`run_batch`](pythontk/net_utils/rpc/job.py#L55)
+- `mayatk` — [`run_batch`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/job.py#L30)

@@ -16,7 +16,7 @@ _Generated: 2026-05-20_
 
 ## `Selection` (2 definitions)
 
-- `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L18)
+- `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
 ## `defaults` (4 definitions)
@@ -24,7 +24,7 @@ _Generated: 2026-05-20_
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
 - `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L207)
-- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L171)
+- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L252)
 
 ## `main` (4 definitions)
 
@@ -38,13 +38,13 @@ _Generated: 2026-05-20_
 - `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L202)
-- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L166)
+- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L247)
 
 ## `render_context` (3 definitions)
 
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
-- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L176)
+- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L257)
 
 ## `run_batch` (2 definitions)
 

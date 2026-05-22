@@ -23,7 +23,7 @@ _Generated: 2026-05-22_
 
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
-- `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L207)
+- `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L179)
 - `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L301)
 
 ## `main` (4 definitions)
@@ -37,7 +37,7 @@ _Generated: 2026-05-22_
 
 - `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
-- `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L202)
+- `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L174)
 - `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L296)
 
 ## `render_context` (3 definitions)

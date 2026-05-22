@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-05-20_
+_Generated: 2026-05-22_
 
 ## `AudioUtils` (2 definitions)
 
@@ -24,7 +24,7 @@ _Generated: 2026-05-20_
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
 - `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L207)
-- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L252)
+- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L301)
 
 ## `main` (4 definitions)
 
@@ -38,13 +38,13 @@ _Generated: 2026-05-20_
 - `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L202)
-- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L247)
+- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L296)
 
 ## `render_context` (3 definitions)
 
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
-- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L257)
+- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L306)
 
 ## `run_batch` (2 definitions)
 

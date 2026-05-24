@@ -83,6 +83,11 @@ jobs:
           # the per-clone oauth2:TOKEN credential when pushing, so
           # cross-repo pushes fail. Push via an explicit token-bearing URL
           # to bypass the global header.
+          # push.ps1 cascade and other workflows can land commits on dev
+          # between our clone and our push. Fetch+rebase before each push,
+          # and retry once on rejection (the second push covers another
+          # racer landing during our rebase window). A second rejection is
+          # rare enough that the next scheduled refresh will pick it up.
           for repo in pythontk uitk mayatk tentacle unitytk; do
             if [ ! -d "${repo}" ]; then
               echo "${repo}: skipped (not cloned)"
@@ -92,10 +97,23 @@ jobs:
             if git status --porcelain API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
               git add API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
               git commit -m "chore: refresh API registry [skip ci]"
-              git -c http."https://github.com/".extraheader= \
-                  push "https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git" \
-                  HEAD:dev
-              echo "${repo}: pushed"
+              push_url="https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git"
+              for attempt in 1 2; do
+                git -c http."https://github.com/".extraheader= \
+                    fetch "${push_url}" dev
+                git rebase FETCH_HEAD || {
+                  echo "::warning::${repo}: rebase produced conflicts on attempt ${attempt} — aborting"
+                  git rebase --abort
+                  break
+                }
+                if git -c http."https://github.com/".extraheader= \
+                       push "${push_url}" HEAD:dev; then
+                  echo "${repo}: pushed (attempt ${attempt})"
+                  break
+                elif [ "${attempt}" = "2" ]; then
+                  echo "::warning::${repo}: push rejected twice — next refresh will retry"
+                fi
+              done
             else
               echo "${repo}: no changes"
             fi

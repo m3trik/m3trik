@@ -19,10 +19,11 @@ _Generated: 2026-06-04_
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
-## `defaults` (4 definitions)
+## `defaults` (5 definitions)
 
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
+- `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/template_params.py#L60)
 - `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L179)
 - `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L301)
 
@@ -30,8 +31,13 @@ _Generated: 2026-06-04_
 
 - `uitk` — [`main`](uitk/compile.py#L526)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L123)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L31)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
+
+## `python_literal` (2 definitions)
+
+- `uitk` — [`python_literal`](uitk/bridge/formatters.py#L29)
+- `mayatk` — [`python_literal`](mayatk/mat_utils/marmoset_bridge/template_params.py#L49)
 
 ## `referenced_keys` (4 definitions)
 

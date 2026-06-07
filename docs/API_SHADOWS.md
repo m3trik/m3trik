@@ -12,7 +12,7 @@ _Generated: 2026-06-07_
 ## `CoreUtils` (2 definitions)
 
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L195)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L203)
 
 ## `Selection` (2 definitions)
 

@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-06-04_
+_Generated: 2026-06-07_
 
 ## `AudioUtils` (2 definitions)
 
@@ -12,7 +12,7 @@ _Generated: 2026-06-04_
 ## `CoreUtils` (2 definitions)
 
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L195)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L203)
 
 ## `Selection` (2 definitions)
 

@@ -2,11 +2,11 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-06-10_
+_Generated: 2026-06-11_
 
 ## `AudioUtils` (2 definitions)
 
-- `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L17)
+- `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L15)
 - `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L81)
 
 ## `CoreUtils` (2 definitions)

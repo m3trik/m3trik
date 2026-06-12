@@ -4,6 +4,11 @@ _Symbols whose simple name is defined in more than one ecosystem package. Review
 
 _Generated: 2026-06-12_
 
+## `AnimUtils` (2 definitions)
+
+- `mayatk` — [`AnimUtils`](mayatk/anim_utils/_anim_utils.py#L551)
+- `blendertk` — [`AnimUtils`](blendertk/anim_utils/_anim_utils.py#L191)
+
 ## `AudioUtils` (2 definitions)
 
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L15)
@@ -18,12 +23,17 @@ _Generated: 2026-06-12_
 
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L203)
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L103)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L152)
 
 ## `EditUtils` (2 definitions)
 
 - `mayatk` — [`EditUtils`](mayatk/edit_utils/_edit_utils.py#L48)
-- `blendertk` — [`EditUtils`](blendertk/edit_utils/_edit_utils.py#L271)
+- `blendertk` — [`EditUtils`](blendertk/edit_utils/_edit_utils.py#L289)
+
+## `MatUtils` (2 definitions)
+
+- `mayatk` — [`MatUtils`](mayatk/mat_utils/_mat_utils.py#L290)
+- `blendertk` — [`MatUtils`](blendertk/mat_utils/_mat_utils.py#L103)
 
 ## `NodeUtils` (2 definitions)
 
@@ -35,6 +45,11 @@ _Generated: 2026-06-12_
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L10)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
+
+## `UiUtils` (2 definitions)
+
+- `mayatk` — [`UiUtils`](mayatk/ui_utils/_ui_utils.py#L8)
+- `blendertk` — [`UiUtils`](blendertk/ui_utils/_ui_utils.py#L68)
 
 ## `UvUtils` (2 definitions)
 
@@ -57,7 +72,7 @@ _Generated: 2026-06-12_
 ## `launch` (2 definitions)
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L418)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L482)
 
 ## `main` (4 definitions)
 
@@ -81,7 +96,7 @@ _Generated: 2026-06-12_
 ## `register` (2 definitions)
 
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L435)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L499)
 
 ## `render_context` (3 definitions)
 

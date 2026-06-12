@@ -41,7 +41,7 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_ROOT = REPO_ROOT / "m3trik" / "docs"
 
-ECOSYSTEM_PACKAGES = ("pythontk", "uitk", "mayatk", "tentacle", "unitytk")
+ECOSYSTEM_PACKAGES = ("pythontk", "uitk", "mayatk", "blendertk", "tentacle", "unitytk")
 
 SKIP_DIR_NAMES = {
     "build",
@@ -592,16 +592,18 @@ def regenerate(
                 else:
                     path.write_text(content, encoding="utf-8")
 
-    # Cross-package shadow report
-    DOCS_ROOT.mkdir(parents=True, exist_ok=True)
-    shadow_path = DOCS_ROOT / "API_SHADOWS.md"
-    shadow_md = emit_shadow_report(packages)
-    existing = shadow_path.read_text(encoding="utf-8") if shadow_path.exists() else None
-    if existing != shadow_md:
-        if check_only:
-            stale.append(shadow_path.relative_to(repo_root).as_posix())
-        else:
-            shadow_path.write_text(shadow_md, encoding="utf-8")
+    # Cross-package shadow report — only meaningful when the whole ecosystem was walked;
+    # a single-package run would otherwise rewrite it with every other package dropped.
+    if {p.name for p in packages} >= set(ECOSYSTEM_PACKAGES):
+        DOCS_ROOT.mkdir(parents=True, exist_ok=True)
+        shadow_path = DOCS_ROOT / "API_SHADOWS.md"
+        shadow_md = emit_shadow_report(packages)
+        existing = shadow_path.read_text(encoding="utf-8") if shadow_path.exists() else None
+        if existing != shadow_md:
+            if check_only:
+                stale.append(shadow_path.relative_to(repo_root).as_posix())
+            else:
+                shadow_path.write_text(shadow_md, encoding="utf-8")
 
     if check_only and stale:
         print("Stale (would be rewritten):", file=sys.stderr)

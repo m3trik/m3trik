@@ -14,10 +14,9 @@ _Generated: 2026-06-19_
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L203)
 
-## `Selection` (3 definitions)
+## `Selection` (2 definitions)
 
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
-- `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
 ## `defaults` (7 definitions)

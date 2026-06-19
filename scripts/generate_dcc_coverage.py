@@ -65,6 +65,11 @@ def build_report() -> str:
     lines = [
         "# tentacle — DCC Slot Coverage",
         "",
+        "> ⚠️ **Measures button presence only — superseded by `PARITY_AUDIT.md` for true parity.**"
+        " A deferred-message stub and a faithful port both count as 'handled' here, so this reaches"
+        " ~100%/100% regardless of real depth. For true depth/panel/helper parity see"
+        " [`PARITY_AUDIT.md`](PARITY_AUDIT.md).",
+        "",
         "_Auto-generated (BLENDER_PORT_PLAN M5). Do not edit by hand. Refresh via"
         " `m3trik/scripts/generate_dcc_coverage.py`._",
         "",

@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-06-11_
+_Generated: 2026-06-19_
 
 ## `AudioUtils` (2 definitions)
 
@@ -26,6 +26,18 @@ _Generated: 2026-06-11_
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/template_params.py#L60)
 - `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L179)
 - `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L301)
+
+## `list_template_modes` (3 definitions)
+
+- `pythontk` — [`list_template_modes`](pythontk/core_utils/script_template.py#L81)
+- `mayatk` — [`list_template_modes`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L89)
+- `mayatk` — [`list_template_modes`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L206)
+
+## `list_templates` (3 definitions)
+
+- `pythontk` — [`list_templates`](pythontk/core_utils/script_template.py#L47)
+- `mayatk` — [`list_templates`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
+- `mayatk` — [`list_templates`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L126)
 
 ## `main` (4 definitions)
 
@@ -56,3 +68,8 @@ _Generated: 2026-06-11_
 
 - `pythontk` — [`run_batch`](pythontk/net_utils/rpc/job.py#L55)
 - `mayatk` — [`run_batch`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/job.py#L30)
+
+## `template_modes` (2 definitions)
+
+- `pythontk` — [`template_modes`](pythontk/core_utils/script_template.py#L56)
+- `mayatk` — [`template_modes`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L65)

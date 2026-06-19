@@ -14,9 +14,10 @@ _Generated: 2026-06-19_
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L203)
 
-## `Selection` (2 definitions)
+## `Selection` (3 definitions)
 
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
+- `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
 ## `defaults` (5 definitions)
@@ -26,6 +27,11 @@ _Generated: 2026-06-19_
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/template_params.py#L60)
 - `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L179)
 - `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L301)
+
+## `launch` (2 definitions)
+
+- `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1406)
 
 ## `list_template_modes` (3 definitions)
 
@@ -57,6 +63,11 @@ _Generated: 2026-06-19_
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L174)
 - `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L296)
+
+## `register` (2 definitions)
+
+- `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L1411)
 
 ## `render_context` (3 definitions)
 

@@ -68,6 +68,9 @@ $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $SCRIPT_DIR "common.ps1")
 
 # Packages that support strict validation
+# NOTE: blendertk is dep-synced (see $requiredPinsByPackage) but stays OUT of the strict/release
+# sets until it is publishable — repo is private, not on PyPI, and has no publish workflow yet
+# (same treatment as unitytk). Add it here + to the auto-cascade graph when that decision lands.
 $STRICT_PACKAGES = @("pythontk", "uitk", "mayatk", "tentacle")
 $RELEASE_ORDER = @("pythontk", "uitk", "mayatk", "tentacle")
 
@@ -196,6 +199,7 @@ function Sync-PyProjectDepsToLocalVersions {
     $requiredPinsByPackage = @{
         "uitk"      = @("pythontk")
         "mayatk"    = @("pythontk", "uitk")
+        "blendertk" = @("pythontk")
         "tentacle"  = @("pythontk", "uitk", "mayatk")
     }
 
@@ -906,6 +910,7 @@ foreach ($repo in $reposToProcess) {
                 $requiredPinsByPackage = @{
                     "uitk"      = @("pythontk")
                     "mayatk"    = @("pythontk", "uitk")
+                    "blendertk" = @("pythontk")
                     "tentacle"  = @("pythontk", "uitk", "mayatk")
                 }
 

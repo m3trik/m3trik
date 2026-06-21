@@ -91,9 +91,9 @@ Tools with a `header_init` but no help text yet. Adding
 
 | Package | File | Notes |
 |:---|:---|:---|
-| extapps | [`map_compositor/slots.py`](../../extapps/extapps/map_compositor/slots.py) | Standalone tool — add a short workflow summary. |
+| extapps | [`texture_maps/compositor/slots.py`](../../extapps/extapps/texture_maps/compositor/slots.py) | Standalone tool — add a short workflow summary. |
 | extapps | [`mesh_convert/slots.py`](../../extapps/extapps/mesh_convert/slots.py) | Standalone tool — header_init currently adds a single checkbox; help text would help discoverability. |
-| extapps | [`map_packer/slots.py`](../../extapps/extapps/map_packer/slots.py) | Standalone tool — explains the per-channel preset workflow. |
+| extapps | [`texture_maps/packer/slots.py`](../../extapps/extapps/texture_maps/packer/slots.py) | Standalone tool — explains the per-channel preset workflow. |
 
 ## Out of scope — tentacle hub panels
 

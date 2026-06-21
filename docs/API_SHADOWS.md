@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-06-19_
+_Generated: 2026-06-21_
 
 ## `AnchorStrategy` (2 definitions)
 
@@ -456,16 +456,6 @@ _Generated: 2026-06-19_
 - `mayatk` — [`UiUtils`](mayatk/ui_utils/_ui_utils.py#L8)
 - `blendertk` — [`UiUtils`](blendertk/ui_utils/_ui_utils.py#L111)
 
-## `UnityBridge` (2 definitions)
-
-- `mayatk` — [`UnityBridge`](mayatk/env_utils/unity_bridge/_unity_bridge.py#L45)
-- `blendertk` — [`UnityBridge`](blendertk/env_utils/unity_bridge/_unity_bridge.py#L38)
-
-## `UnityBridgeSlots` (2 definitions)
-
-- `mayatk` — [`UnityBridgeSlots`](mayatk/env_utils/unity_bridge/unity_bridge_slots.py#L33)
-- `blendertk` — [`UnityBridgeSlots`](blendertk/env_utils/unity_bridge/unity_bridge_slots.py#L28)
-
 ## `UvUtils` (2 definitions)
 
 - `mayatk` — [`UvUtils`](mayatk/uv_utils/_uv_utils.py#L22)
@@ -486,17 +476,16 @@ _Generated: 2026-06-19_
 - `mayatk` — [`XformUtils`](mayatk/xform_utils/_xform_utils.py#L399)
 - `blendertk` — [`XformUtils`](blendertk/xform_utils/_xform_utils.py#L437)
 
-## `defaults` (9 definitions)
+## `defaults` (8 definitions)
 
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
-- `mayatk` — [`defaults`](mayatk/env_utils/blender_bridge/parameters.py#L93)
-- `mayatk` — [`defaults`](mayatk/env_utils/unity_bridge/parameters.py#L104)
+- `mayatk` — [`defaults`](mayatk/env_utils/blender_bridge/parameters.py#L110)
+- `mayatk` — [`defaults`](mayatk/env_utils/unity_bridge/parameters.py#L147)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/template_params.py#L60)
 - `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L179)
 - `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L301)
-- `blendertk` — [`defaults`](blendertk/env_utils/maya_bridge/parameters.py#L95)
-- `blendertk` — [`defaults`](blendertk/env_utils/unity_bridge/parameters.py#L100)
+- `blendertk` — [`defaults`](blendertk/env_utils/maya_bridge/parameters.py#L111)
 
 ## `get_bounding_box` (2 definitions)
 
@@ -506,17 +495,12 @@ _Generated: 2026-06-19_
 ## `launch` (2 definitions)
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1406)
-
-## `list_delivery_modes` (2 definitions)
-
-- `mayatk` — [`list_delivery_modes`](mayatk/env_utils/unity_bridge/_unity_bridge.py#L40)
-- `blendertk` — [`list_delivery_modes`](blendertk/env_utils/unity_bridge/_unity_bridge.py#L30)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1405)
 
 ## `list_template_modes` (5 definitions)
 
 - `pythontk` — [`list_template_modes`](pythontk/core_utils/script_template.py#L81)
-- `mayatk` — [`list_template_modes`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L71)
+- `mayatk` — [`list_template_modes`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L73)
 - `mayatk` — [`list_template_modes`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L73)
 - `mayatk` — [`list_template_modes`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L206)
 - `blendertk` — [`list_template_modes`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L81)
@@ -524,54 +508,48 @@ _Generated: 2026-06-19_
 ## `list_templates` (5 definitions)
 
 - `pythontk` — [`list_templates`](pythontk/core_utils/script_template.py#L47)
-- `mayatk` — [`list_templates`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L61)
+- `mayatk` — [`list_templates`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L63)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L59)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L126)
 - `blendertk` — [`list_templates`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L71)
 
-## `main` (10 definitions)
+## `main` (6 definitions)
 
 - `uitk` — [`main`](uitk/compile.py#L526)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L17)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import_and_frame.py#L19)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/replace_scene.py#L18)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L28)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L16)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import_and_frame.py#L17)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/new_scene.py#L17)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L26)
 
 ## `python_literal` (2 definitions)
 
 - `uitk` — [`python_literal`](uitk/bridge/formatters.py#L29)
 - `mayatk` — [`python_literal`](mayatk/mat_utils/marmoset_bridge/template_params.py#L49)
 
-## `referenced_keys` (8 definitions)
+## `referenced_keys` (7 definitions)
 
 - `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
-- `mayatk` — [`referenced_keys`](mayatk/env_utils/blender_bridge/parameters.py#L88)
-- `mayatk` — [`referenced_keys`](mayatk/env_utils/unity_bridge/parameters.py#L99)
+- `mayatk` — [`referenced_keys`](mayatk/env_utils/blender_bridge/parameters.py#L105)
+- `mayatk` — [`referenced_keys`](mayatk/env_utils/unity_bridge/parameters.py#L142)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L174)
 - `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L296)
-- `blendertk` — [`referenced_keys`](blendertk/env_utils/maya_bridge/parameters.py#L90)
-- `blendertk` — [`referenced_keys`](blendertk/env_utils/unity_bridge/parameters.py#L95)
+- `blendertk` — [`referenced_keys`](blendertk/env_utils/maya_bridge/parameters.py#L106)
 
 ## `register` (2 definitions)
 
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L1411)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L1410)
 
-## `render_context` (7 definitions)
+## `render_context` (6 definitions)
 
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
-- `mayatk` — [`render_context`](mayatk/env_utils/blender_bridge/parameters.py#L98)
-- `mayatk` — [`render_context`](mayatk/env_utils/unity_bridge/parameters.py#L109)
+- `mayatk` — [`render_context`](mayatk/env_utils/blender_bridge/parameters.py#L115)
+- `mayatk` — [`render_context`](mayatk/env_utils/unity_bridge/parameters.py#L152)
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
 - `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L306)
-- `blendertk` — [`render_context`](blendertk/env_utils/maya_bridge/parameters.py#L100)
-- `blendertk` — [`render_context`](blendertk/env_utils/unity_bridge/parameters.py#L105)
+- `blendertk` — [`render_context`](blendertk/env_utils/maya_bridge/parameters.py#L116)
 
 ## `run_batch` (2 definitions)
 
@@ -581,6 +559,6 @@ _Generated: 2026-06-19_
 ## `template_modes` (4 definitions)
 
 - `pythontk` — [`template_modes`](pythontk/core_utils/script_template.py#L56)
-- `mayatk` — [`template_modes`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L66)
+- `mayatk` — [`template_modes`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L68)
 - `mayatk` — [`template_modes`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L64)
 - `blendertk` — [`template_modes`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L76)

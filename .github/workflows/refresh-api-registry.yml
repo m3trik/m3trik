@@ -33,7 +33,7 @@ jobs:
         run: |
           if [ -z "$TOKEN" ]; then
             echo "::error::REPO_DISPATCH_TOKEN is not set on this repository."
-            echo "::error::Add it under Settings → Secrets → Actions with cross-repo push scope to pythontk/uitk/mayatk/tentacle/unitytk."
+            echo "::error::Add it under Settings → Secrets → Actions with cross-repo push scope to pythontk/uitk/mayatk/blendertk/tentacle/unitytk/extapps."
             exit 1
           fi
 
@@ -61,7 +61,7 @@ jobs:
           # for newer repos, but the refresh should still cover the rest.
           # The generator skips missing siblings gracefully.
           # x-access-token works for both classic PATs and installation tokens.
-          for repo in pythontk uitk mayatk tentacle unitytk; do
+          for repo in pythontk uitk mayatk blendertk tentacle unitytk extapps; do
             if ! git clone --branch dev \
                 "https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git" \
                 "${repo}"; then
@@ -71,6 +71,13 @@ jobs:
 
       - name: Run generator
         run: python m3trik/scripts/generate_api_registry.py
+
+      - name: Check context budget (repo-side)
+        # Gate the agent-facing context surface: CLAUDE.md sizes + registry
+        # freshness. Memory-index checks are skipped (the auto-memory dir is
+        # local, not in CI); the dispatch check self-skips without the monorepo
+        # root CLAUDE.md. Fails the job on a hard budget breach.
+        run: python m3trik/scripts/check_context_budget.py --no-memory
 
       - name: Commit and push per-package registries
         env:
@@ -88,14 +95,14 @@ jobs:
           # and retry once on rejection (the second push covers another
           # racer landing during our rebase window). A second rejection is
           # rare enough that the next scheduled refresh will pick it up.
-          for repo in pythontk uitk mayatk tentacle unitytk; do
+          for repo in pythontk uitk mayatk blendertk tentacle unitytk extapps; do
             if [ ! -d "${repo}" ]; then
               echo "${repo}: skipped (not cloned)"
               continue
             fi
             cd "${repo}"
-            if git status --porcelain API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
-              git add API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
+            if git status --porcelain API_INDEX.md API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
+              git add API_INDEX.md API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
               git commit -m "chore: refresh API registry [skip ci]"
               push_url="https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git"
               for attempt in 1 2; do

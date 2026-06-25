@@ -22,7 +22,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `Selection` — mayatk, tentacle
 
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
-- `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
 ### `defaults` — blendertk, mayatk, uitk
@@ -39,7 +38,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1405)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1385)
 
 ### `list_template_modes` — blendertk, mayatk, pythontk
 
@@ -84,7 +83,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `register` — mayatk, tentacle
 
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L1410)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L1390)
 
 ### `render_context` — blendertk, mayatk, uitk
 

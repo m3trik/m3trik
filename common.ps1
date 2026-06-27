@@ -347,6 +347,7 @@ function Merge-ToMain {
             git checkout --theirs "*/__init__.py"          *>&1 | Out-Null
             git checkout --theirs "pyproject.toml"          *>&1 | Out-Null
             git checkout --theirs "docs/README.md"          *>&1 | Out-Null
+            git checkout --theirs "CHANGELOG.md"            *>&1 | Out-Null
             $ErrorActionPreference = "Continue"
 
             # Hard guard: anything still in conflict means we'd be staging a

@@ -6,7 +6,7 @@
 
 ## Primary tool — `push.ps1`
 
-**The** release path for ecosystem packages. Handles dependency sync, PyPI publication, version bumps. Never `git push` these packages manually.
+**The** release path for ecosystem packages. Handles dependency sync, PyPI publication, version bumps. Never `git push` these packages manually. On publish it also tags `vX.Y.Z` + cuts a GitHub Release (notes = `CHANGELOG.md` lines added since the last release, via `Get-ChangelogDelta`/`git diff origin/main..dev`); additive + non-fatal.
 
 ```powershell
 .\m3trik\push.ps1 -Packages pythontk,uitk -Strict -Merge

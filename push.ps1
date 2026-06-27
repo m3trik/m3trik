@@ -701,6 +701,100 @@ function Merge-ToMainViaPR {
     return (Wait-ForPRMerged $repoSlug $pr $PRMergeTimeoutSeconds)
 }
 
+function Get-ChangelogDelta {
+    # This release's CHANGELOG additions = lines added to CHANGELOG.md on dev
+    # relative to the last-released state (origin/main). A deterministic boundary
+    # (no date heuristics) that fits the existing dated-prose CHANGELOG as-is —
+    # nothing about how the changelog is written changes. Returns the added text
+    # (for the git tag / GitHub Release), or "" when this release added no
+    # CHANGELOG entries (e.g. a docstring-only or dependency-bump release → the
+    # version is still tagged, just without a Release body).
+    param([string]$RepoPath)
+    Push-Location $RepoPath
+    try {
+        if (-not (Test-Path "CHANGELOG.md")) { return "" }
+        git fetch origin main --quiet 2>&1 | Out-Null
+        # `dev` (local HEAD) vs origin/main; keep added lines, drop the '+++' header.
+        $diff = git diff origin/main..dev -- CHANGELOG.md 2>$null
+        if (-not $diff) { return "" }
+        $added = $diff |
+            Where-Object { $_ -match '^\+' -and $_ -notmatch '^\+\+\+' } |
+            ForEach-Object { $_.Substring(1) }
+        return (($added -join "`n").Trim())
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function New-GitReleaseTag {
+    # Annotated tag v<Version> on origin/main HEAD (idempotent) plus a GitHub
+    # Release when there are curated notes. Additive and NON-FATAL: a failure
+    # here never aborts the release — the PyPI publish + main merge already
+    # succeeded by the time this runs, so the worst case is a missing tag/release
+    # the operator can add manually.
+    param(
+        [string]$RepoPath,
+        [string]$RepoSlug,
+        [string]$PackageName,
+        [string]$Version,
+        [string]$Notes
+    )
+    if (-not $Version) { return }
+    $tag = "v$Version"
+    Push-Location $RepoPath
+    try {
+        git fetch origin main --quiet 2>&1 | Out-Null
+        $existing = git ls-remote --tags origin $tag 2>$null
+        if ($existing) {
+            Write-Skip "Tag $tag already exists (skipping)"
+            return
+        }
+        $sha = (git rev-parse origin/main 2>$null)
+        if ($LASTEXITCODE -ne 0 -or -not $sha) {
+            Write-Err "Cannot resolve origin/main for tag $tag"
+            return
+        }
+        $sha = $sha.Trim()
+
+        # -f so a stale local tag from a prior failed run is re-pointed at the
+        # released SHA (the ls-remote guard above already prevents re-tagging an
+        # existing *remote* release, so this only ever fixes a local-only tag).
+        git tag -f -a $tag $sha -m "$PackageName $tag" 2>&1 | Out-Null
+        git push origin $tag 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Failed to push tag $tag (create manually)"
+            return
+        }
+        Write-Success "Tagged $tag"
+
+        if ($Notes -and $RepoSlug -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+            $tmp = [System.IO.Path]::GetTempFileName()
+            try {
+                [System.IO.File]::WriteAllText($tmp, $Notes, (New-Object System.Text.UTF8Encoding $false))
+                $out = gh release create $tag --repo $RepoSlug --title "$PackageName $tag" --notes-file $tmp --target main 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Success "GitHub Release $tag created"
+                } else {
+                    Write-Err "GitHub Release $tag failed (tag pushed; create manually)"
+                    if ($out) { Write-Host "    $out" -ForegroundColor DarkGray }
+                }
+            }
+            finally {
+                Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            Write-Skip "No curated notes for $tag (tag-only, no Release)"
+        }
+    }
+    catch {
+        Write-Err "Tag/release step error for $tag : $_"
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 Write-Header "Repository Manager"
 if ($DryRun) { Write-Host "  [DRY RUN MODE]" -ForegroundColor Magenta }
 if ($Merge) { Write-Host "  [MERGE MODE ENABLED]" -ForegroundColor Magenta }
@@ -812,6 +906,7 @@ foreach ($repo in $reposToProcess) {
     
     $repoPath = $repo.FullName
     $isStrictPackage = $STRICT_PACKAGES -contains $pkgName
+    $capturedNotes = ""   # curated CHANGELOG notes for this release's tag/Release
 
     # 0. Repo Safety Preflight
     if (-not (Test-RepoOperationSafe $repoPath)) {
@@ -934,6 +1029,21 @@ foreach ($repo in $reposToProcess) {
                         continue
                     }
                 }
+            }
+
+            # Capture this release's CHANGELOG additions (lines new on dev vs the
+            # last-released main) for the git tag + GitHub Release. No file edit —
+            # the existing dated-prose CHANGELOG is the source as-is. An empty
+            # delta (docstring-only / dependency bump) -> tag-only release.
+            if ($isStrictPackage -and -not $DryRun) {
+                $capturedNotes = Get-ChangelogDelta $repoPath
+                if ($capturedNotes) {
+                    Write-Step "Captured CHANGELOG delta for release notes"
+                } else {
+                    Write-Skip "No CHANGELOG additions this release (tag-only)"
+                }
+            } elseif ($isStrictPackage -and $DryRun) {
+                Write-Step "[DryRun] Would capture CHANGELOG delta for release notes"
             }
         }
         if (-not $DryRun -and -not $SkipBuild) {
@@ -1061,6 +1171,10 @@ foreach ($repo in $reposToProcess) {
                 } else {
                     Write-Skip "Workflow wait skipped"
                 }
+
+                # Published OK (or wait skipped). Tag this version and cut a
+                # GitHub Release when there are curated notes. Non-fatal.
+                New-GitReleaseTag $repoPath (Get-GitHubRepoSlug $repoPath) $pkgName $localStrictVersions[$pkgName] $capturedNotes
             }
         }
     }

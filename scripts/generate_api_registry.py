@@ -292,7 +292,13 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
 
 
 def _iter_py_files(root: Path) -> Iterable[Path]:
-    for path in sorted(root.rglob("*.py")):
+    # Sort by the posix string, not the Path object: WindowsPath compares
+    # case-insensitively while PosixPath (CI/Linux) compares case-sensitively, so
+    # sorting Path objects ordered the modules differently on Windows vs CI and
+    # made the generated registries drift between local and CI runs (e.g.
+    # table_actions.py vs tableWidget.py). as_posix() is case-sensitive on every
+    # platform and equals CI's existing order, so this is deterministic + churn-free.
+    for path in sorted(root.rglob("*.py"), key=lambda p: p.as_posix()):
         parts = set(path.relative_to(root).parts[:-1])
         if parts & SKIP_DIR_NAMES:
             continue

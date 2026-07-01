@@ -311,10 +311,16 @@ function Test-OnlyDevBumpChanges {
         [string]$PackageName
     )
 
+    # ONLY a pure version-string bump counts as "nothing to release". The strict
+    # packages all declare `version = {attr = "<pkg>.__version__"}` (dynamic), so
+    # a bump touches exactly <pkg>/__init__.py and nothing else. Deliberately
+    # NOT allowing pyproject.toml here: a dependency-cascade release changes only
+    # the pin in pyproject.toml (+ the version), and that MUST still merge/publish
+    # so downstream pins propagate — treating it as "bump noise" would silently
+    # drop the whole point of the cascade. README/docs changes likewise ship in
+    # the wheel and should release. (A statically-versioned package would touch
+    # pyproject.toml on bump and fall through to a merge — harmless, just no skip.)
     $allowed = @(
-        "pyproject.toml",
-        "README.md",
-        "docs/README.md",
         "$PackageName/__init__.py"
     )
 
@@ -1130,13 +1136,15 @@ foreach ($repo in $reposToProcess) {
     }
 
     # 4. Merge to Main
-    # Gate on $needsMerge (not just $Merge): step 2 sets it $false when dev is
-    # ahead of main ONLY by a prior post-release [skip ci] version bump
-    # (Test-OnlyDevBumpChanges) — there is nothing to release. Without this
-    # guard the "skipping merge" message was a no-op: step 4 merged the bumped
-    # version to main anyway, tripping publish.yml into a *phantom publish*
+    # Gate on $needsMerge (not just $Merge): step 2 sets it $false only when dev
+    # is ahead of main ONLY by a pure version-string bump (Test-OnlyDevBumpChanges,
+    # now narrowed to <pkg>/__init__.py alone) — there is nothing to release.
+    # Without this guard the "skipping merge" message was a no-op: step 4 merged
+    # that bump to main anyway, tripping publish.yml into a *phantom publish*
     # (e.g. pythontk 0.8.77 shipped to PyPI on a re-run with no real changes,
     # then mis-tagged because $localStrictVersions still held the old version).
+    # A dependency-cascade release changes pyproject.toml too, so it is NOT
+    # version-only -> $needsMerge stays $true -> it still merges and propagates.
     if ($Merge -and $needsMerge) {
         # Check for conflicts first
         $conflictsOk = Test-MergeConflicts $repoPath

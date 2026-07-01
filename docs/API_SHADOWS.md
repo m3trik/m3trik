@@ -22,7 +22,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `Selection` — mayatk, tentacle
 
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
-- `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L11)
 
 ### `defaults` — blendertk, mayatk, uitk

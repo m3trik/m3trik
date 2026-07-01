@@ -657,6 +657,20 @@ def _to_jsonable(pkg: PackageData) -> dict:
     return asdict(pkg)
 
 
+def _strip_generated(text: str | None) -> str | None:
+    """Drop the cosmetic generation-date line(s) so ``--check`` doesn't treat a
+    new day as staleness. The written output keeps the date; only the staleness
+    comparison ignores it (the `_Generated: <date>_` markdown line and the JSON
+    `"generated_at"` field are metadata, not source-derived API content)."""
+    if text is None:
+        return None
+    return "\n".join(
+        ln
+        for ln in text.splitlines()
+        if not ln.startswith("_Generated:") and '"generated_at"' not in ln
+    )
+
+
 def regenerate(
     package_names: list[str],
     repo_root: Path = REPO_ROOT,
@@ -702,8 +716,12 @@ def regenerate(
                     # API_CHANGES.md is a generation-time diff narrative: it
                     # legitimately differs from a re-diff against the
                     # now-updated baseline, so it is NOT a staleness signal.
-                    # Gate only the source-derived artifacts (INDEX/REGISTRY).
-                    if path.name != "API_CHANGES.md":
+                    # Gate only the source-derived artifacts (INDEX/REGISTRY),
+                    # ignoring the cosmetic generation date so an untouched
+                    # registry isn't "stale" merely because the day rolled over.
+                    if path.name != "API_CHANGES.md" and _strip_generated(
+                        existing
+                    ) != _strip_generated(content):
                         stale.append(path.relative_to(repo_root).as_posix())
                 else:
                     path.write_text(content, encoding="utf-8")
@@ -734,7 +752,8 @@ def regenerate(
         existing = shadow_path.read_text(encoding="utf-8") if shadow_path.exists() else None
         if existing != shadow_md:
             if check_only:
-                stale.append(shadow_path.relative_to(repo_root).as_posix())
+                if _strip_generated(existing) != _strip_generated(shadow_md):
+                    stale.append(shadow_path.relative_to(repo_root).as_posix())
             else:
                 shadow_path.write_text(shadow_md, encoding="utf-8")
 

@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-06-27_
+_Generated: 2026-07-01_
 
 ## Genuine cross-layer collisions (35)
 
@@ -256,8 +256,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `CamUtils`
 - `Channels`
 - `ChannelsSlots`
-- `ColorManager`
-- `ColorManagerSlots`
+- `ColorId`
+- `ColorIdSlots`
 - `ControlNodes`
 - `Controls`
 - `CurtainRig`

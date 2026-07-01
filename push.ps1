@@ -1130,7 +1130,14 @@ foreach ($repo in $reposToProcess) {
     }
 
     # 4. Merge to Main
-    if ($Merge) {
+    # Gate on $needsMerge (not just $Merge): step 2 sets it $false when dev is
+    # ahead of main ONLY by a prior post-release [skip ci] version bump
+    # (Test-OnlyDevBumpChanges) — there is nothing to release. Without this
+    # guard the "skipping merge" message was a no-op: step 4 merged the bumped
+    # version to main anyway, tripping publish.yml into a *phantom publish*
+    # (e.g. pythontk 0.8.77 shipped to PyPI on a re-run with no real changes,
+    # then mis-tagged because $localStrictVersions still held the old version).
+    if ($Merge -and $needsMerge) {
         # Check for conflicts first
         $conflictsOk = Test-MergeConflicts $repoPath
         if (-not $conflictsOk) {

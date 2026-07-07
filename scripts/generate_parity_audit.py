@@ -16,8 +16,15 @@ Metrics, and *why* — learned the hard way:
   * Helper coverage      = shared public names / mayatk public names (idiom-neutral).
 
 Usage:
-    python generate_parity_audit.py            # write the doc
-    python generate_parity_audit.py --check    # exit 1 if stale (CI)
+    python generate_parity_audit.py                  # write the doc
+    python generate_parity_audit.py --check          # exit 1 if stale (CI)
+    python generate_parity_audit.py --allow-stale    # skip the registry-freshness guard
+
+Inputs that are NOT source (guarded): the L4 layer reads mayatk/blendertk API_REGISTRY.json —
+the 2026-06-19 audit shipped "nurbs_utils ABSENT" because it was generated from a stale
+working-tree registry. The freshness guard refuses to run when a registry predates the
+package source (regenerate via generate_api_registry.py first). Maya-only panel triage comes
+from tentacle/docs/parity_map.py (the shared ledger), not a local table.
 """
 from __future__ import annotations
 import ast
@@ -27,8 +34,29 @@ import os
 import re
 import sys
 
+import compare_panel_surface as cps
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(ROOT, "tentacle", "docs", "PARITY_AUDIT.md")
+
+
+def check_registry_freshness(pkg):
+    """Refuse to compute L4 from a registry older than the package source."""
+    reg = rp(pkg, "API_REGISTRY.json")
+    if not os.path.isfile(reg):
+        sys.exit(f"missing {reg} — run generate_api_registry.py {pkg} first")
+    reg_m = os.path.getmtime(reg)
+    newest = max(
+        (os.path.getmtime(f) for f in glob.glob(rp(pkg, pkg, "**", "*.py"), recursive=True)
+         if "__pycache__" not in f),
+        default=0,
+    )
+    if newest > reg_m:
+        sys.exit(
+            f"STALE INPUT: {pkg}/API_REGISTRY.json predates {pkg} source — the L4 numbers "
+            f"would be wrong. Run: python m3trik/scripts/generate_api_registry.py {pkg} "
+            f"(or pass --allow-stale to override)."
+        )
 
 
 def rp(*a):
@@ -108,12 +136,9 @@ def flat_names(reg_path):
 
 
 # --------------------------------------------------------------------------- L3 panels
-PANEL_DISPOSITION = {  # mayatk-only panels: how to treat the gap (judgement, not measurable)
-    "ArnoldBridgeSlots": ("external", "no Arnold in Blender (Cycles/EEVEE)"),
-    "MarmosetBridgeSlots": ("external", "external DCC bridge"),
-    "SubstanceBridgeSlots": ("external", "external DCC bridge"),
-    "BlenderBridgeSlots": ("mirrored", "already mirrored as Blender's `MayaBridgeSlots`"),
-}
+# Maya-only panel triage lives in the shared ledger (tentacle/docs/parity_map.py PANELS):
+# status na -> N/A by design, counterpart -> mirrored pair, pending -> tracked open port.
+# An unledgered Maya-only panel is UNTRIAGED and flagged loudly.
 
 
 def find_panels(pkg_root):
@@ -132,6 +157,11 @@ def panel_metrics(pyfile):
         cands = glob.glob(os.path.join(os.path.dirname(pyfile), "*.ui"))
         uipath = cands[0] if len(cands) == 1 else uipath
     uw = ui_interactive(uipath)
+    # HYBRID/dynamic panels build their options body at runtime from AttributeSpec dicts
+    # (TubeRig) — count those statically-declared option keys as UI surface, or dynamic
+    # panels score 3/16 "thin shell" while actually rendering 7+ controls.
+    spec = cps.Surface(pyfile).spec_options
+    uw += len({k for keys in spec.values() for k in keys})
     m = code_metrics(pyfile)
     return dict(ui=uw, controls=m["controls"], opt=m["opt_boxes"], lines=m["lines"])
 
@@ -172,6 +202,8 @@ def build():
     absent_mods = sorted(m for m in M if M[m] and not B.get(m))
 
     # ---- L3 ----
+    ledger = cps.load_ledger()
+    pan_ledger = ledger["panels"]
     MP, BP = find_panels("mayatk/mayatk"), find_panels("blendertk/blendertk")
     present = sorted(set(MP) & set(BP))
     missing = sorted(set(MP) - set(BP))
@@ -179,11 +211,15 @@ def build():
     panel_rows = []
     for cn in present:
         m, b = panel_metrics(MP[cn]), panel_metrics(BP[cn])
-        panel_rows.append((cn, m, b, pct(b["lines"], m["lines"]), pct(b["ui"], m["ui"])))
+        stem = os.path.splitext(os.path.basename(MP[cn]))[0]
+        d = cps.diff_pair(MP[cn], BP[cn], stem, ledger, is_slot=False)
+        surf = (len(d["untriaged"]), len(d["pending"]))
+        panel_rows.append((cn, m, b, pct(b["lines"], m["lines"]), pct(b["ui"], m["ui"]), surf))
     panel_rows.sort(key=lambda r: (r[3] if r[3] is not None else 999))
-    genuine = [c for c in missing if c not in PANEL_DISPOSITION]
-    external = [c for c in missing if PANEL_DISPOSITION.get(c, ("",))[0] == "external"]
-    mirrored = [c for c in missing if PANEL_DISPOSITION.get(c, ("",))[0] == "mirrored"]
+    untriaged_missing = [c for c in missing if c not in pan_ledger]
+    open_ports = [c for c in missing if pan_ledger.get(c, {}).get("status") == "pending"]
+    na_panels = [c for c in missing if pan_ledger.get(c, {}).get("status") == "na"]
+    counterpart = [c for c in missing if pan_ledger.get(c, {}).get("status") == "counterpart"]
 
     # ---- L2 / L1 ----
     slot_rows = []
@@ -228,18 +264,18 @@ def build():
       f"divergence. Spot-checks (pivot, selection) show menus are **largely faithful**.* {thol} hollow "
       "handlers |")
     w(f"| **3. Tool panels** | co-located `*Slots` tools | **{len(present)} present** pairs (of "
-      f"Maya's {len(MP)}), **{len(genuine)} genuine gaps**, {len(external)} external-bridge, "
-      f"{len(mirrored)} mirrored. Present-panel depth is *highly variable* — {n_thin} below 50% |")
+      f"Maya's {len(MP)}), {len(open_ports)} open ports (tracked), {len(na_panels)} N/A by design, "
+      f"{len(counterpart)} counterpart-pair"
+      + (f", **{len(untriaged_missing)} UNTRIAGED**" if untriaged_missing else "")
+      + f". {n_thin} below 50% by line count (see per-panel surface column) |")
     w(f"| **4. Helper surface** | public names, Blender covers of mayatk | **{helper_cov}%** "
       f"({len(Ma & Ba)}/{len(Ma)} names); {len(absent_mods)} modules absent: {', '.join(absent_mods)} |")
     w("")
-    w("**Bottom line:** the plumbing and the **in-menu experience are largely faithful** already "
-      f"(the {slot_depth}% control figure is a floor — reading the slots, pivot/selection are ~fully "
-      "ported). The real, unambiguous gaps are the standalone **tool panels** "
-      f"({len(genuine)} missing outright, several of the {len(present)} \"present\" ones genuinely thin "
-      "shells by line count) and the **helper library** at "
-      f"{helper_cov}% with {len(absent_mods)} module(s) still absent ({', '.join(absent_mods)}). "
-      "**Start work there, not on the menus.**")
+    w("**Bottom line:** depth numbers here are coarse floors — the per-element truth (every "
+      "control/widget/handler, classified through the triage ledger) is "
+      "[`PARITY_SURFACE.md`](PARITY_SURFACE.md); its UNTRIAGED and `pending` rows are the real "
+      f"work list. Helper library at {helper_cov}% with {len(absent_mods)} module(s) absent "
+      f"({', '.join(absent_mods)}); {len(open_ports)} panel ports open.")
     w("")
 
     # L4
@@ -279,30 +315,41 @@ def build():
     w("")
     w(f"### Present pairs ({len(present)}) — worst first by logic")
     w("")
-    w("| panel | option boxes M→B | code controls M→B | `.ui` widgets M→B | lines M→B | logic% | UI% | verdict |")
+    w("> **The `surface` column is the verdict that matters** — it comes from the name-level "
+      "classified diff (`compare_panel_surface.py` + `parity_map.py`): `clean` = every element "
+      "matched or consciously triaged; `N open` = ledgered pending gaps; `N!` = untriaged. "
+      "A `clean` panel with a low logic% just needs less code in Blender (native-op collapse, "
+      "shared helpers) — that is not a defect.")
+    w("")
+    w("| panel | option boxes M→B | code controls M→B | `.ui` widgets M→B | lines M→B | logic% | UI% | surface |")
     w("|:--|:--:|:--:|:--:|:--:|--:|--:|:--|")
-    for cn, m, b, ld, ud in panel_rows:
-        if ld is not None and ld >= 80:
-            verdict = "faithful"
-        elif ld is not None and ld < 30:
-            verdict = "thin shell"
-        elif ud is not None and ud >= 70 and ld is not None and ld < 50:
-            verdict = "looks complete, does less"
+    for cn, m, b, ld, ud, (n_unt, n_pend) in panel_rows:
+        if n_unt:
+            surf = f"**{n_unt}!**" + (f" +{n_pend} open" if n_pend else "")
+        elif n_pend:
+            surf = f"{n_pend} open"
         else:
-            verdict = "partial"
+            surf = "clean"
         ob = f"{m['opt']}→{b['opt']}" + (" ⚠" if m["opt"] > b["opt"] else "")
         w(f"| {cn.replace('Slots','')} | {ob} | {m['controls']}→{b['controls']} | {m['ui']}→{b['ui']} | "
-          f"{m['lines']}→{b['lines']} | {ps(ld)} | {ps(ud)} | {verdict} |")
+          f"{m['lines']}→{b['lines']} | {ps(ld)} | {ps(ud)} | {surf} |")
     w("")
-    w(f"### Genuine gaps — no Blender panel ({len(genuine)})")
+    if untriaged_missing:
+        w(f"### UNTRIAGED Maya-only panels ({len(untriaged_missing)}) — add a parity_map PANELS entry")
+        w("")
+        w(", ".join(c.replace("Slots", "") for c in untriaged_missing) + ".")
+        w("")
+    w(f"### Open panel ports ({len(open_ports)}) — tracked in parity_map")
     w("")
-    w(", ".join(c.replace("Slots", "") for c in genuine) + ".")
+    for c in open_ports:
+        w(f"- **{c.replace('Slots','')}** — {pan_ledger[c]['reason']}.")
     w("")
-    w(f"### Not counted as gaps ({len(external) + len(mirrored)})")
+    w(f"### Not gaps ({len(na_panels) + len(counterpart)})")
     w("")
-    for c in external + mirrored:
-        kind, why = PANEL_DISPOSITION[c]
-        w(f"- **{c.replace('Slots','')}** — {why}.")
+    for c in na_panels:
+        w(f"- **{c.replace('Slots','')}** — N/A: {pan_ledger[c]['reason']}.")
+    for c in counterpart:
+        w(f"- **{c.replace('Slots','')}** ↔ {pan_ledger[c].get('to', '')} — {pan_ledger[c]['reason']}.")
     if bonly:
         w("")
         w("Blender-only panels (no mayatk counterpart): " + ", ".join(c.replace("Slots", "") for c in bonly) + ".")
@@ -350,6 +397,9 @@ def build():
 
 
 def main():
+    if "--allow-stale" not in sys.argv:
+        for pkg in ("mayatk", "blendertk"):
+            check_registry_freshness(pkg)
     report = build()
     if "--check" in sys.argv:
         cur = read(OUT) if os.path.isfile(OUT) else ""

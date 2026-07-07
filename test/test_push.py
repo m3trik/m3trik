@@ -7,7 +7,6 @@ without actually publishing to PyPI.
 
 import subprocess
 import sys
-import os
 import tempfile
 from pathlib import Path
 import unittest
@@ -104,7 +103,16 @@ class TestPushScriptRegressions(unittest.TestCase):
         return r
 
     def _init_dummy_repo(self, root: Path, name: str, version: str, requirements_lines):
-        """Create a local repo with origin remote and main/dev branches."""
+        """Create a local repo with origin remote and main/dev branches.
+
+        Mirrors the real packages' shape: dynamic version (`{attr =
+        "<pkg>.__version__"}`, read from `__init__.py`) and internal pins
+        declared as `"pkg>=X.Y.Z"` entries in pyproject.toml's `dependencies`
+        list — the exact format Sync-PyProjectDepsToLocalVersions' regex
+        matches. `requirements.txt` is deprecated repo-wide and no longer
+        created; any `==`-pinned entry is normalized to `>=` since that's the
+        only operator the real sync logic understands.
+        """
         repo = root / name
         repo.mkdir(parents=True, exist_ok=True)
 
@@ -119,11 +127,14 @@ class TestPushScriptRegressions(unittest.TestCase):
         (pkg_dir / "__init__.py").write_text(
             f'__package__ = "{name}"\n__version__ = "{version}"\n', encoding="utf-8"
         )
+        deps = [line.replace("==", ">=") for line in requirements_lines]
+        deps_toml = ",\n    ".join(f'"{d}"' for d in deps)
         (repo / "pyproject.toml").write_text(
-            f'[project]\nname = "{name}"\nversion = "{version}"\n', encoding="utf-8"
-        )
-        (repo / "requirements.txt").write_text(
-            "\n".join(requirements_lines) + "\n", encoding="utf-8"
+            "[project]\n"
+            f'name = "{name}"\n'
+            f'version = {{attr = "{name}.__version__"}}\n'
+            f"dependencies = [\n    {deps_toml}\n]\n",
+            encoding="utf-8",
         )
 
         self._git(repo, "add", "-A")
@@ -203,9 +214,10 @@ class TestPushScriptRegressions(unittest.TestCase):
             self._git(other, "push", "origin", "dev")
 
             # Create local uncommitted change (dirty tree)
-            req = repo / "requirements.txt"
-            req.write_text(
-                req.read_text(encoding="utf-8") + "# local edit\n", encoding="utf-8"
+            pyproject = repo / "pyproject.toml"
+            pyproject.write_text(
+                pyproject.read_text(encoding="utf-8") + "# local edit\n",
+                encoding="utf-8",
             )
 
             script = M3TRIK_DIR / "push.ps1"
@@ -286,12 +298,12 @@ class TestPushScriptRegressions(unittest.TestCase):
             root = Path(td)
             repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
 
-            # Simulate an automated dev-bump: only version metadata changes on dev.
+            # Simulate an automated dev-bump: only __init__.py changes on dev.
+            # Real strict packages declare `version = {attr = "<pkg>.__version__"}`
+            # (dynamic) in pyproject.toml, so a pure version bump never touches
+            # that file — only rewriting __init__.py matches what
+            # Test-OnlyDevBumpChanges actually allows.
             self._git(repo, "checkout", "dev")
-            (repo / "pyproject.toml").write_text(
-                '[project]\nname = "pythontk"\nversion = "0.1.1"\n',
-                encoding="utf-8",
-            )
             (repo / "pythontk" / "__init__.py").write_text(
                 '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
                 encoding="utf-8",
@@ -325,7 +337,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("Dev is ahead only due to dev bump (skipping merge)", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_syncs_internal_requirements_pins(self):
+    def test_syncs_internal_pyproject_pins(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
@@ -364,23 +376,24 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
-            self.assertIn("Synced requirements.txt pins", out)
+            self.assertIn("Synced dependencies & bumped version", out)
 
-            req = (root / "uitk" / "requirements.txt").read_text(encoding="utf-8")
-            self.assertIn("pythontk==0.7.51", req)
+            toml = (root / "uitk" / "pyproject.toml").read_text(encoding="utf-8")
+            self.assertIn('"pythontk>=0.7.51"', toml)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_fails_when_conflict_markers_in_requirements(self):
+    def test_fails_when_conflict_markers_in_pyproject(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, _ = self._init_dummy_repo(
                 root, "uitk", "1.0.52", ["qtpy", "pythontk==0.7.51"]
             )
 
-            # Introduce conflict markers in requirements.txt
-            req = repo / "requirements.txt"
-            req.write_text(
-                "qtpy\n<<<<<<< HEAD\npythontk==0.7.51\n=======\npythontk==0.7.50\n>>>>>>> dev\n",
+            # Introduce conflict markers in pyproject.toml
+            pyproject = repo / "pyproject.toml"
+            pyproject.write_text(
+                pyproject.read_text(encoding="utf-8")
+                + "<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> dev\n",
                 encoding="utf-8",
             )
             self._git(repo, "add", "-A")
@@ -409,7 +422,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             out = result.stdout + result.stderr
             self.assertNotEqual(result.returncode, 0, out)
-            self.assertIn("Conflict markers found in requirements.txt", out)
+            self.assertIn("Conflict markers found in pyproject.toml", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_fails_when_remote_main_has_conflict_markers(self):
@@ -421,8 +434,10 @@ class TestPushScriptRegressions(unittest.TestCase):
 
             # Commit conflict markers on main and push to origin/main
             self._git(repo, "checkout", "main")
-            (repo / "requirements.txt").write_text(
-                "qtpy\n<<<<<<< HEAD\npythontk==0.7.51\n=======\npythontk==0.7.50\n>>>>>>> dev\n",
+            pyproject = repo / "pyproject.toml"
+            pyproject.write_text(
+                pyproject.read_text(encoding="utf-8")
+                + "<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> dev\n",
                 encoding="utf-8",
             )
             self._git(repo, "add", "-A")
@@ -431,12 +446,6 @@ class TestPushScriptRegressions(unittest.TestCase):
 
             # Ensure local dev file is clean (so only remote check catches it)
             self._git(repo, "checkout", "dev")
-            (repo / "requirements.txt").write_text(
-                "qtpy\npythontk==0.7.51\n# dev clean\n", encoding="utf-8"
-            )
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "dev clean")
-            self._git(repo, "push", "origin", "dev")
 
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
@@ -461,7 +470,54 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             out = result.stdout + result.stderr
             self.assertNotEqual(result.returncode, 0, out)
-            self.assertIn("Conflict markers found in origin/main:requirements.txt", out)
+            self.assertIn("Conflict markers found in origin/main:pyproject.toml", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_fails_when_remote_dev_has_conflict_markers(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(
+                root, "uitk", "1.0.52", ["qtpy", "pythontk==0.7.51"]
+            )
+
+            # Commit conflict markers on dev and push to origin/dev
+            pyproject = repo / "pyproject.toml"
+            pyproject.write_text(
+                pyproject.read_text(encoding="utf-8")
+                + "<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> dev\n",
+                encoding="utf-8",
+            )
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "dev has conflict markers")
+            self._git(repo, "push", "origin", "dev")
+
+            # Ensure local checkout is clean main (so only remote check catches it)
+            self._git(repo, "checkout", "main")
+
+            script = M3TRIK_DIR / "push.ps1"
+            result = self._run(
+                [
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-Root",
+                    str(root),
+                    "-Packages",
+                    "uitk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ],
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("Conflict markers found in origin/dev:pyproject.toml", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_pr_mode_fails_for_non_github_origin(self):
@@ -521,12 +577,6 @@ class TestPackageStructure(unittest.TestCase):
             pyproject_file = ROOT / pkg / "pyproject.toml"
             self.assertTrue(pyproject_file.exists(), f"{pkg}/pyproject.toml not found")
 
-    def test_packages_have_requirements(self):
-        """All packages should have requirements.txt"""
-        for pkg in PACKAGES:
-            req_file = ROOT / pkg / "requirements.txt"
-            self.assertTrue(req_file.exists(), f"{pkg}/requirements.txt not found")
-
     def test_versions_are_valid_semver(self):
         """All package versions should be valid semantic versions"""
         import re
@@ -547,24 +597,21 @@ class TestPackageStructure(unittest.TestCase):
             )
 
 
-class TestRequirementsPins(unittest.TestCase):
-    """Validate requirements.txt pins remain installable.
+class TestPyprojectPins(unittest.TestCase):
+    """Validate internal pyproject.toml pins remain installable.
 
-    These files are used for `pip install -r requirements.txt` and are also
-    edited by our publish workflows. A regression here can break installs.
+    Internal deps are pinned as `"pkg>=X.Y.Z"` entries in each package's
+    `dependencies` list — the same format push.ps1's
+    Sync-PyProjectDepsToLocalVersions reads/writes. A regression here can
+    break installs.
     """
 
     def _read_pins(self, pkg: str) -> dict:
-        req_file = ROOT / pkg / "requirements.txt"
-        pins = {}
-        for line in req_file.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "==" in line:
-                name, ver = line.split("==", 1)
-                pins[name.strip()] = ver.strip()
-        return pins
+        import re
+
+        toml_file = ROOT / pkg / "pyproject.toml"
+        content = toml_file.read_text(encoding="utf-8")
+        return dict(re.findall(r'"([A-Za-z0-9_.-]+)>=([0-9.]+)"', content))
 
     def test_internal_pins_present(self):
         expectations = {

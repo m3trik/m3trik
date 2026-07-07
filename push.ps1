@@ -925,8 +925,15 @@ foreach ($repo in $reposToProcess) {
 
     # Additional safety: remote refs must not contain conflict markers in critical files.
     if ($Strict -and $isStrictPackage) {
-        # Only check common source files
-        # requirements.txt check removed as file is deprecated
+        $remoteSafe = (Test-RemoteConflictMarkers -RepoPath $repoPath -Ref "origin/main") -and
+                      (Test-RemoteConflictMarkers -RepoPath $repoPath -Ref "origin/dev")
+        if (-not $remoteSafe) {
+            $results[$pkgName] = "unsafe-repo"
+            $anyErrors = $true
+            Write-Err "Repository is not in a safe state for automation"
+            if ($stopOnFailure) { break }
+            continue
+        }
     }
     
     # 1. Strict Validation (Build & Test)

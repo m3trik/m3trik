@@ -43,7 +43,7 @@ function Get-PackageVersion {
 function Test-RepoOperationSafe {
     param(
         [string]$RepoPath,
-        [string[]]$FilesToScanForConflictMarkers = @("requirements.txt")
+        [string[]]$FilesToScanForConflictMarkers = @("pyproject.toml")
     )
 
     Push-Location $RepoPath
@@ -97,7 +97,7 @@ function Test-RemoteConflictMarkers {
     param(
         [string]$RepoPath,
         [string]$Ref,
-        [string[]]$FilesToScan = @("requirements.txt")
+        [string[]]$FilesToScan = @("pyproject.toml")
     )
 
     Push-Location $RepoPath

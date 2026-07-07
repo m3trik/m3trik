@@ -2,7 +2,9 @@
 context-budget pass: shadow-report parity bucketing and JSON reconstruction of
 non-walked packages (so a partial run still produces a complete shadow report)."""
 
+import ast
 import sys
+import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
@@ -61,6 +63,49 @@ class TestJsonReconstruction(unittest.TestCase):
         md = g.emit_shadow_report([walked, from_json])
         self.assertIn("CoreUtils", md)
         self.assertIn("pythontk", md)
+
+
+class TestPropertyAccessorSkip(unittest.TestCase):
+    """A property setter/deleter must not be emitted as a phantom member (it
+    re-defines the property already emitted by its getter; recording it
+    double-lists the property and mislabels the setter as a plain method)."""
+
+    @staticmethod
+    def _func(src: str):
+        return ast.parse(src).body[0]
+
+    def test_setter_is_accessor(self):
+        self.assertTrue(g._is_property_accessor(self._func("@x.setter\ndef x(self, v): ...")))
+
+    def test_deleter_is_accessor(self):
+        self.assertTrue(g._is_property_accessor(self._func("@x.deleter\ndef x(self): ...")))
+
+    def test_getter_is_not_accessor(self):
+        self.assertFalse(g._is_property_accessor(self._func("@property\ndef x(self): ...")))
+
+    def test_plain_method_is_not_accessor(self):
+        self.assertFalse(g._is_property_accessor(self._func("def x(self): ...")))
+
+    def test_walk_module_emits_property_once(self):
+        src = (
+            "class C:\n"
+            "    @property\n"
+            "    def val(self): return self._v\n"
+            "    @val.setter\n"
+            "    def val(self, v): self._v = v\n"
+            "    def plain(self): pass\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            f = root / "m.py"
+            f.write_text(src, encoding="utf-8")
+            mod = g._walk_module(f, root)
+            members = {(m.name, m.kind) for m in mod.classes[0].members}
+            self.assertIn(("val", "property"), members)
+            self.assertIn(("plain", "method"), members)
+            # the setter must NOT appear as a separate (phantom) member
+            self.assertNotIn(("val", "method"), members)
+            self.assertEqual(sum(1 for n, _ in members if n == "val"), 1)
 
 
 if __name__ == "__main__":

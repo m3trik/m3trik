@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib.util
 import json
 import sys
 from dataclasses import dataclass, field, asdict
@@ -43,6 +44,26 @@ from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_ROOT = REPO_ROOT / "m3trik" / "docs"
+
+
+def _load_symbol_record() -> type:
+    """Load the shared ``SymbolRecord`` DTO from pythontk source WITHOUT
+    importing the pythontk package (the module is pure-stdlib, so this keeps the
+    generator dependency-free and runnable on a bare CI box). Single source of
+    truth: ``pythontk/pythontk/core_utils/symbol_record.py``."""
+    path = REPO_ROOT / "pythontk" / "pythontk" / "core_utils" / "symbol_record.py"
+    spec = importlib.util.spec_from_file_location("_ptk_symbol_record", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load SymbolRecord from {path}")
+    module = importlib.util.module_from_spec(spec)
+    # Register before exec: @dataclass resolves annotations via
+    # sys.modules[cls.__module__], which is None for an unregistered module.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.SymbolRecord
+
+
+SymbolRecord = _load_symbol_record()
 
 ECOSYSTEM_PACKAGES = (
     "pythontk",
@@ -81,30 +102,19 @@ GENERATED_CLASS_PREFIXES = ("Ui_",)
 
 
 @dataclass
-class SymbolEntry:
-    name: str
-    qualname: str
-    kind: str  # "function" | "method" | "staticmethod" | "classmethod" | "property" | "class"
-    signature: str
-    summary: str
-    line: int
-    deprecated: bool = False
-
-
-@dataclass
 class ClassEntry:
     name: str
     summary: str
     line: int
     bases: list[str] = field(default_factory=list)
-    members: list[SymbolEntry] = field(default_factory=list)
+    members: list[SymbolRecord] = field(default_factory=list)
 
 
 @dataclass
 class ModuleEntry:
     relpath: str  # POSIX-style relative path inside the package source root
     summary: str
-    functions: list[SymbolEntry] = field(default_factory=list)
+    functions: list[SymbolRecord] = field(default_factory=list)
     classes: list[ClassEntry] = field(default_factory=list)
 
 
@@ -214,6 +224,19 @@ def _is_public(name: str) -> bool:
     return not name.startswith("_")
 
 
+def _is_property_accessor(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True for a property setter/deleter (``@x.setter`` / ``@x.deleter``).
+
+    These re-define an existing property (already emitted by its ``@property``
+    getter); recording them as separate members double-lists every writable
+    property and mislabels the setter as a plain ``method`` (``.setter`` is not a
+    kind ``_decorator_kinds`` recognises)."""
+    for dec in node.decorator_list:
+        if isinstance(dec, ast.Attribute) and dec.attr in ("setter", "deleter"):
+            return True
+    return False
+
+
 def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     """Parse one .py file. Return None if it has no public surface."""
     try:
@@ -228,7 +251,7 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     summary = _first_sentence(ast.get_docstring(tree))
     relpath = path.relative_to(pkg_source_root).as_posix()
 
-    funcs: list[SymbolEntry] = []
+    funcs: list[SymbolRecord] = []
     classes: list[ClassEntry] = []
 
     for node in tree.body:
@@ -240,7 +263,7 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                 if isinstance(dec, ast.Name) and dec.id == "deprecated":
                     deprecated = True
             funcs.append(
-                SymbolEntry(
+                SymbolRecord(
                     name=node.name,
                     qualname=node.name,
                     kind=kind,
@@ -255,14 +278,16 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                 continue
             if any(node.name.startswith(p) for p in GENERATED_CLASS_PREFIXES):
                 continue
-            members: list[SymbolEntry] = []
+            members: list[SymbolRecord] = []
             for member in node.body:
                 if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     if not _is_public(member.name):
                         continue
+                    if _is_property_accessor(member):
+                        continue
                     kind, deprecated = _decorator_kinds(member)
                     members.append(
-                        SymbolEntry(
+                        SymbolRecord(
                             name=member.name,
                             qualname=f"{node.name}.{member.name}",
                             kind=kind,
@@ -346,20 +371,6 @@ def _anchor_for(relpath: str) -> str:
     return "".join(ch for ch in out if ch.isalnum() or ch in "-_")
 
 
-def _emit_member_line(member: SymbolEntry) -> str:
-    decoration = ""
-    if member.kind == "staticmethod":
-        decoration = " *(static)*"
-    elif member.kind == "classmethod":
-        decoration = " *(class)*"
-    elif member.kind == "property":
-        decoration = " *(property)*"
-    if member.deprecated:
-        decoration += " **DEPRECATED**"
-    summary = f" — {member.summary}" if member.summary else ""
-    return f"  - `{member.qualname}{member.signature}`{decoration}{summary}"
-
-
 def emit_registry_markdown(pkg: PackageData) -> str:
     lines: list[str] = []
     lines.append(f"# {pkg.name} — API Registry")
@@ -400,7 +411,7 @@ def emit_registry_markdown(pkg: PackageData) -> str:
             summary = f" — {cls.summary}" if cls.summary else ""
             lines.append(f"- **[`class {cls.name}{base}`]({link})**{summary}")
             for member in cls.members:
-                lines.append(_emit_member_line(member))
+                lines.append(member.to_registry_row())
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -451,10 +462,10 @@ def _package_data_from_json(d: dict) -> PackageData:
     """
     modules: list[ModuleEntry] = []
     for m in d.get("modules", []):
-        funcs = [SymbolEntry(**f) for f in m.get("functions", [])]
+        funcs = [SymbolRecord(**f) for f in m.get("functions", [])]
         classes = []
         for c in m.get("classes", []):
-            members = [SymbolEntry(**mem) for mem in c.get("members", [])]
+            members = [SymbolRecord(**mem) for mem in c.get("members", [])]
             classes.append(
                 ClassEntry(
                     name=c["name"],

@@ -40,13 +40,13 @@ widget.menu.add(
 
 | Package | File |
 |:---|:---|
-| extapps | [`metashape_workflow/slots.py`](../../extapps/extapps/metashape_workflow/slots.py) |
+| extapps | [`photogrammetry/_panel_slots.py`](../../extapps/extapps/photogrammetry/_panel_slots.py) |
 | mayatk · anim_utils | [`blendshape_animator/blendshape_animator_slots.py`](../../mayatk/mayatk/anim_utils/blendshape_animator/blendshape_animator_slots.py) |
 | mayatk · anim_utils | [`shots/shots_slots.py`](../../mayatk/mayatk/anim_utils/shots/shots_slots.py) |
 | mayatk · anim_utils | [`shots/shot_manifest/shot_manifest_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_manifest/shot_manifest_slots.py) |
 | mayatk · anim_utils | [`shots/shot_sequencer/shot_sequencer_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_sequencer/shot_sequencer_slots.py) |
 | mayatk · audio_utils | [`audio_clips/audio_clips_slots.py`](../../mayatk/mayatk/audio_utils/audio_clips/audio_clips_slots.py) |
-| mayatk · display_utils | [`color_manager.py`](../../mayatk/mayatk/display_utils/color_manager.py) |
+| mayatk · display_utils | [`color_id.py`](../../mayatk/mayatk/display_utils/color_id.py) |
 | mayatk · display_utils | [`exploded_view.py`](../../mayatk/mayatk/display_utils/exploded_view.py) |
 | mayatk · edit_utils | [`bevel.py`](../../mayatk/mayatk/edit_utils/bevel.py) |
 | mayatk · edit_utils | [`bridge.py`](../../mayatk/mayatk/edit_utils/bridge.py) |

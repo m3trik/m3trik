@@ -42,7 +42,7 @@ DEFAULT_DOC_GLOBS = ("*.md", "docs/**/*.md")
 # "broken" when the script runs from inside a single repo but are correct under
 # the layout the generator targets. Excluding by default keeps the deterministic
 # check focused on hand-written docs.
-DEFAULT_EXCLUDES = ("API_REGISTRY.md", "API_CHANGES.md")
+DEFAULT_EXCLUDES = ("API_REGISTRY.md", "API_CHANGES.md", "API_SHADOWS.md")
 
 
 def _exclude_matches(rel_path: Path, pat: str) -> bool:

@@ -76,8 +76,11 @@ jobs:
         # Gate the agent-facing context surface: CLAUDE.md sizes + registry
         # freshness. Memory-index checks are skipped (the auto-memory dir is
         # local, not in CI); the dispatch check self-skips without the monorepo
-        # root CLAUDE.md. Fails the job on a hard budget breach.
-        run: python m3trik/scripts/check_context_budget.py --no-memory
+        # root CLAUDE.md. --no-runtime keeps this job import-free (the whole point
+        # of the AST registry): runtime-vs-static drift needs importable/DCC
+        # runtimes and is checked locally by Check-RuntimeSurface.ps1, not here.
+        # Fails the job on a hard budget breach.
+        run: python m3trik/scripts/check_context_budget.py --no-memory --no-runtime
 
       - name: Commit and push per-package registries
         env:

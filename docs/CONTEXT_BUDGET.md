@@ -89,6 +89,14 @@ python m3trik/scripts/check_context_budget.py
   hard FAIL or when `MEMORY.md` is within 2 KB of cap. It runs with
   `--no-registry` (see the Nextcloud caveat below). The agent also self-enforces
   the `MEMORY.md` cap whenever it writes a memory (the cap is in the header).
+- **Runtime API drift (local):** the same weekly task then runs
+  [`Check-RuntimeSurface.ps1`](../scripts/Check-RuntimeSurface.ps1) — the DCC half
+  of the drift gate cloud CI can't run (no Maya/Qt/Blender). It dumps each
+  package's live `HelpMixin` surface from a fresh session-safe DCC instance and
+  diffs it against the committed registry (`verify_runtime_surface.py`), logging to
+  `%LOCALAPPDATA%\claude-runtime-surface.log` and toasting on a `missing`-member
+  FAIL. This covers ALL packages incl. pythontk; cloud CI stays import-free
+  (`--no-runtime`), since runtime drift needs importable/DCC runtimes it lacks.
 - **When a WARN shows up,** don't wait for it to become a FAIL — that is the
   early-warning the audit found was missing.
 

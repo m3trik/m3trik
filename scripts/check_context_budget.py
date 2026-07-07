@@ -29,6 +29,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -153,11 +154,21 @@ def check_memory(memory_dir: Path, report: Report) -> None:
 
 def _claude_files() -> list[Path]:
     out: list[Path] = []
-    for p in REPO_ROOT.rglob("CLAUDE.md"):
-        s = str(p)
-        if any(seg in s for seg in (".archive", "node_modules", ".git", "site-packages")):
+    skip = (".archive", "node_modules", ".git", "site-packages")
+    # os.walk instead of Path.rglob: a broken cloud-VFS placeholder anywhere
+    # in the tree makes rglob raise OSError mid-traversal and kill the whole
+    # check; os.walk lets us skip unreadable entries and keep scanning.
+    for dirpath, dirnames, filenames in os.walk(REPO_ROOT, onerror=lambda e: None):
+        if any(seg in dirpath for seg in skip):
+            dirnames[:] = []  # prune the subtree
             continue
-        out.append(p)
+        if "CLAUDE.md" in filenames:
+            p = Path(dirpath) / "CLAUDE.md"
+            try:
+                p.stat()
+            except OSError:
+                continue  # unreadable (e.g. dehydrated/broken cloud placeholder)
+            out.append(p)
     return sorted(out)
 
 
@@ -246,7 +257,54 @@ def check_registry_fresh(report: Report) -> None:
     report.fail("REGISTRY: stale — run `python m3trik/scripts/generate_api_registry.py`:\n        " + head)
 
 
-def run_checks(memory_dir: Path, do_memory: bool, do_registry: bool) -> Report:
+def check_runtime_surface(report: Report) -> None:
+    """Opt-in pythontk runtime-vs-static drift spot-check.
+
+    ``verify_runtime_surface.py verify pythontk`` compares pythontk's live
+    ``HelpMixin`` surface against its committed registry. It runs only when the
+    guard is invoked WITHOUT ``--no-runtime`` in an env where pythontk is
+    importable (its numpy/Pillow deps present) - a convenience for a manual local
+    run. The automated runtime-drift gate across ALL packages (including the DCC
+    ones CI cannot import) is ``Check-RuntimeSurface.ps1``, run weekly locally;
+    cloud CI stays import-free. A registry that over-promises a member the live
+    class lacks (a ``missing`` member) FAILs; ``added`` / ``kind_changed`` are
+    advisory and never reach here as a failure."""
+    tool = SCRIPT_DIR / "verify_runtime_surface.py"
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(tool), "verify", "pythontk"],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            timeout=120,
+        )
+    except Exception as exc:  # noqa: BLE001
+        report.warn(f"RUNTIME: could not run verify_runtime_surface.py: {exc}")
+        return
+
+    if proc.returncode == 0:
+        report.ok("RUNTIME: pythontk live surface matches the static registry")
+    elif proc.returncode == 2:
+        # Import failed (e.g. numpy/Pillow absent on a minimal CI box) — advisory,
+        # like the memory-dir skip; the registry --check still gates statically.
+        tail = proc.stderr.strip().splitlines()
+        report.warn(
+            "RUNTIME: pythontk not importable in-process — skipped "
+            f"({tail[-1] if tail else 'import error'})"
+        )
+    else:
+        detail = (proc.stdout.strip() or proc.stderr.strip()).splitlines()
+        head = "\n        ".join(detail[:12])
+        report.fail(
+            "RUNTIME: pythontk registry over-promises members the live class "
+            "lacks — run `python m3trik/scripts/verify_runtime_surface.py verify "
+            "pythontk`:\n        " + head
+        )
+
+
+def run_checks(
+    memory_dir: Path, do_memory: bool, do_registry: bool, do_runtime: bool
+) -> Report:
     report = Report()
     if do_memory:
         check_memory(memory_dir, report)
@@ -255,6 +313,8 @@ def run_checks(memory_dir: Path, do_memory: bool, do_registry: bool) -> Report:
     check_claude_links(report)
     if do_registry:
         check_registry_fresh(report)
+    if do_runtime:
+        check_runtime_surface(report)
     return report
 
 
@@ -264,10 +324,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--memory-dir", type=Path, default=DEFAULT_MEMORY_DIR)
     ap.add_argument("--no-registry", action="store_true", help="skip the (slower) registry --check walk")
+    ap.add_argument("--no-runtime", action="store_true", help="skip the runtime-vs-static drift check (imports pythontk)")
     ap.add_argument("--no-memory", action="store_true", help="skip memory-dir checks (repo-only)")
     args = ap.parse_args(argv)
 
-    report = run_checks(args.memory_dir, do_memory=not args.no_memory, do_registry=not args.no_registry)
+    report = run_checks(
+        args.memory_dir,
+        do_memory=not args.no_memory,
+        do_registry=not args.no_registry,
+        do_runtime=not args.no_runtime,
+    )
 
     print("CONTEXT-BUDGET GUARD")
     print("=" * 64)

@@ -1196,7 +1196,21 @@ foreach ($repo in $reposToProcess) {
 
                 # Published OK (or wait skipped). Tag this version and cut a
                 # GitHub Release when there are curated notes. Non-fatal.
-                New-GitReleaseTag $repoPath (Get-GitHubRepoSlug $repoPath) $pkgName $localStrictVersions[$pkgName] $capturedNotes
+                # Re-read the version fresh from disk rather than trusting
+                # $localStrictVersions[$pkgName]: Get-LocalStrictVersions clamps
+                # an unpublished local version down to PyPI's last-published one
+                # (so a phantom-publish re-run doesn't think it needs a fresh
+                # bump). That's correct for the bump-decision earlier, but on a
+                # run that PUBLISHES a version bumped in an earlier attempt (no
+                # re-bump this run -> dict entry never refreshed off the clamp),
+                # this dict still holds the stale pre-bump version at tag time,
+                # so the tag step tags/skips the wrong release entirely.
+                $pkgSourcePath = Join-Path (Join-Path $ROOT $pkgName) $pkgName
+                $releasedVersion = Get-PackageVersion $pkgSourcePath
+                if (-not $releasedVersion -or $releasedVersion -eq "unknown") {
+                    $releasedVersion = $localStrictVersions[$pkgName]
+                }
+                New-GitReleaseTag $repoPath (Get-GitHubRepoSlug $repoPath) $pkgName $releasedVersion $capturedNotes
             }
         }
     }

@@ -8,19 +8,21 @@ _Generated: 2026-07-07_
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
-### `AudioUtils` — mayatk, pythontk
+### `AudioUtils` — blendertk, mayatk, pythontk
 
+- `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L66)
 - `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L81)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L15)
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L594)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L619)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
-### `Selection` — mayatk, tentacle
+### `Selection` — blendertk, mayatk, tentacle
 
+- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L30)
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L10)
@@ -28,6 +30,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `defaults` — blendertk, mayatk, uitk
 
 - `blendertk` — [`defaults`](blendertk/env_utils/maya_bridge/parameters.py#L111)
+- `blendertk` — [`defaults`](blendertk/env_utils/unity_bridge/parameters.py#L145)
+- `blendertk` — [`defaults`](blendertk/uv_utils/rizom_bridge/parameters.py#L91)
 - `mayatk` — [`defaults`](mayatk/env_utils/blender_bridge/parameters.py#L110)
 - `mayatk` — [`defaults`](mayatk/env_utils/unity_bridge/parameters.py#L147)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
@@ -52,6 +56,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `list_templates` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`list_templates`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L71)
+- `blendertk` — [`list_templates`](blendertk/ui_utils/style_setter/_style_setter.py#L99)
 - `mayatk` — [`list_templates`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L63)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L59)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L126)
@@ -75,6 +80,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `referenced_keys` — blendertk, mayatk, uitk
 
 - `blendertk` — [`referenced_keys`](blendertk/env_utils/maya_bridge/parameters.py#L106)
+- `blendertk` — [`referenced_keys`](blendertk/env_utils/unity_bridge/parameters.py#L140)
+- `blendertk` — [`referenced_keys`](blendertk/uv_utils/rizom_bridge/parameters.py#L86)
 - `mayatk` — [`referenced_keys`](mayatk/env_utils/blender_bridge/parameters.py#L105)
 - `mayatk` — [`referenced_keys`](mayatk/env_utils/unity_bridge/parameters.py#L142)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
@@ -90,6 +97,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `render_context` — blendertk, mayatk, uitk
 
 - `blendertk` — [`render_context`](blendertk/env_utils/maya_bridge/parameters.py#L116)
+- `blendertk` — [`render_context`](blendertk/env_utils/unity_bridge/parameters.py#L150)
+- `blendertk` — [`render_context`](blendertk/uv_utils/rizom_bridge/parameters.py#L96)
 - `mayatk` — [`render_context`](mayatk/env_utils/blender_bridge/parameters.py#L115)
 - `mayatk` — [`render_context`](mayatk/env_utils/unity_bridge/parameters.py#L152)
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
@@ -110,15 +119,25 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (92)
+## Intentional mayatk↔blendertk port parity (143)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
 - `AnchorStrategy`
 - `AnimUtils`
 - `AnimationMacros`
+- `Applicator`
+- `ApplyStatus`
+- `ArnoldBridge`
+- `ArnoldBridgeSlots`
+- `AudioClipsSlots`
+- `BakeAnalysis`
+- `BakeResult`
+- `BakeSessionStore`
 - `Bevel`
 - `BevelSlots`
+- `BlendshapeAnimator`
+- `BlendshapeAnimatorSlots`
 - `Bridge`
 - `BridgeSlots`
 - `CalculatorController`
@@ -130,6 +149,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ColorIdSlots`
 - `ControlNodes`
 - `Controls`
+- `Creator`
 - `CurtainRig`
 - `CurtainSlots`
 - `CurveToTube`
@@ -154,14 +174,22 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `FbxUtils`
 - `GameShaderSlots`
 - `HdrManagerSlots`
+- `HierarchyManager`
+- `HierarchyManagerController`
+- `HierarchyManagerSlots`
+- `HierarchyMapBuilder`
+- `HierarchySidecar`
+- `HierarchyTreeRenderer`
 - `ImageToPlane`
 - `ImageToPlaneSlots`
 - `ImageTracer`
 - `ImageTracerSlots`
+- `Keyframes`
 - `LightUtils`
 - `LightmapBaker`
 - `LightmapBakerSlots`
 - `MacroManager`
+- `MacroManagerSlots`
 - `Macros`
 - `MatUpdater`
 - `MatUpdaterSlots`
@@ -177,23 +205,35 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ReferenceManagerSlots`
 - `RenderOpacity`
 - `RenderOpacitySlots`
+- `RestoreResult`
 - `RigUtils`
 - `RizomBridgeSlots`
 - `RizomUVBridge`
 - `ScaleKeys`
+- `SceneExporter`
+- `SceneExporterSlots`
+- `ScriptConsole`
 - `ScriptJobManager`
 - `SelectionMacros`
 - `ShaderTemplatesSlots`
 - `ShadowRig`
 - `ShadowRigSlots`
+- `SmartBake`
+- `SmartBakeSlots`
 - `SnapSlots`
 - `SplineIKStrategy`
 - `StaggerKeys`
+- `StyleSetter`
+- `Target`
+- `Targets`
+- `TaskFactory`
+- `TaskManager`
 - `TelescopeRig`
 - `TelescopeRigSlots`
 - `TextureBaker`
 - `TexturePathEditorSlots`
 - `TransformDiagnostics`
+- `TreePathMatcher`
 - `TubePath`
 - `TubeRig`
 - `TubeRigBundle`
@@ -201,8 +241,28 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `TubeStrategy`
 - `UiMacros`
 - `UiUtils`
+- `UnityBridge`
+- `UnityBridgeSlots`
 - `UvUtils`
+- `Validator`
+- `Weights`
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`
+- `apply_template`
+- `build_hierarchy_structure`
+- `find_tree_item_by_name`
 - `get_bounding_box`
+- `get_selected_object_names`
+- `get_selected_tree_items`
+- `install`
+- `is_installed`
+- `list_delivery_modes`
+- `list_styles`
+- `node_ref`
+- `resolve_ref`
+- `restore_session`
+- `set_style`
+- `should_keep_node_by_type`
+- `show`
+- `toggle`

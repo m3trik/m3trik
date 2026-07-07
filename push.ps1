@@ -487,6 +487,33 @@ function Wait-ForWorkflow {
         return $false
     }
 
+    # Polls `gh run list`, filters to $headSha, and reports a verdict:
+    # 'pending' (no matching run yet, or still running), 'success', or a
+    # failure conclusion string. Shared by the main wait loop and the
+    # post-timeout fallback below so both apply identical match/status logic.
+    function Get-MatchingRunVerdict {
+        param([string]$RepoSlug, [string]$Sha)
+        try {
+            $runsJson = gh run list --repo $RepoSlug --branch main --workflow $WorkflowFile --limit 20 --json status,conclusion,headSha,createdAt,displayTitle 2>$null
+            if (-not $runsJson) { return "pending" }
+            $runs = $runsJson | ConvertFrom-Json
+        }
+        catch {
+            return "pending"
+        }
+
+        $matching = @($runs | Where-Object { $_.headSha -eq $Sha })
+        if (-not $matching -or $matching.Count -eq 0) { return "pending" }
+
+        $inProgress = @($matching | Where-Object { $_.status -ne "completed" })
+        if ($inProgress.Count -gt 0) { return "pending" }
+
+        $failed = @($matching | Where-Object { $_.conclusion -and $_.conclusion -ne "success" })
+        if ($failed.Count -gt 0) { return $failed[0].conclusion }
+
+        return "success"
+    }
+
     $maxWait = $WorkflowTimeoutSeconds
     $elapsed = 0
 
@@ -499,44 +526,49 @@ function Wait-ForWorkflow {
             $elapsed += $WorkflowPollSeconds
         }
 
-        $runs = $null
-        try {
-            # Use the publish workflow as the canonical signal.
-            $runsJson = gh run list --repo $repoSlug --branch main --workflow $WorkflowFile --limit 20 --json status,conclusion,headSha,createdAt,displayTitle 2>$null
-            if (-not $runsJson) {
-                continue
-            }
-            $runs = $runsJson | ConvertFrom-Json
-        }
-        catch {
-            continue
-        }
-
-        $matching = @($runs | Where-Object { $_.headSha -eq $headSha })
-        if (-not $matching -or $matching.Count -eq 0) {
+        $verdict = Get-MatchingRunVerdict -RepoSlug $repoSlug -Sha $headSha
+        if ($verdict -eq "pending") {
             if ($elapsed % 60 -eq 0) {
-                Write-Host "    Waiting for workflow to start... ($elapsed/$maxWait seconds)" -ForegroundColor Gray
+                Write-Host "    Waiting for workflow... ($elapsed/$maxWait seconds)" -ForegroundColor Gray
             }
             continue
         }
+        if ($verdict -eq "success") {
+            Write-Success "Workflow completed (publish.yml)"
+            return $true
+        }
+        Write-Err "Workflow concluded with '$verdict'"
+        return $false
+    }
 
-        $inProgress = @($matching | Where-Object { $_.status -ne "completed" })
-        if ($inProgress.Count -gt 0) {
-            if ($elapsed % 60 -eq 0) {
-                Write-Host "    Waiting... ($elapsed/$maxWait seconds)" -ForegroundColor Gray
+    # No matching run ever appeared. publish.yml's push trigger is
+    # path-filtered (paths: [<pkg>/**, pyproject.toml]) - a push whose diff
+    # is entirely CI-workflow/docs/changelog (no package-source paths)
+    # never queues a run at all, so continuing to poll here would wait
+    # forever. Force one manual workflow_dispatch and give it a shorter,
+    # bounded second window before truly giving up. Safe to retry: the
+    # publish job's own version-vs-PyPI check plus `twine upload
+    # --skip-existing` make a redundant dispatch a no-op, not a double-publish.
+    Write-Host "    No matching run after ${maxWait}s - dispatching publish.yml manually (push may be path-filtered)..." -ForegroundColor Yellow
+    gh workflow run $WorkflowFile --repo $repoSlug --ref main 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $fallbackWait = 180
+        $fallbackElapsed = 0
+        Start-Sleep -Seconds 10
+        $fallbackElapsed += 10
+        while ($fallbackElapsed -lt $fallbackWait) {
+            $verdict = Get-MatchingRunVerdict -RepoSlug $repoSlug -Sha $headSha
+            if ($verdict -eq "success") {
+                Write-Success "Workflow completed (publish.yml, manually dispatched)"
+                return $true
             }
-            continue
+            if ($verdict -ne "pending") {
+                Write-Err "Workflow concluded with '$verdict'"
+                return $false
+            }
+            Start-Sleep -Seconds $WorkflowPollSeconds
+            $fallbackElapsed += $WorkflowPollSeconds
         }
-
-        $failed = @($matching | Where-Object { $_.conclusion -and $_.conclusion -ne "success" })
-        if ($failed.Count -gt 0) {
-            $c = $failed[0].conclusion
-            Write-Err "Workflow concluded with '$c'"
-            return $false
-        }
-
-        Write-Success "Workflow completed (publish.yml)"
-        return $true
     }
 
     Write-Host "    Warning: Timeout waiting for workflow (${maxWait}s)" -ForegroundColor Yellow

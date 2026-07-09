@@ -11,7 +11,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `AudioUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L66)
-- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L81)
+- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L84)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L15)
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
@@ -136,7 +136,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (202)
+## Intentional mayatk↔blendertk port parity (203)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -278,6 +278,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UiUtils`
 - `UnityBridge`
 - `UnityBridgeSlots`
+- `UvTransformSlots`
 - `UvUtils`
 - `Validator`
 - `Weights`

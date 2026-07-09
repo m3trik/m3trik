@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-04T15:55:05.936295+00:00",
+  "generated_at": "2026-07-08T13:53:52.295495+00:00",
   "workspace_root": "O:/Cloud/Code/_scripts",
   "repo_count": 12,
   "repos": [
@@ -71,6 +71,7 @@
           "path": "blendertk",
           "immediate_subpackages": [
             "anim_utils",
+            "audio_utils",
             "cam_utils",
             "core_utils",
             "display_utils",
@@ -86,16 +87,16 @@
             "xform_utils"
           ],
           "immediate_modules": [],
-          "recursive_module_count": 70
+          "recursive_module_count": 104
         }
       ],
       "code_roots": [
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 51,
+          "code_file_count": 61,
           "dominant_suffixes": [
-            ".py (50)",
+            ".py (60)",
             ".ps1 (1)"
           ]
         }
@@ -103,9 +104,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 187,
-      "tracked_total_lines": 64043,
-      "tracked_nonempty_lines": 58891
+      "tracked_code_files": 250,
+      "tracked_total_lines": 86809,
+      "tracked_nonempty_lines": 79051
     },
     {
       "name": "comfyui",
@@ -226,8 +227,8 @@
       "has_tests": true,
       "has_examples": false,
       "tracked_code_files": 147,
-      "tracked_total_lines": 31514,
-      "tracked_nonempty_lines": 27883
+      "tracked_total_lines": 31564,
+      "tracked_nonempty_lines": 27924
     },
     {
       "name": "m3trik",
@@ -254,27 +255,27 @@
         {
           "name": "scripts",
           "path": "scripts",
-          "code_file_count": 11,
+          "code_file_count": 12,
           "dominant_suffixes": [
-            ".py (8)",
+            ".py (9)",
             ".ps1 (3)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 3,
+          "code_file_count": 4,
           "dominant_suffixes": [
-            ".py (3)"
+            ".py (4)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 16,
-      "tracked_total_lines": 7545,
-      "tracked_nonempty_lines": 6692
+      "tracked_code_files": 20,
+      "tracked_total_lines": 8755,
+      "tracked_nonempty_lines": 7742
     },
     {
       "name": "mayatk",
@@ -309,7 +310,7 @@
             "xform_utils"
           ],
           "immediate_modules": [],
-          "recursive_module_count": 188
+          "recursive_module_count": 191
         },
         {
           "name": "test",
@@ -321,6 +322,7 @@
             "check_cmds_naming",
             "check_cmds_syntax",
             "conftest",
+            "dump_runtime_surface",
             "run_tests",
             "test_anim_utils",
             "test_arnold_bridge",
@@ -355,6 +357,7 @@
             "test_diagnostics",
             "test_display_extras",
             "test_display_utils",
+            "test_duplicate_radial",
             "test_dynamic_pipe",
             "test_edit_tools_duplicate",
             "test_edit_tools_geometry",
@@ -432,8 +435,11 @@
             "test_shot_manifest_mapping",
             "test_shot_plan",
             "test_smart_bake",
+            "test_smart_bake_slots",
+            "test_snap",
             "test_stagger_keys",
             "test_static_analysis",
+            "test_style_setter",
             "test_substance_bridge",
             "test_substance_connection",
             "test_tentacle_editors",
@@ -452,22 +458,22 @@
             "test_xform_matrices",
             "test_xform_utils"
           ],
-          "recursive_module_count": 148
+          "recursive_module_count": 156
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 453,
-      "tracked_total_lines": 247659,
-      "tracked_nonempty_lines": 215613
+      "tracked_code_files": 468,
+      "tracked_total_lines": 252717,
+      "tracked_nonempty_lines": 220093
     },
     {
       "name": "pythontk",
       "path": "pythontk",
       "domain": "",
-      "summary": "A modular Python toolkit providing utilities for file handling, string processing, iteration, math operations, and more.",
+      "summary": "Foundation layer of a DCC-tooling ecosystem: composable primitives for files, strings, iteration, math, geometry, images, video, audio, and networking, plus shared class mixins and package infrastructure.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -479,7 +485,6 @@
           "path": "pythontk",
           "immediate_subpackages": [
             "audio_utils",
-            "color_utils",
             "core_utils",
             "file_utils",
             "geo_utils",
@@ -490,8 +495,10 @@
             "str_utils",
             "vid_utils"
           ],
-          "immediate_modules": [],
-          "recursive_module_count": 65
+          "immediate_modules": [
+            "help"
+          ],
+          "recursive_module_count": 67
         },
         {
           "name": "test",
@@ -509,7 +516,7 @@
             "test_bridge",
             "test_class_property",
             "test_cli",
-            "test_color_utils",
+            "test_color",
             "test_core",
             "test_drape",
             "test_execution_monitor",
@@ -519,6 +526,7 @@
             "test_help_mixin",
             "test_hierarchy_diff",
             "test_hierarchy_utils",
+            "test_hotkey_utils",
             "test_html_presets",
             "test_img",
             "test_iter",
@@ -549,12 +557,13 @@
             "test_schema_spec",
             "test_singleton_mixin",
             "test_str",
+            "test_symbol_record",
             "test_template_set",
             "test_texture_factory_non_greedy",
             "test_user_config",
             "test_vid"
           ],
-          "recursive_module_count": 56
+          "recursive_module_count": 58
         }
       ],
       "code_roots": [
@@ -570,9 +579,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": true,
-      "tracked_code_files": 145,
-      "tracked_total_lines": 62097,
-      "tracked_nonempty_lines": 53303
+      "tracked_code_files": 148,
+      "tracked_total_lines": 62500,
+      "tracked_nonempty_lines": 53687
     },
     {
       "name": "server",
@@ -601,10 +610,10 @@
         {
           "name": "server",
           "path": "server",
-          "code_file_count": 47,
+          "code_file_count": 50,
           "dominant_suffixes": [
-            ".sh (17)",
-            ".yml (10)",
+            ".sh (19)",
+            ".yml (11)",
             ".py (8)",
             ".ps1 (7)",
             ".conf (2)"
@@ -613,18 +622,19 @@
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 8,
+          "code_file_count": 10,
           "dominant_suffixes": [
-            ".ps1 (8)"
+            ".ps1 (9)",
+            ".sh (1)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 61,
-      "tracked_total_lines": 7283,
-      "tracked_nonempty_lines": 6307
+      "tracked_code_files": 67,
+      "tracked_total_lines": 7736,
+      "tracked_nonempty_lines": 6719
     },
     {
       "name": "tentacle",
@@ -635,9 +645,7 @@
       "manifests": [
         "pyproject.toml"
       ],
-      "root_scripts": [
-        "migrate_nav_buttons.py"
-      ],
+      "root_scripts": [],
       "package_roots": [
         {
           "name": "tentacle",
@@ -658,25 +666,18 @@
         {
           "name": "docs",
           "path": "docs",
-          "code_file_count": 1,
+          "code_file_count": 2,
           "dominant_suffixes": [
-            ".json (1)"
-          ]
-        },
-        {
-          "name": "tentacletk-0.9.34",
-          "path": "tentacletk-0.9.34",
-          "code_file_count": 1,
-          "dominant_suffixes": [
+            ".json (1)",
             ".py (1)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 84,
+          "code_file_count": 92,
           "dominant_suffixes": [
-            ".py (79)",
+            ".py (87)",
             ".json (5)"
           ]
         }
@@ -684,9 +685,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 282,
-      "tracked_total_lines": 76031,
-      "tracked_nonempty_lines": 70414
+      "tracked_code_files": 309,
+      "tracked_total_lines": 81127,
+      "tracked_nonempty_lines": 75151
     },
     {
       "name": "uitk",
@@ -708,6 +709,7 @@
           "immediate_modules": [
             "conftest",
             "run_tests",
+            "test_affix_option",
             "test_bridge_slots",
             "test_bridge_slots_header",
             "test_centered_icon",
@@ -735,6 +737,7 @@
             "test_mainwindow_menus",
             "test_marking_menu",
             "test_marking_menu_chord_release",
+            "test_marking_menu_instance_retirement",
             "test_marking_menu_integration",
             "test_marking_menu_leaf_click",
             "test_marking_menu_multiscreen",
@@ -752,6 +755,7 @@
             "test_recent_values_store",
             "test_rich_text_formatter",
             "test_runtime_loader",
+            "test_script_output",
             "test_separator",
             "test_sequencer",
             "test_settings_manager",
@@ -785,7 +789,7 @@
             "test_widget_combobox",
             "test_widgets"
           ],
-          "recursive_module_count": 83
+          "recursive_module_count": 86
         },
         {
           "name": "uitk",
@@ -803,16 +807,16 @@
             "events",
             "file_manager"
           ],
-          "recursive_module_count": 116
+          "recursive_module_count": 118
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 220,
-      "tracked_total_lines": 118718,
-      "tracked_nonempty_lines": 101745
+      "tracked_code_files": 225,
+      "tracked_total_lines": 119863,
+      "tracked_nonempty_lines": 102725
     },
     {
       "name": "unitytk",

@@ -17,6 +17,8 @@
 - `verify_runtime_surface.py` — runtime-vs-static API drift gate: diffs a package's LIVE `HelpMixin` surface against its committed registry, catching members the AST walker can't see (metaclass/mixin injection, dynamic composition) and registry over-promises. `verify <pkg>` imports in-process (pythontk; uitk under offscreen Qt); DCC packages `dump` from a fresh headless session (mayapy / `blender --background`, via each package's `test/dump_runtime_surface.py`) then `verify --runtime <artifact>`. Exit 1 only on a `missing` member; `added`/`kind_changed` are advisory notes.
 - `Check-RuntimeSurface.ps1` — orchestrates the above across the ecosystem (pythontk/uitk/mayatk/blendertk), skipping runtimes not installed locally. Wired into the weekly `ClaudeContextBudget` task via `Invoke-ContextBudgetCheck.ps1` (the DCC half can't run in cloud CI).
 
+- `sync_shared_bat.py` — mirrors the shared `m3trik/package-manager.bat` (the interpreter-agnostic package-manager menu, SSoT) verbatim into `mayatk/mayatk/env_utils/` and `blendertk/blendertk/env_utils/`, so a copy ships in each wheel next to the thin per-DCC wrapper (after a bare `pip install` there is no `m3trik/` on disk for the wrapper's `..\..\..\m3trik\` fallback to find). The mirrors are committed (not build-time-generated — nothing recreates them on load) and picked up by each package's `*.bat` `package-data`. Run with no args to (re)write; `--check` exits non-zero on drift (CI-friendly, for a workflow or pre-commit hook). The drift invariant is pinned by `m3trik/test/test_sync_shared_bat.py` and the two DCC package-manager tests.
+
 ## Rules
 
 - One-shot maintenance scripts go here. Reusable logic belongs in [pythontk](../../pythontk/CLAUDE.md) instead.

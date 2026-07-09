@@ -1,30 +1,30 @@
 # Workspace Repository Inventory
 
-Generated from `O:/Cloud/Code/_scripts` on 2026-07-04 15:55 UTC.
+Generated from `O:/Cloud/Code/_scripts` on 2026-07-08 13:53 UTC.
 
 Scope: direct child git repositories under the workspace root. Line counts cover tracked code/config files and exclude common generated folders such as `.venv`, `build`, `dist`, `output`, `node_modules`, and `__pycache__`.
 
 ## Summary
 
 - Repositories: 12
-- Tracked code/config files: 1672
-- Total lines: 705443
-- Non-empty lines: 623522
+- Tracked code/config files: 1795
+- Total lines: 741624
+- Non-empty lines: 655766
 
 ## Repository Index
 
 | Repo | Domain | Kind | Package roots | Code roots | Docs | Tests | Files | Total lines | Non-empty |
 | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |
 | androidtk | - | Python package | androidtk | examples<br>test | Yes | Yes | 16 | 847 | 693 |
-| blendertk | - | Python package | blendertk | test | Yes | Yes | 187 | 64043 | 58891 |
+| blendertk | - | Python package | blendertk | test | Yes | Yes | 250 | 86809 | 79051 |
 | comfyui | - | Operations / scripts | - | comfyui<br>config<br>patches<br>scripts<br>test<br>workflows | Yes | Yes | 90 | 17677 | 16630 |
-| extapps | - | Python package | extapps | test | Yes | Yes | 147 | 31514 | 27883 |
-| m3trik | - | Operations / scripts | - | docs<br>scripts<br>test | Yes | Yes | 16 | 7545 | 6692 |
-| mayatk | - | Python package | mayatk<br>test | - | Yes | Yes | 453 | 247659 | 215613 |
-| pythontk | - | Python package | pythontk<br>test | examples | Yes | Yes | 145 | 62097 | 53303 |
-| server | - | Operations / scripts | - | scripts<br>server<br>test | Yes | Yes | 61 | 7283 | 6307 |
-| tentacle | - | Python package | tentacle | docs<br>tentacletk-0.9.34<br>test | Yes | Yes | 282 | 76031 | 70414 |
-| uitk | - | Python package | test<br>uitk | - | Yes | Yes | 220 | 118718 | 101745 |
+| extapps | - | Python package | extapps | test | Yes | Yes | 147 | 31564 | 27924 |
+| m3trik | - | Operations / scripts | - | docs<br>scripts<br>test | Yes | Yes | 20 | 8755 | 7742 |
+| mayatk | - | Python package | mayatk<br>test | - | Yes | Yes | 468 | 252717 | 220093 |
+| pythontk | - | Python package | pythontk<br>test | examples | Yes | Yes | 148 | 62500 | 53687 |
+| server | - | Operations / scripts | - | scripts<br>server<br>test | Yes | Yes | 67 | 7736 | 6719 |
+| tentacle | - | Python package | tentacle | docs<br>test | Yes | Yes | 309 | 81127 | 75151 |
+| uitk | - | Python package | test<br>uitk | - | Yes | Yes | 225 | 119863 | 102725 |
 | unitytk | - | Python package | test<br>unitytk | - | Yes | Yes | 27 | 10539 | 8977 |
 | www | - | Operations / scripts | - | test<br>www | Yes | Yes | 28 | 61490 | 56374 |
 
@@ -63,19 +63,19 @@ Scope: direct child git repositories under the workspace root. Line counts cover
 - Manifests: pyproject.toml
 - Root entry scripts: -
 - Support folders: docs=Yes, tests=Yes, examples=No
-- Tracked code surface: 187 files, 64043 total lines, 58891 non-empty lines
+- Tracked code surface: 250 files, 86809 total lines, 79051 non-empty lines
 
 #### Package Roots
 
 | Package | Path | Immediate subpackages | Immediate modules | Recursive module count |
 | --- | --- | --- | --- | ---: |
-| blendertk | `blendertk` | anim_utils<br>cam_utils<br>core_utils<br>display_utils<br>edit_utils<br>env_utils<br>light_utils<br>mat_utils<br>node_utils<br>nurbs_utils<br>rig_utils<br>ui_utils<br>uv_utils<br>xform_utils | - | 70 |
+| blendertk | `blendertk` | anim_utils<br>audio_utils<br>cam_utils<br>core_utils<br>display_utils<br>edit_utils<br>env_utils<br>light_utils<br>mat_utils<br>node_utils<br>nurbs_utils<br>rig_utils<br>ui_utils<br>uv_utils<br>xform_utils | - | 104 |
 
 #### Non-package Code Roots
 
 | Root | Path | Code files | Dominant suffixes |
 | --- | --- | ---: | --- |
-| test | `test` | 51 | .py (50)<br>.ps1 (1) |
+| test | `test` | 61 | .py (60)<br>.ps1 (1) |
 
 ### comfyui
 
@@ -112,7 +112,7 @@ No top-level Python package roots detected.
 - Manifests: pyproject.toml
 - Root entry scripts: -
 - Support folders: docs=Yes, tests=Yes, examples=No
-- Tracked code surface: 147 files, 31514 total lines, 27883 non-empty lines
+- Tracked code surface: 147 files, 31564 total lines, 27924 non-empty lines
 
 #### Package Roots
 
@@ -135,7 +135,7 @@ No top-level Python package roots detected.
 - Manifests: -
 - Root entry scripts: common.ps1, package-manager.bat, push.ps1
 - Support folders: docs=Yes, tests=Yes, examples=No
-- Tracked code surface: 16 files, 7545 total lines, 6692 non-empty lines
+- Tracked code surface: 20 files, 8755 total lines, 7742 non-empty lines
 
 #### Package Roots
 
@@ -146,8 +146,8 @@ No top-level Python package roots detected.
 | Root | Path | Code files | Dominant suffixes |
 | --- | --- | ---: | --- |
 | docs | `docs` | 1 | .json (1) |
-| scripts | `scripts` | 11 | .py (8)<br>.ps1 (3) |
-| test | `test` | 3 | .py (3) |
+| scripts | `scripts` | 12 | .py (9)<br>.ps1 (3) |
+| test | `test` | 4 | .py (4) |
 
 ### mayatk
 
@@ -158,14 +158,14 @@ No top-level Python package roots detected.
 - Manifests: pyproject.toml
 - Root entry scripts: -
 - Support folders: docs=Yes, tests=Yes, examples=No
-- Tracked code surface: 453 files, 247659 total lines, 215613 non-empty lines
+- Tracked code surface: 468 files, 252717 total lines, 220093 non-empty lines
 
 #### Package Roots
 
 | Package | Path | Immediate subpackages | Immediate modules | Recursive module count |
 | --- | --- | --- | --- | ---: |
-| mayatk | `mayatk` | anim_utils<br>audio_utils<br>cam_utils<br>core_utils<br>display_utils<br>edit_utils<br>env_utils<br>light_utils<br>mat_utils<br>node_utils<br>nurbs_utils<br>render_utils<br>rig_utils<br>ui_utils<br>uv_utils<br>xform_utils | - | 188 |
-| test | `test` | - | _run_hm_tests<br>base_test<br>check_cmds_naming<br>check_cmds_syntax<br>conftest<br>run_tests<br>test_anim_utils<br>test_arnold_bridge<br>test_audio_clips<br>test_audio_clips_export<br>test_audio_internals<br>test_audio_utils_batch<br>test_audio_utils_compositor<br>test_audio_utils_discovery<br>test_audio_utils_events<br>test_audio_utils_phase2f<br>test_audio_utils_schema<br>test_auto_instancer<br>test_auto_instancer_scene<br>test_blender_bridge<br>test_blendshape_animator<br>test_bridge<br>test_calculator<br>test_cam_utils<br>test_channel_box<br>test_channels<br>test_components<br>test_compute_plan<br>test_connect_switch_to_constraint<br>test_controls<br>test_core_utils<br>test_create_locator_naming<br>test_curtain<br>test_curve_to_tube<br>test_data_nodes<br>test_devtools<br>test_diagnostics<br>test_display_extras<br>test_display_utils<br>test_dynamic_pipe<br>test_edit_tools_duplicate<br>test_edit_tools_geometry<br>test_edit_tools_misc<br>test_edit_utils<br>test_env_utils<br>test_fbx_export_preparers<br>test_fbx_utils<br>test_freeze_restore_locator_rig<br>test_game_shader<br>test_game_shader_config<br>test_group_combine<br>test_hdr_manager<br>test_hierarchy_manager<br>test_hierarchy_sidecar<br>test_hotkey_collisions<br>test_image_to_plane<br>test_image_tracer<br>test_instancing_extras<br>test_light_utils<br>test_lightmap_baker<br>test_macro_manager_slots<br>test_macros<br>test_mash<br>test_mat_manifest<br>test_mat_marmoset_bridge<br>test_mat_snapshot<br>test_mat_transfer<br>test_mat_utils<br>test_mat_utils_extended<br>test_mat_utils_resolve_path<br>test_material_updater<br>test_material_updater_diagnostics<br>test_material_updater_workflow<br>test_maya_connection<br>test_maya_menu_handler<br>test_maya_ui_handler<br>test_mayapy_package_manager<br>test_msao_fbx_export<br>test_namespace_alias_edge_cases<br>test_namespace_sandbox<br>test_naming<br>test_native_menu_window<br>test_node_utils<br>test_nurbs_utils<br>test_original_mesh_separated<br>test_pivot_rot_place<br>test_pivot_transfer_scenarios<br>test_pivot_watcher<br>test_playblast_exporter<br>test_preview<br>test_reference_manager<br>test_remaining<br>test_render_opacity<br>test_render_opacity_export<br>test_render_utils<br>test_rig_utils<br>test_scale_keys<br>test_scene_audit<br>test_scene_exporter<br>test_script_output<br>test_segment_keys<br>test_separate_objects<br>test_sequencer<br>test_sequencer_audio_shift<br>test_sequencer_gui<br>test_shader_attribute_map<br>test_shader_remapper<br>test_shader_templates<br>test_shot_export_view<br>test_shot_manifest<br>test_shot_manifest_audio_integration<br>test_shot_manifest_behaviors<br>test_shot_manifest_csv_load<br>test_shot_manifest_mapping<br>test_shot_plan<br>test_smart_bake<br>test_stagger_keys<br>test_static_analysis<br>test_substance_bridge<br>test_substance_connection<br>test_tentacle_editors<br>test_texture_baker<br>test_texture_path_editor<br>test_tube_rig_cleanliness<br>test_ui_utils<br>test_unity_bridge<br>test_uv_cleanup_actions<br>test_uv_diagnostics<br>test_uv_rizom_bridge<br>test_uv_snapshot<br>test_uv_utils<br>test_wheel_rig<br>test_workspace<br>test_xform_matrices<br>test_xform_utils | 148 |
+| mayatk | `mayatk` | anim_utils<br>audio_utils<br>cam_utils<br>core_utils<br>display_utils<br>edit_utils<br>env_utils<br>light_utils<br>mat_utils<br>node_utils<br>nurbs_utils<br>render_utils<br>rig_utils<br>ui_utils<br>uv_utils<br>xform_utils | - | 191 |
+| test | `test` | - | _run_hm_tests<br>base_test<br>check_cmds_naming<br>check_cmds_syntax<br>conftest<br>dump_runtime_surface<br>run_tests<br>test_anim_utils<br>test_arnold_bridge<br>test_audio_clips<br>test_audio_clips_export<br>test_audio_internals<br>test_audio_utils_batch<br>test_audio_utils_compositor<br>test_audio_utils_discovery<br>test_audio_utils_events<br>test_audio_utils_phase2f<br>test_audio_utils_schema<br>test_auto_instancer<br>test_auto_instancer_scene<br>test_blender_bridge<br>test_blendshape_animator<br>test_bridge<br>test_calculator<br>test_cam_utils<br>test_channel_box<br>test_channels<br>test_components<br>test_compute_plan<br>test_connect_switch_to_constraint<br>test_controls<br>test_core_utils<br>test_create_locator_naming<br>test_curtain<br>test_curve_to_tube<br>test_data_nodes<br>test_devtools<br>test_diagnostics<br>test_display_extras<br>test_display_utils<br>test_duplicate_radial<br>test_dynamic_pipe<br>test_edit_tools_duplicate<br>test_edit_tools_geometry<br>test_edit_tools_misc<br>test_edit_utils<br>test_env_utils<br>test_fbx_export_preparers<br>test_fbx_utils<br>test_freeze_restore_locator_rig<br>test_game_shader<br>test_game_shader_config<br>test_group_combine<br>test_hdr_manager<br>test_hierarchy_manager<br>test_hierarchy_sidecar<br>test_hotkey_collisions<br>test_image_to_plane<br>test_image_tracer<br>test_instancing_extras<br>test_light_utils<br>test_lightmap_baker<br>test_macro_manager_slots<br>test_macros<br>test_mash<br>test_mat_manifest<br>test_mat_marmoset_bridge<br>test_mat_snapshot<br>test_mat_transfer<br>test_mat_utils<br>test_mat_utils_extended<br>test_mat_utils_resolve_path<br>test_material_updater<br>test_material_updater_diagnostics<br>test_material_updater_workflow<br>test_maya_connection<br>test_maya_menu_handler<br>test_maya_ui_handler<br>test_mayapy_package_manager<br>test_msao_fbx_export<br>test_namespace_alias_edge_cases<br>test_namespace_sandbox<br>test_naming<br>test_native_menu_window<br>test_node_utils<br>test_nurbs_utils<br>test_original_mesh_separated<br>test_pivot_rot_place<br>test_pivot_transfer_scenarios<br>test_pivot_watcher<br>test_playblast_exporter<br>test_preview<br>test_reference_manager<br>test_remaining<br>test_render_opacity<br>test_render_opacity_export<br>test_render_utils<br>test_rig_utils<br>test_scale_keys<br>test_scene_audit<br>test_scene_exporter<br>test_script_output<br>test_segment_keys<br>test_separate_objects<br>test_sequencer<br>test_sequencer_audio_shift<br>test_sequencer_gui<br>test_shader_attribute_map<br>test_shader_remapper<br>test_shader_templates<br>test_shot_export_view<br>test_shot_manifest<br>test_shot_manifest_audio_integration<br>test_shot_manifest_behaviors<br>test_shot_manifest_csv_load<br>test_shot_manifest_mapping<br>test_shot_plan<br>test_smart_bake<br>test_smart_bake_slots<br>test_snap<br>test_stagger_keys<br>test_static_analysis<br>test_style_setter<br>test_substance_bridge<br>test_substance_connection<br>test_tentacle_editors<br>test_texture_baker<br>test_texture_path_editor<br>test_tube_rig_cleanliness<br>test_ui_utils<br>test_unity_bridge<br>test_uv_cleanup_actions<br>test_uv_diagnostics<br>test_uv_rizom_bridge<br>test_uv_snapshot<br>test_uv_utils<br>test_wheel_rig<br>test_workspace<br>test_xform_matrices<br>test_xform_utils | 156 |
 
 #### Non-package Code Roots
 
@@ -176,18 +176,18 @@ No additional top-level code roots detected.
 - Path: `pythontk`
 - Domain: Unclassified
 - Kind: Python package
-- Summary: A modular Python toolkit providing utilities for file handling, string processing, iteration, math operations, and more.
+- Summary: Foundation layer of a DCC-tooling ecosystem: composable primitives for files, strings, iteration, math, geometry, images, video, audio, and networking, plus shared class mixins and package infrastructure.
 - Manifests: pyproject.toml
 - Root entry scripts: -
 - Support folders: docs=Yes, tests=Yes, examples=Yes
-- Tracked code surface: 145 files, 62097 total lines, 53303 non-empty lines
+- Tracked code surface: 148 files, 62500 total lines, 53687 non-empty lines
 
 #### Package Roots
 
 | Package | Path | Immediate subpackages | Immediate modules | Recursive module count |
 | --- | --- | --- | --- | ---: |
-| pythontk | `pythontk` | audio_utils<br>color_utils<br>core_utils<br>file_utils<br>geo_utils<br>img_utils<br>iter_utils<br>math_utils<br>net_utils<br>str_utils<br>vid_utils | - | 65 |
-| test | `test` | - | conftest<br>run_tests<br>test_affix_hardening<br>test_all_packages_namespace_aliases<br>test_app_installer<br>test_app_launcher<br>test_atomic_write<br>test_audio_utils<br>test_bridge<br>test_class_property<br>test_cli<br>test_color_utils<br>test_core<br>test_drape<br>test_execution_monitor<br>test_file<br>test_file_transfer<br>test_fuzzy_matcher<br>test_help_mixin<br>test_hierarchy_diff<br>test_hierarchy_utils<br>test_html_presets<br>test_img<br>test_iter<br>test_logging_mixin<br>test_map_compositor<br>test_map_factory<br>test_map_factory_grouping<br>test_map_registry_ambiguity<br>test_map_registry_resolution<br>test_map_registry_resolve<br>test_mat_report<br>test_math<br>test_mesh_convert<br>test_module_reloader<br>test_module_resolver<br>test_namedtuple_container<br>test_namespace_handler<br>test_net_utils<br>test_noise<br>test_output_template<br>test_package_manager<br>test_pointcloud<br>test_polyline<br>test_preset_store<br>test_progression<br>test_py39_compat<br>test_rpc<br>test_schema_spec<br>test_singleton_mixin<br>test_str<br>test_template_set<br>test_texture_factory_non_greedy<br>test_user_config<br>test_vid | 56 |
+| pythontk | `pythontk` | audio_utils<br>core_utils<br>file_utils<br>geo_utils<br>img_utils<br>iter_utils<br>math_utils<br>net_utils<br>str_utils<br>vid_utils | help | 67 |
+| test | `test` | - | conftest<br>run_tests<br>test_affix_hardening<br>test_all_packages_namespace_aliases<br>test_app_installer<br>test_app_launcher<br>test_atomic_write<br>test_audio_utils<br>test_bridge<br>test_class_property<br>test_cli<br>test_color<br>test_core<br>test_drape<br>test_execution_monitor<br>test_file<br>test_file_transfer<br>test_fuzzy_matcher<br>test_help_mixin<br>test_hierarchy_diff<br>test_hierarchy_utils<br>test_hotkey_utils<br>test_html_presets<br>test_img<br>test_iter<br>test_logging_mixin<br>test_map_compositor<br>test_map_factory<br>test_map_factory_grouping<br>test_map_registry_ambiguity<br>test_map_registry_resolution<br>test_map_registry_resolve<br>test_mat_report<br>test_math<br>test_mesh_convert<br>test_module_reloader<br>test_module_resolver<br>test_namedtuple_container<br>test_namespace_handler<br>test_net_utils<br>test_noise<br>test_output_template<br>test_package_manager<br>test_pointcloud<br>test_polyline<br>test_preset_store<br>test_progression<br>test_py39_compat<br>test_rpc<br>test_schema_spec<br>test_singleton_mixin<br>test_str<br>test_symbol_record<br>test_template_set<br>test_texture_factory_non_greedy<br>test_user_config<br>test_vid | 58 |
 
 #### Non-package Code Roots
 
@@ -204,7 +204,7 @@ No additional top-level code roots detected.
 - Manifests: -
 - Root entry scripts: connect.ps1, credential-manager.ps1, diagnose.ps1, manage_db_secrets.py, update-samba-creds.ps1
 - Support folders: docs=Yes, tests=Yes, examples=No
-- Tracked code surface: 61 files, 7283 total lines, 6307 non-empty lines
+- Tracked code surface: 67 files, 7736 total lines, 6719 non-empty lines
 
 #### Package Roots
 
@@ -215,8 +215,8 @@ No top-level Python package roots detected.
 | Root | Path | Code files | Dominant suffixes |
 | --- | --- | ---: | --- |
 | scripts | `scripts` | 1 | .sh (1) |
-| server | `server` | 47 | .sh (17)<br>.yml (10)<br>.py (8)<br>.ps1 (7)<br>.conf (2) |
-| test | `test` | 8 | .ps1 (8) |
+| server | `server` | 50 | .sh (19)<br>.yml (11)<br>.py (8)<br>.ps1 (7)<br>.conf (2) |
+| test | `test` | 10 | .ps1 (9)<br>.sh (1) |
 
 ### tentacle
 
@@ -225,9 +225,9 @@ No top-level Python package roots detected.
 - Kind: Python package
 - Summary: A multi-application marking menu and UI framework for Maya, 3ds Max, and Blender.
 - Manifests: pyproject.toml
-- Root entry scripts: migrate_nav_buttons.py
+- Root entry scripts: -
 - Support folders: docs=Yes, tests=Yes, examples=No
-- Tracked code surface: 282 files, 76031 total lines, 70414 non-empty lines
+- Tracked code surface: 309 files, 81127 total lines, 75151 non-empty lines
 
 #### Package Roots
 
@@ -239,9 +239,8 @@ No top-level Python package roots detected.
 
 | Root | Path | Code files | Dominant suffixes |
 | --- | --- | ---: | --- |
-| docs | `docs` | 1 | .json (1) |
-| tentacletk-0.9.34 | `tentacletk-0.9.34` | 1 | .py (1) |
-| test | `test` | 84 | .py (79)<br>.json (5) |
+| docs | `docs` | 2 | .json (1)<br>.py (1) |
+| test | `test` | 92 | .py (87)<br>.json (5) |
 
 ### uitk
 
@@ -252,14 +251,14 @@ No top-level Python package roots detected.
 - Manifests: pyproject.toml
 - Root entry scripts: -
 - Support folders: docs=Yes, tests=Yes, examples=No
-- Tracked code surface: 220 files, 118718 total lines, 101745 non-empty lines
+- Tracked code surface: 225 files, 119863 total lines, 102725 non-empty lines
 
 #### Package Roots
 
 | Package | Path | Immediate subpackages | Immediate modules | Recursive module count |
 | --- | --- | --- | --- | ---: |
-| test | `test` | bench | conftest<br>run_tests<br>test_bridge_slots<br>test_bridge_slots_header<br>test_centered_icon<br>test_choice_capture<br>test_collapsable_group<br>test_color_mapping_editor<br>test_color_swatch<br>test_combobox<br>test_compile<br>test_compiled_loader<br>test_conftest_qsettings_sandbox<br>test_dismiss_on_move<br>test_double_spin_box<br>test_dynamic_slot_init<br>test_events<br>test_expandable_list<br>test_external_app_handler<br>test_file_manager<br>test_filter_option<br>test_footer<br>test_header<br>test_line_edit_validator<br>test_main_window_resize<br>test_mainwindow<br>test_mainwindow_menus<br>test_marking_menu<br>test_marking_menu_chord_release<br>test_marking_menu_integration<br>test_marking_menu_leaf_click<br>test_marking_menu_multiscreen<br>test_marking_menu_position_stability<br>test_marking_menu_resolver<br>test_marking_menu_shortcuts<br>test_menu<br>test_menu_button<br>test_optionBox<br>test_overlay_clone_positioning<br>test_persistence_full_chain<br>test_persistence_hardening<br>test_preset_manager<br>test_progress_adapter<br>test_recent_values_store<br>test_rich_text_formatter<br>test_runtime_loader<br>test_separator<br>test_sequencer<br>test_settings_manager<br>test_shortcut_capture<br>test_shortcut_commands<br>test_shortcut_editor<br>test_shortcuts<br>test_signals<br>test_slider<br>test_spinbox<br>test_state_manager<br>test_style_editor<br>test_style_sheet<br>test_switchboard<br>test_switchboard_browser<br>test_switchboard_editors_mixin<br>test_switchboard_history<br>test_switchboard_sources<br>test_switchboard_style_mixin<br>test_switchboard_tag_persistence<br>test_table_widget_wheel<br>test_text_edit_log_handler<br>test_tooltip_mixin<br>test_tree_column_config<br>test_tree_header_actions<br>test_tree_selection<br>test_ui_handler<br>test_value_manager<br>test_value_option<br>test_visibility_policy<br>test_widget_combobox<br>test_widgets | 83 |
-| uitk | `uitk` | bridge<br>examples<br>loaders<br>switchboard<br>widgets | _bootstrap<br>compile<br>events<br>file_manager | 116 |
+| test | `test` | bench | conftest<br>run_tests<br>test_affix_option<br>test_bridge_slots<br>test_bridge_slots_header<br>test_centered_icon<br>test_choice_capture<br>test_collapsable_group<br>test_color_mapping_editor<br>test_color_swatch<br>test_combobox<br>test_compile<br>test_compiled_loader<br>test_conftest_qsettings_sandbox<br>test_dismiss_on_move<br>test_double_spin_box<br>test_dynamic_slot_init<br>test_events<br>test_expandable_list<br>test_external_app_handler<br>test_file_manager<br>test_filter_option<br>test_footer<br>test_header<br>test_line_edit_validator<br>test_main_window_resize<br>test_mainwindow<br>test_mainwindow_menus<br>test_marking_menu<br>test_marking_menu_chord_release<br>test_marking_menu_instance_retirement<br>test_marking_menu_integration<br>test_marking_menu_leaf_click<br>test_marking_menu_multiscreen<br>test_marking_menu_position_stability<br>test_marking_menu_resolver<br>test_marking_menu_shortcuts<br>test_menu<br>test_menu_button<br>test_optionBox<br>test_overlay_clone_positioning<br>test_persistence_full_chain<br>test_persistence_hardening<br>test_preset_manager<br>test_progress_adapter<br>test_recent_values_store<br>test_rich_text_formatter<br>test_runtime_loader<br>test_script_output<br>test_separator<br>test_sequencer<br>test_settings_manager<br>test_shortcut_capture<br>test_shortcut_commands<br>test_shortcut_editor<br>test_shortcuts<br>test_signals<br>test_slider<br>test_spinbox<br>test_state_manager<br>test_style_editor<br>test_style_sheet<br>test_switchboard<br>test_switchboard_browser<br>test_switchboard_editors_mixin<br>test_switchboard_history<br>test_switchboard_sources<br>test_switchboard_style_mixin<br>test_switchboard_tag_persistence<br>test_table_widget_wheel<br>test_text_edit_log_handler<br>test_tooltip_mixin<br>test_tree_column_config<br>test_tree_header_actions<br>test_tree_selection<br>test_ui_handler<br>test_value_manager<br>test_value_option<br>test_visibility_policy<br>test_widget_combobox<br>test_widgets | 86 |
+| uitk | `uitk` | bridge<br>examples<br>loaders<br>switchboard<br>widgets | _bootstrap<br>compile<br>events<br>file_manager | 118 |
 
 #### Non-package Code Roots
 

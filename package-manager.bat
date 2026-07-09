@@ -5,6 +5,10 @@ SETLOCAL EnableDelayedExpansion EnableExtensions
 :: (mayatk\env_utils\mayapy-package-manager.bat, blendertk\env_utils\blenderpy-package-manager.bat).
 :: A wrapper detects its DCC, resolves the interpreter, and hands off here.
 ::
+:: SSoT: this file lives in m3trik/. It is mirrored verbatim into each DCC package's
+:: env_utils/ (so it ships in the wheel next to the wrapper) by
+:: m3trik/scripts/sync_shared_bat.py -- edit HERE, never the mirror; run that script to propagate.
+::
 :: Usage: package-manager.bat "<python.exe>" "<Label>" "<backup_prefix>"
 ::   %1  Full path to the target Python interpreter (e.g. mayapy.exe / Blender's python.exe).
 ::   %2  Display label shown in the UI (e.g. "Maya 2025", "Blender 5.1").

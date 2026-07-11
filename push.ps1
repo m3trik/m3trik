@@ -67,12 +67,23 @@ $ROOT = $Root
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $SCRIPT_DIR "common.ps1")
 
-# Packages that support strict validation
-# NOTE: blendertk is dep-synced (see $requiredPinsByPackage) but stays OUT of the strict/release
-# sets until it is publishable — repo is private, not on PyPI, and has no publish workflow yet
-# (same treatment as unitytk). Add it here + to the auto-cascade graph when that decision lands.
-$STRICT_PACKAGES = @("pythontk", "uitk", "mayatk", "tentacle")
-$RELEASE_ORDER = @("pythontk", "uitk", "mayatk", "tentacle")
+# Packages that support strict validation.
+# blendertk is a full ecosystem package: public repo, published to PyPI, its own publish.yml,
+# and a hard tentacle dependency. It releases in parallel with mayatk (both consume uitk; the
+# chain is pythontk -> uitk -> {mayatk, blendertk} -> tentacle), so it sits after mayatk and
+# before tentacle in the release order. (unitytk remains off-chain — floor-pinned, not cascaded.)
+$STRICT_PACKAGES = @("pythontk", "uitk", "mayatk", "blendertk", "tentacle")
+$RELEASE_ORDER = @("pythontk", "uitk", "mayatk", "blendertk", "tentacle")
+
+# Internal (in-chain) pins each package carries — the SAME set is kept in sync in
+# its pyproject.toml AND checked for availability on PyPI, so it lives in one place.
+# unitytk is intentionally excluded everywhere (off-chain: floor-pinned, not cascaded).
+$REQUIRED_PINS = @{
+    "uitk"      = @("pythontk")
+    "mayatk"    = @("pythontk", "uitk")
+    "blendertk" = @("pythontk", "uitk")
+    "tentacle"  = @("pythontk", "uitk", "mayatk", "blendertk")
+}
 
 function Get-RepoSlugFromOriginUrl {
     param([string]$OriginUrl)
@@ -195,19 +206,12 @@ function Sync-PyProjectDepsToLocalVersions {
         return $true
     }
 
-    # Only these packages have internal pins today.
-    $requiredPinsByPackage = @{
-        "uitk"      = @("pythontk")
-        "mayatk"    = @("pythontk", "uitk")
-        "blendertk" = @("pythontk")
-        "tentacle"  = @("pythontk", "uitk", "mayatk")
-    }
-
-    if (-not $requiredPinsByPackage.ContainsKey($PackageName)) {
+    # Only these packages have internal pins today (see $REQUIRED_PINS, top of file).
+    if (-not $REQUIRED_PINS.ContainsKey($PackageName)) {
         return $true
     }
 
-    $requiredPins = $requiredPinsByPackage[$PackageName]
+    $requiredPins = $REQUIRED_PINS[$PackageName]
     # Ensure edits land on dev
     Push-Location $RepoPath
     try {
@@ -892,9 +896,10 @@ if ($reposToProcess.Count -eq 0) {
 if ($Strict) {
     # Define the dependency graph (Upstream -> [Downstream1, Downstream2...])
     $dependencyGraph = @{
-        "pythontk" = @("uitk", "mayatk", "tentacle")
-        "uitk"     = @("mayatk", "tentacle")
-        "mayatk"   = @("tentacle")
+        "pythontk"  = @("uitk", "mayatk", "blendertk", "tentacle")
+        "uitk"      = @("mayatk", "blendertk", "tentacle")
+        "mayatk"    = @("tentacle")
+        "blendertk" = @("tentacle")
     }
 
     $initialNames = @($reposToProcess.Name)
@@ -1047,15 +1052,8 @@ foreach ($repo in $reposToProcess) {
             # Optional: ensure pinned upstream versions are already available on PyPI.
             # This prevents merging downstream pins that would temporarily be un-installable.
             if (-not $SkipPypiCheck -and $pkgName -ne "pythontk") {
-                $requiredPinsByPackage = @{
-                    "uitk"      = @("pythontk")
-                    "mayatk"    = @("pythontk", "uitk")
-                    "blendertk" = @("pythontk")
-                    "tentacle"  = @("pythontk", "uitk", "mayatk")
-                }
-
-                if ($requiredPinsByPackage.ContainsKey($pkgName)) {
-                    foreach ($dep in $requiredPinsByPackage[$pkgName]) {
+                if ($REQUIRED_PINS.ContainsKey($pkgName)) {
+                    foreach ($dep in $REQUIRED_PINS[$pkgName]) {
                         if ($localStrictVersions.ContainsKey($dep)) {
                             $depVer = $localStrictVersions[$dep]
                             $pypiName = Get-PypiProjectName $dep

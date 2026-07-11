@@ -40,13 +40,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/template_params.py#L60)
 - `mayatk` — [`defaults`](mayatk/mat_utils/substance_bridge/parameters.py#L179)
-- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L301)
+- `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L326)
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
 
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1385)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1405)
 
 ### `list_template_modes` — blendertk, mayatk, pythontk
 
@@ -67,7 +67,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`list_templates`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L63)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L59)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L126)
-- `mayatk` — [`list_templates`](mayatk/ui_utils/style_setter/_style_setter.py#L111)
+- `mayatk` — [`list_templates`](mayatk/ui_utils/style_setter/_style_setter.py#L113)
 - `pythontk` — [`list_templates`](pythontk/core_utils/script_template.py#L47)
 
 ### `main` — blendertk, mayatk, uitk
@@ -99,14 +99,14 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`referenced_keys`](mayatk/env_utils/unity_bridge/parameters.py#L142)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/substance_bridge/parameters.py#L174)
-- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L296)
+- `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L321)
 - `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
 
 ### `register` — blendertk, mayatk, tentacle
 
 - `blendertk` — [`register`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L1390)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L1410)
 
 ### `render_context` — blendertk, mayatk, uitk
 
@@ -117,7 +117,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`render_context`](mayatk/env_utils/blender_bridge/parameters.py#L115)
 - `mayatk` — [`render_context`](mayatk/env_utils/unity_bridge/parameters.py#L152)
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
-- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L306)
+- `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L331)
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
 
 ### `run_batch` — blendertk, mayatk, pythontk
@@ -248,6 +248,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ShaderTemplatesSlots`
 - `ShadowRig`
 - `ShadowRigSlots`
+- `ShellXformSlots`
 - `SmartBake`
 - `SmartBakeSlots`
 - `SnapSlots`
@@ -278,7 +279,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UiUtils`
 - `UnityBridge`
 - `UnityBridgeSlots`
-- `UvTransformSlots`
 - `UvUtils`
 - `Validator`
 - `Weights`

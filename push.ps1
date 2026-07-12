@@ -3,14 +3,17 @@ Repository Manager (push.ps1)
 
 Purpose
 - Safely push changes on dev and (optionally) promote dev -> main in a controlled release order.
-- Designed for the core package chain: pythontk -> uitk -> mayatk -> tentacle (tentacletk on PyPI).
+- Designed for the core package chain: pythontk -> uitk -> {mayatk, blendertk} -> tentacle
+  (tentacle publishes as tentacletk on PyPI).
 
 Core safety rules (Strict+Merge)
 - Enforces canonical release order when multiple packages are provided.
 - Stops on the first failure (build, merge conflict, workflow timeout, unsafe repo state).
 - Refuses to operate if a repo has an in-progress merge/rebase/cherry-pick.
-- Refuses to proceed if conflict markers exist in requirements.txt (local OR remote origin/main|origin/dev).
-- Keeps internal requirements.txt pins in sync with the local versions being released.
+- Refuses to proceed if conflict markers exist in pyproject.toml (local OR remote origin/main|origin/dev).
+- Keeps internal pyproject.toml pins in sync with the local versions being released, and
+  waits for a just-published upstream version to become visible on PyPI before merging
+  a downstream package that pins it.
 
 Recommended usage
 
@@ -34,13 +37,18 @@ Key flags
 -UsePR                Uses GitHub PRs (via gh) to merge dev -> main (recommended).
 -SkipBuild            Skip python build/twine validation.
 -SkipWorkflowWait     Skip waiting for the publish workflow on main.
+-SkipPypiCheck        Skip all PyPI availability gates (downstream pin pre-check +
+                      post-publish visibility wait). Meant for offline use only —
+                      indexing lag is already handled by bounded retries.
 -CommitMessage        Message for the auto-commit Sync-DevWithOrigin makes when
                               absorbing local changes (defaults to "Update").
 -WorkflowTimeoutSeconds / -WorkflowPollSeconds
                               Control workflow wait behavior.
+-PypiVisibilityTimeoutSeconds How long to wait for a just-published version to become
+                              visible on PyPI's API before continuing (default 180).
 
 Notes
-- PyPI install requirements come from pyproject.toml; requirements.txt pins are for pip -r workflows.
+- Install requirements come from pyproject.toml (requirements.txt is deprecated repo-wide).
 - PR mode requires GitHub CLI (gh) with authenticated access.
 #>
 
@@ -57,6 +65,7 @@ param(
     [int]$PRMergeTimeoutSeconds = 1800,
     [int]$WorkflowTimeoutSeconds = 900,
     [int]$WorkflowPollSeconds = 15,
+    [int]$PypiVisibilityTimeoutSeconds = 180,
     [string]$WorkflowFile = "publish.yml",
     [string]$Root = "O:\Cloud\Code\_scripts",
     [string]$CommitMessage = "Update"
@@ -139,6 +148,33 @@ function Get-PypiLatestVersion {
     return $null
 }
 
+function Wait-PypiHasVersion {
+    # PyPI's API can lag a fresh twine upload (CDN propagation), so a single
+    # Test-PypiHasVersion probe right after a publish can false-negative.
+    # Poll with a bounded window instead of failing immediately — the old
+    # workaround was re-running the cascade with -SkipPypiCheck, which drops
+    # the installability guard entirely.
+    param(
+        [string]$ProjectName,
+        [string]$Version,
+        [int]$TimeoutSeconds = 180,
+        [int]$PollSeconds = 10
+    )
+
+    if (Test-PypiHasVersion $ProjectName $Version) { return $true }
+    $elapsed = 0
+    while ($elapsed -lt $TimeoutSeconds) {
+        Write-Host "    Waiting for PyPI to show $ProjectName==$Version... ($elapsed/$TimeoutSeconds seconds)" -ForegroundColor Gray
+        Start-Sleep -Seconds $PollSeconds
+        $elapsed += $PollSeconds
+        if (Test-PypiHasVersion $ProjectName $Version) {
+            Write-Success "PyPI shows $ProjectName==$Version"
+            return $true
+        }
+    }
+    return $false
+}
+
 function Bump-LocalVersion {
     param(
         [string]$PackagePath
@@ -155,13 +191,18 @@ function Bump-LocalVersion {
     }
 
     $content = Get-Content $initFile -Raw
-    if ($content -match '__version__\s*=\s*["''](?<ver>\d+\.\d+\.\d+)["'']') {
+    # (?m)^ anchors detection to the real assignment line, matching the
+    # replacement below — a docstring that merely mentions __version__ = "…"
+    # earlier in the file must not seed $oldVer.
+    if ($content -match '(?m)^__version__\s*=\s*["''](?<ver>\d+\.\d+\.\d+)["'']') {
         $oldVer = $Matches['ver']
         $parts = $oldVer -split "\."
         $parts[2] = [int]$parts[2] + 1
         $newVer = "$($parts[0]).$($parts[1]).$($parts[2])"
         
-        $newContent = $content -replace "__version__\s*=\s*.*", "__version__ = `"$newVer`""
+        # (?m)^ anchors to the assignment line so a docstring/comment that
+        # happens to mention __version__ is never clobbered.
+        $newContent = $content -replace '(?m)^__version__\s*=\s*.*', "__version__ = `"$newVer`""
         Set-Content -Path $initFile -Value $newContent -NoNewline
         Write-Host "    Bumped version: $oldVer -> $newVer" -ForegroundColor Cyan
         return $newVer
@@ -181,12 +222,17 @@ function Get-LocalStrictVersions {
         $ver = Get-PackageVersion $pkgPath
         if (-not $ver -or $ver -eq "unknown") { continue }
 
-        $pypiName = Get-PypiProjectName $pkg
-        if (-not (Test-PypiHasVersion $pypiName $ver)) {
-            $latest = Get-PypiLatestVersion $pypiName
-            if ($latest) {
-                Write-Host "  > $pkg local $ver is unpublished; using PyPI latest $latest" -ForegroundColor DarkGray
-                $ver = $latest
+        # -SkipPypiCheck (offline runs): trust local versions as-is — every
+        # other PyPI probe honors the flag, and firing network calls here
+        # contradicted the parameter's documented offline purpose.
+        if (-not $SkipPypiCheck) {
+            $pypiName = Get-PypiProjectName $pkg
+            if (-not (Test-PypiHasVersion $pypiName $ver)) {
+                $latest = Get-PypiLatestVersion $pypiName
+                if ($latest) {
+                    Write-Host "  > $pkg local $ver is unpublished; using PyPI latest $latest" -ForegroundColor DarkGray
+                    $ver = $latest
+                }
             }
         }
         $versions[$pkg] = $ver
@@ -212,17 +258,20 @@ function Sync-PyProjectDepsToLocalVersions {
     }
 
     $requiredPins = $REQUIRED_PINS[$PackageName]
-    # Ensure edits land on dev
-    Push-Location $RepoPath
-    try {
-        git checkout dev --quiet 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "Checkout dev failed (toml sync)"
-            return $false
+    # Ensure edits land on dev. A DryRun makes no edits, so it must not
+    # switch branches either.
+    if (-not $DryRun) {
+        Push-Location $RepoPath
+        try {
+            git checkout dev --quiet 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "Checkout dev failed (toml sync)"
+                return $false
+            }
         }
-    }
-    finally {
-        Pop-Location
+        finally {
+            Pop-Location
+        }
     }
 
     $content = Get-Content $tomlFile -Raw
@@ -315,23 +364,42 @@ function Test-OnlyDevBumpChanges {
         [string]$PackageName
     )
 
-    # ONLY a pure version-string bump counts as "nothing to release". The strict
-    # packages all declare `version = {attr = "<pkg>.__version__"}` (dynamic), so
-    # a bump touches exactly <pkg>/__init__.py and nothing else. Deliberately
-    # NOT allowing pyproject.toml here: a dependency-cascade release changes only
-    # the pin in pyproject.toml (+ the version), and that MUST still merge/publish
-    # so downstream pins propagate — treating it as "bump noise" would silently
-    # drop the whole point of the cascade. README/docs changes likewise ship in
-    # the wheel and should release. (A statically-versioned package would touch
-    # pyproject.toml on bump and fall through to a merge — harmless, just no skip.)
+    # ONLY deltas that cannot change the shipped artifact count as "nothing to
+    # release":
+    #   - <pkg>/__init__.py — the version-string bump itself. The strict
+    #     packages all declare `version = {attr = "<pkg>.__version__"}`
+    #     (dynamic), so a pure bump touches exactly this file.
+    #   - API_INDEX/API_REGISTRY/API_CHANGES — repo-root artifacts the
+    #     refresh-api-registry bot commits to dev after every publish. They
+    #     never ship in the wheel; without this, the bot's post-release commit
+    #     defeated the guard and every cascade re-run phantom-published.
+    #   - CHANGELOG.md — repo-root release-notes source, not wheel content; a
+    #     notes-only delta rides along with the next real release
+    #     (Get-ChangelogDelta diffs origin/main..dev, so nothing is lost).
+    # Deliberately NOT allowed: pyproject.toml (a dependency-cascade release
+    # changes only the pin + version and MUST still merge/publish so downstream
+    # pins propagate) and docs/README.md (dynamic readme -> wheel metadata).
     $allowed = @(
-        "$PackageName/__init__.py"
+        "$PackageName/__init__.py",
+        "API_INDEX.md",
+        "API_REGISTRY.md",
+        "API_REGISTRY.json",
+        "API_CHANGES.md",
+        "CHANGELOG.md"
     )
 
     Push-Location $RepoPath
     try {
         git fetch origin main dev --quiet 2>&1 | Out-Null
-        $files = @(git diff --name-only origin/main..origin/dev 2>$null)
+        # Diff LOCAL dev (what Merge-ToMain will actually merge), not
+        # origin/dev: this run's absorbed local work and bump/pin-sync commits
+        # exist only locally at this point — the push happens later, in step 3.
+        # Diffing origin/dev made the guard skip the merge whenever real local
+        # changes rode on top of a bot-bumped origin/dev, silently dropping the
+        # release while reporting success. Local dev is rebased onto origin/dev
+        # by Sync-DevWithOrigin before this runs, so it is always a superset of
+        # origin/dev in Strict+Merge mode.
+        $files = @(git diff --name-only origin/main..dev 2>$null)
         if (-not $files -or $files.Count -eq 0) {
             return $false
         }
@@ -1000,11 +1068,29 @@ foreach ($repo in $reposToProcess) {
                      # If we have commits ahead of origin/dev, we consider those "new features" requiring a bump.
                      git fetch origin dev --quiet 2>&1 | Out-Null
                      $ahead = git rev-list --count origin/dev..dev 2>$null
-                     if ($ahead -and [int]$ahead -gt 0) { 
-                        # Check if the last commit was already a bump to avoid loops/double bumps
+                     if ($ahead -and [int]$ahead -gt 0) {
+                        # Check if the last commit was already a bump to avoid loops/double
+                        # bumps. Matches BOTH bump message shapes: the auto-bump/bot
+                        # "Bump version to X" AND the pin-sync "Update dependencies &
+                        # bump version to X" — a run that failed after the pin-sync
+                        # commit used to re-bump on every retry, burning a patch
+                        # version each time. Anchored to those exact shapes: an
+                        # ordinary commit that merely MENTIONS the phrase (e.g.
+                        # 'Revert "Bump version to X"') must still bump, or the
+                        # release ships an already-published version and the
+                        # publish gate silently skips it.
                         $lastMsg = git log -1 --pretty=%s
-                        if ($lastMsg -notmatch "^Bump version to") {
-                             $shouldBump = $true 
+                        if ($lastMsg -notmatch '(?i)^(update dependencies & )?bump version to ') {
+                             $shouldBump = $true
+                        }
+                        # A delta that is only allow-listed housekeeping
+                        # (registry refresh, CHANGELOG curation) skips the
+                        # merge later — don't burn a patch version on dev for
+                        # a release that won't happen; the notes ride along
+                        # with the next real release.
+                        if ($shouldBump -and $Strict -and $isStrictPackage -and (Test-OnlyDevBumpChanges $repoPath $pkgName)) {
+                            Write-Skip "Dev delta is allow-listed housekeeping only (skipping version bump)"
+                            $shouldBump = $false
                         }
                      }
                  }
@@ -1042,22 +1128,26 @@ foreach ($repo in $reposToProcess) {
             # Keep internal pins consistent with what we're releasing, so pip installs are reliable.
             $syncOk = Sync-PyProjectDepsToLocalVersions $pkgName $repoPath $localStrictVersions
             if (-not $syncOk) {
-                $results[$pkgName] = "requirements-invalid"
+                $results[$pkgName] = "dep-sync-failed"
                 $anyErrors = $true
                 Write-Err "Dependency sync failed"
                 if ($stopOnFailure) { break }
                 continue
             }
 
-            # Optional: ensure pinned upstream versions are already available on PyPI.
-            # This prevents merging downstream pins that would temporarily be un-installable.
-            if (-not $SkipPypiCheck -and $pkgName -ne "pythontk") {
+            # Ensure pinned upstream versions are already available on PyPI.
+            # This prevents merging downstream pins that would temporarily be
+            # un-installable. Skipped in DryRun: the version map holds simulated
+            # (never-published) bumps there, so the check can only false-fail.
+            if (-not $SkipPypiCheck -and -not $DryRun) {
                 if ($REQUIRED_PINS.ContainsKey($pkgName)) {
                     foreach ($dep in $REQUIRED_PINS[$pkgName]) {
                         if ($localStrictVersions.ContainsKey($dep)) {
                             $depVer = $localStrictVersions[$dep]
                             $pypiName = Get-PypiProjectName $dep
-                            $ok = Test-PypiHasVersion $pypiName $depVer
+                            # Short retry window: absorbs residual API lag when
+                            # the dep was published minutes ago in this cascade.
+                            $ok = Wait-PypiHasVersion $pypiName $depVer -TimeoutSeconds 60
                             if (-not $ok) {
                                 $results[$pkgName] = "pypi-missing"
                                 $anyErrors = $true
@@ -1072,6 +1162,8 @@ foreach ($repo in $reposToProcess) {
                         continue
                     }
                 }
+            } elseif ($DryRun -and -not $SkipPypiCheck -and $REQUIRED_PINS.ContainsKey($pkgName)) {
+                Write-Step "[DryRun] Skipping PyPI pin check (versions are simulated)"
             }
 
             # Capture this release's CHANGELOG additions (lines new on dev vs the
@@ -1131,6 +1223,13 @@ foreach ($repo in $reposToProcess) {
                 if ($aheadCount -gt 0) {
                     if ($Strict -and $isStrictPackage -and (Test-OnlyDevBumpChanges $repoPath $pkgName)) {
                         Write-Skip "Dev is ahead only due to dev bump (skipping merge)"
+                        if ($DryRun) {
+                            # Sync-DevWithOrigin is skipped in DryRun, so this
+                            # classification sees committed state only; a real
+                            # run absorbs uncommitted local work first, which
+                            # can flip this to a real merge.
+                            Write-Host "    Note: [DryRun] classification excludes uncommitted local work" -ForegroundColor DarkGray
+                        }
                         $needsMerge = $false
                     } else {
                         $needsMerge = $true
@@ -1174,14 +1273,15 @@ foreach ($repo in $reposToProcess) {
 
     # 4. Merge to Main
     # Gate on $needsMerge (not just $Merge): step 2 sets it $false only when dev
-    # is ahead of main ONLY by a pure version-string bump (Test-OnlyDevBumpChanges,
-    # now narrowed to <pkg>/__init__.py alone) — there is nothing to release.
-    # Without this guard the "skipping merge" message was a no-op: step 4 merged
-    # that bump to main anyway, tripping publish.yml into a *phantom publish*
-    # (e.g. pythontk 0.8.77 shipped to PyPI on a re-run with no real changes,
-    # then mis-tagged because $localStrictVersions still held the old version).
-    # A dependency-cascade release changes pyproject.toml too, so it is NOT
-    # version-only -> $needsMerge stays $true -> it still merges and propagates.
+    # is ahead of main ONLY by non-artifact deltas (Test-OnlyDevBumpChanges:
+    # the version bump, bot registry churn, CHANGELOG) — there is nothing to
+    # release. Without this guard the "skipping merge" message was a no-op:
+    # step 4 merged that bump to main anyway, tripping publish.yml into a
+    # *phantom publish* (e.g. pythontk 0.8.77 shipped to PyPI on a re-run with
+    # no real changes, then mis-tagged because $localStrictVersions still held
+    # the old version). A dependency-cascade release changes pyproject.toml
+    # too, so it is NOT skippable -> $needsMerge stays $true -> it still
+    # merges and propagates.
     if ($Merge -and $needsMerge) {
         # Check for conflicts first
         $conflictsOk = Test-MergeConflicts $repoPath
@@ -1240,6 +1340,31 @@ foreach ($repo in $reposToProcess) {
                 if (-not $releasedVersion -or $releasedVersion -eq "unknown") {
                     $releasedVersion = $localStrictVersions[$pkgName]
                 }
+
+                # Wheel-upload dependency ordering: downstream packages in this
+                # same run pin (and PyPI-check) this version, so block until it
+                # is actually visible on PyPI's API — the workflow's twine
+                # upload completing does not mean the API reflects it yet.
+                # Non-fatal on timeout: the publish itself succeeded, and the
+                # downstream pin check retries + fails loudly if the version
+                # still isn't visible.
+                if (-not $SkipWorkflowWait -and -not $SkipPypiCheck -and $releasedVersion) {
+                    $pypiName = Get-PypiProjectName $pkgName
+                    if (-not (Wait-PypiHasVersion $pypiName $releasedVersion -TimeoutSeconds $PypiVisibilityTimeoutSeconds)) {
+                        Write-Host "    Warning: $pypiName==$releasedVersion not visible on PyPI after ${PypiVisibilityTimeoutSeconds}s" -ForegroundColor Yellow
+                    }
+                    # Refresh the version map whether or not the wait confirmed:
+                    # the publish itself succeeded, so downstream pins must
+                    # target THIS version. Leaving the clamped pre-bump entry in
+                    # place on timeout let the downstream pin check "pass"
+                    # instantly against the stale published version and pin a
+                    # stale floor, instead of retrying (and failing loudly)
+                    # against the new one. (The map only exists in -Strict runs.)
+                    if ($localStrictVersions) {
+                        $localStrictVersions[$pkgName] = $releasedVersion
+                    }
+                }
+
                 New-GitReleaseTag $repoPath (Get-GitHubRepoSlug $repoPath) $pkgName $releasedVersion $capturedNotes
             }
         }
@@ -1257,7 +1382,7 @@ foreach ($repo in $reposToProcess) {
     switch ($status) {
         "success" { Write-Success "$pkg - Completed" }
         "skipped" { Write-Skip "$pkg - No changes" }
-        "requirements-invalid" { Write-Err "$pkg - requirements.txt invalid/out of sync" }
+        "dep-sync-failed" { Write-Err "$pkg - pyproject.toml dependency sync failed" }
         "build-failed" { Write-Err "$pkg - Build failed" }
         "push-failed" { Write-Err "$pkg - Push failed" }
         "merge-failed" { Write-Err "$pkg - Merge failed" }

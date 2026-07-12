@@ -13,7 +13,8 @@ import unittest
 
 ROOT = Path(r"O:\Cloud\Code\_scripts")
 M3TRIK_DIR = ROOT / "m3trik"
-PACKAGES = ["pythontk", "uitk", "mayatk", "tentacle"]
+PACKAGES = ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"]
+DUMMY_VERSIONS = ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0"]
 
 
 class TestPushScript(unittest.TestCase):
@@ -38,7 +39,7 @@ class TestPushScript(unittest.TestCase):
 
             # Minimal strict package set (just enough to exercise the script)
             reg = TestPushScriptRegressions()
-            for pkg, ver in zip(PACKAGES, ["0.1.0", "0.2.0", "0.3.0", "0.4.0"]):
+            for pkg, ver in zip(PACKAGES, DUMMY_VERSIONS):
                 reg._init_dummy_repo(root, pkg, ver, ["qtpy"])
 
             result = subprocess.run(
@@ -158,7 +159,7 @@ class TestPushScriptRegressions(unittest.TestCase):
     def test_enforces_release_order_in_dry_run(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            for pkg, ver in zip(PACKAGES, ["0.1.0", "0.2.0", "0.3.0", "0.4.0"]):
+            for pkg, ver in zip(PACKAGES, DUMMY_VERSIONS):
                 self._init_dummy_repo(root, pkg, ver, ["qtpy"])
 
             script = M3TRIK_DIR / "push.ps1"
@@ -176,7 +177,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "-Strict",
                     "-Merge",
                     "-Packages",
-                    "tentacle,mayatk,pythontk,uitk",
+                    "tentacle,blendertk,mayatk,pythontk,uitk",
                 ],
                 cwd=root,
                 timeout=60,
@@ -192,7 +193,11 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "..."
                 ):
                     order.append(line.strip().split()[1].rstrip("..."))
-            self.assertEqual(order[:4], ["pythontk", "uitk", "mayatk", "tentacle"], out)
+            self.assertEqual(
+                order[:5],
+                ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"],
+                out,
+            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_pushdev_commits_before_pull_when_behind(self):
@@ -337,9 +342,194 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("Dev is ahead only due to dev bump (skipping merge)", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_merges_local_changes_when_origin_dev_is_bump_only(self):
+        """Real local changes must release even when origin/dev is bump-only ahead.
+
+        Steady state after any release: origin/dev = origin/main + the bump-dev
+        bot's version commit. A run that then absorbs real local work commits it
+        LOCALLY first (push happens later, in step 3) — so the bump-only guard
+        must diff local dev, not origin/dev, or it classifies the run as
+        "nothing to release" and silently drops the merge while still reporting
+        success.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+
+            # Simulate the bump-dev bot: version-only commit on origin/dev.
+            (repo / "pythontk" / "__init__.py").write_text(
+                '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
+                encoding="utf-8",
+            )
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "Bump version to 0.1.1 [skip ci]")
+            self._git(repo, "push", "origin", "dev")
+
+            # Real, not-yet-committed local work.
+            (repo / "pythontk" / "feature.py").write_text(
+                "VALUE = 1\n", encoding="utf-8"
+            )
+
+            script = M3TRIK_DIR / "push.ps1"
+            result = self._run(
+                [
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-Root",
+                    str(root),
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ],
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertNotIn("skipping merge", out)
+            self.assertIn("Merged and pushed to main", out)
+
+            # The local change must actually be on the released main branch.
+            tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
+            self.assertIn("pythontk/feature.py", tree, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_strict_merge_skips_bump_plus_registry_churn(self):
+        """Bot-generated registry commits must not defeat the phantom-publish guard.
+
+        refresh-api-registry.yml pushes API_INDEX.md/API_REGISTRY.md/
+        API_REGISTRY.json/API_CHANGES.md commits onto dev after every publish.
+        None of those files ship in the wheel, so a dev that is ahead only by
+        the bump commit + registry churn has nothing to release — merging it
+        anyway phantom-publishes a new version with identical wheel content.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+
+            # bump-dev bot commit
+            (repo / "pythontk" / "__init__.py").write_text(
+                '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
+                encoding="utf-8",
+            )
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "Bump version to 0.1.1 [skip ci]")
+
+            # api-registry-bot commit (repo-root artifacts, not wheel content)
+            for name in (
+                "API_INDEX.md",
+                "API_REGISTRY.md",
+                "API_REGISTRY.json",
+                "API_CHANGES.md",
+            ):
+                (repo / name).write_text("# generated\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "chore: refresh API registry [skip ci]")
+            self._git(repo, "push", "origin", "dev")
+
+            script = M3TRIK_DIR / "push.ps1"
+            result = self._run(
+                [
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-Root",
+                    str(root),
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ],
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Dev is ahead only due to dev bump (skipping merge)", out)
+
+            # Nothing may have been merged to main.
+            tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
+            self.assertNotIn("API_INDEX.md", tree, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_no_double_bump_after_dep_sync_commit(self):
+        """A retry after a failed run must not bump the version a second time.
+
+        The dependency-cascade path commits "Update dependencies & bump version
+        to X [skip ci]". If a run fails after that commit (e.g. build failure),
+        the retry sees dev ahead of origin/dev and must recognize that the last
+        commit already carries a bump — otherwise every retry burns a patch
+        version.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+
+            # Simulate a prior failed run's pin-sync commit: local-only,
+            # touching __init__.py + pyproject.toml.
+            (repo / "pythontk" / "__init__.py").write_text(
+                '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
+                encoding="utf-8",
+            )
+            pyproject = repo / "pyproject.toml"
+            pyproject.write_text(
+                pyproject.read_text(encoding="utf-8") + "# pin sync\n",
+                encoding="utf-8",
+            )
+            self._git(repo, "add", "-A")
+            self._git(
+                repo,
+                "commit",
+                "-m",
+                "Update dependencies & bump version to 0.1.1 [skip ci]",
+            )
+
+            script = M3TRIK_DIR / "push.ps1"
+            result = self._run(
+                [
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-Root",
+                    str(root),
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ],
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertNotIn("[Auto-Bump]", out)
+            content = (repo / "pythontk" / "__init__.py").read_text(encoding="utf-8")
+            self.assertIn('__version__ = "0.1.1"', content, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_syncs_internal_pyproject_pins(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            # Versions are real published releases whose successors also exist
+            # on PyPI — the strict pipeline clamps/checks against the live
+            # index, so invented versions would false-fail the PyPI pin check.
             self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
             self._init_dummy_repo(
                 root, "uitk", "1.0.51", ["qtpy", "pythontk==0.0.1"]
@@ -348,10 +538,19 @@ class TestPushScriptRegressions(unittest.TestCase):
                 root, "mayatk", "0.9.54", ["qtpy", "pythontk==0.0.1", "uitk==0.0.1"]
             )
             self._init_dummy_repo(
+                root, "blendertk", "0.5.0", ["qtpy", "pythontk==0.0.1", "uitk==0.0.1"]
+            )
+            self._init_dummy_repo(
                 root,
                 "tentacle",
                 "0.9.60",
-                ["qtpy", "pythontk==0.0.1", "uitk==0.0.1", "mayatk==0.0.1"],
+                [
+                    "qtpy",
+                    "pythontk==0.0.1",
+                    "uitk==0.0.1",
+                    "mayatk==0.0.1",
+                    "blendertk==0.0.1",
+                ],
             )
 
             script = M3TRIK_DIR / "push.ps1"
@@ -380,6 +579,12 @@ class TestPushScriptRegressions(unittest.TestCase):
 
             toml = (root / "uitk" / "pyproject.toml").read_text(encoding="utf-8")
             self.assertIn('"pythontk>=0.7.51"', toml)
+
+            # The cascade must also have synced the parallel blendertk branch.
+            btk_toml = (root / "blendertk" / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn('"pythontk>=0.7.51"', btk_toml)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_fails_when_conflict_markers_in_pyproject(self):
@@ -617,7 +822,8 @@ class TestPyprojectPins(unittest.TestCase):
         expectations = {
             "uitk": ["pythontk"],
             "mayatk": ["pythontk", "uitk"],
-            "tentacle": ["pythontk", "uitk", "mayatk"],
+            "blendertk": ["pythontk", "uitk"],
+            "tentacle": ["pythontk", "uitk", "mayatk", "blendertk"],
         }
 
         for pkg, deps in expectations.items():
@@ -632,9 +838,9 @@ class TestPyprojectPins(unittest.TestCase):
         """
 
         pinned = []
-        for pkg in ["uitk", "mayatk", "tentacle"]:
+        for pkg in ["uitk", "mayatk", "blendertk", "tentacle"]:
             pins = self._read_pins(pkg)
-            for dep in ["pythontk", "uitk", "mayatk"]:
+            for dep in ["pythontk", "uitk", "mayatk", "blendertk"]:
                 if dep in pins:
                     pinned.append((dep, pins[dep]))
 

@@ -4,7 +4,7 @@ _Symbols whose simple name is defined in more than one ecosystem package. Review
 
 _Generated: 2026-07-12_
 
-## Genuine cross-layer collisions (24)
+## Genuine cross-layer collisions (21)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -16,18 +16,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L678)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L692)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
-### `OutputStream` — blendertk, pythontk
-
-- `blendertk` — [`OutputStream`](blendertk/mat_utils/substance_bridge/connection.py#L89)
-- `pythontk` — [`OutputStream`](pythontk/core_utils/process_stream.py#L37)
-
 ### `Selection` — blendertk, mayatk, tentacle
 
-- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L30)
+- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L33)
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L10)
@@ -41,16 +36,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L272)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L294)
-
-### `TaskFactory` — blendertk, pythontk
-
-- `blendertk` — [`TaskFactory`](blendertk/env_utils/scene_exporter/task_factory.py#L14)
-- `pythontk` — [`TaskFactory`](pythontk/core_utils/task_factory.py#L23)
-
-### `Weights` — blendertk, pythontk
-
-- `blendertk` — [`Weights`](blendertk/anim_utils/blendshape_animator/weights.py#L13)
-- `pythontk` — [`Weights`](pythontk/math_utils/weights.py#L12)
 
 ### `apply` — mayatk, pythontk
 
@@ -186,7 +171,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (200)
+## Intentional mayatk↔blendertk port parity (221)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -214,11 +199,13 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `CamUtils`
 - `Channels`
 - `ChannelsSlots`
+- `ClipMotionMixin`
 - `ColorId`
 - `ColorIdSlots`
 - `ControlNodes`
 - `Controls`
 - `Creator`
+- `CurtainDrape`
 - `CurtainRig`
 - `CurtainSlots`
 - `CurveToTube`
@@ -242,6 +229,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `FKChainStrategy`
 - `FbxUtils`
 - `GameShaderSlots`
+- `GapManagerMixin`
 - `GeometryMatcher`
 - `HdrManagerSlots`
 - `HierarchyManager`
@@ -264,6 +252,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `MacroManager`
 - `MacroManagerSlots`
 - `Macros`
+- `ManifestTableMixin`
+- `MarkerManagerMixin`
 - `MarmosetBridge`
 - `MarmosetBridgeSlots`
 - `MarmosetConnection`
@@ -298,6 +288,14 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ShadowRig`
 - `ShadowRigSlots`
 - `ShellXformSlots`
+- `ShotManifestController`
+- `ShotManifestSlots`
+- `ShotNavMixin`
+- `ShotSequencer`
+- `ShotSequencerController`
+- `ShotSequencerSlots`
+- `ShotsController`
+- `ShotsSlots`
 - `SmartBake`
 - `SmartBakeSlots`
 - `SnapSlots`
@@ -332,6 +330,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`
+- `active_object_set`
 - `all_ops`
 - `apply_sky_preset`
 - `apply_template`
@@ -339,18 +338,24 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `autostart`
 - `begin_log`
 - `build_bake_pairs_manifest`
+- `build_curve_preview`
 - `build_hierarchy_structure`
 - `classify_log_line`
 - `clear`
 - `collect_mesh_objects`
+- `collect_segments`
+- `curves_for_attr`
 - `default_log_path`
 - `derive_per_run_log_path`
 - `describe`
 - `describe_op`
 - `dispatch_log_lines`
+- `extract_attributes`
 - `find_material`
 - `find_painter_exe`
 - `find_tree_item_by_name`
+- `fmt_behavior`
+- `format_behavior_html`
 - `frame_in_viewport`
 - `get`
 - `get_bounding_box`
@@ -376,6 +381,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `resolve_toolbag_log_path`
 - `restore_session`
 - `run_on_main_thread`
+- `scale_attribute_keys`
 - `set_style`
 - `should_keep_node_by_type`
 - `show`

@@ -2,11 +2,21 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-07-11_
+_Generated: 2026-07-12_
 
-## Genuine cross-layer collisions (14)
+## Genuine cross-layer collisions (65)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
+
+### `ActiveShotChanged` — mayatk, pythontk
+
+- `mayatk` — [`ActiveShotChanged`](mayatk/anim_utils/shots/_shots.py#L440)
+- `pythontk` — [`ActiveShotChanged`](pythontk/core_utils/engines/shots/shot_model.py#L256)
+
+### `AudioMethod` — mayatk, pythontk
+
+- `mayatk` — [`AudioMethod`](mayatk/anim_utils/shots/shot_manifest/mapping/_spec.py#L28)
+- `pythontk` — [`AudioMethod`](pythontk/core_utils/engines/shots/manifest/mapping/_spec.py#L28)
 
 ### `AudioUtils` — blendertk, mayatk, pythontk
 
@@ -14,11 +24,67 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L84)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L15)
 
+### `BatchComplete` — mayatk, pythontk
+
+- `mayatk` — [`BatchComplete`](mayatk/anim_utils/shots/_shots.py#L455)
+- `pythontk` — [`BatchComplete`](pythontk/core_utils/engines/shots/shot_model.py#L271)
+
+### `BehaviorSpec` — mayatk, pythontk
+
+- `mayatk` — [`BehaviorSpec`](mayatk/anim_utils/shots/shot_manifest/behaviors/_spec.py#L68)
+- `pythontk` — [`BehaviorSpec`](pythontk/core_utils/engines/shots/manifest/behaviors/_spec.py#L69)
+
+### `BuilderObject` — mayatk, pythontk
+
+- `mayatk` — [`BuilderObject`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L36)
+- `pythontk` — [`BuilderObject`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L46)
+
+### `BuilderStep` — mayatk, pythontk
+
+- `mayatk` — [`BuilderStep`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L46)
+- `pythontk` — [`BuilderStep`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L56)
+
+### `ColumnMap` — mayatk, pythontk
+
+- `mayatk` — [`ColumnMap`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L358)
+- `pythontk` — [`ColumnMap`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L246)
+
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L678)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
+
+### `MappingSpec` — mayatk, pythontk
+
+- `mayatk` — [`MappingSpec`](mayatk/anim_utils/shots/shot_manifest/mapping/_spec.py#L101)
+- `pythontk` — [`MappingSpec`](pythontk/core_utils/engines/shots/manifest/mapping/_spec.py#L101)
+
+### `MovePlan` — mayatk, pythontk
+
+- `mayatk` — [`MovePlan`](mayatk/anim_utils/shots/_shot_plan.py#L69)
+- `pythontk` — [`MovePlan`](pythontk/core_utils/engines/shots/shot_plan.py#L63)
+
+### `ObjectStatus` — mayatk, pythontk
+
+- `mayatk` — [`ObjectStatus`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L277)
+- `pythontk` — [`ObjectStatus`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L165)
+
+### `OutputStream` — blendertk, mayatk, pythontk
+
+- `blendertk` — [`OutputStream`](blendertk/mat_utils/substance_bridge/connection.py#L89)
+- `mayatk` — [`OutputStream`](mayatk/mat_utils/substance_bridge/connection.py#L89)
+- `pythontk` — [`OutputStream`](pythontk/core_utils/process_stream.py#L37)
+
+### `PlannedShot` — mayatk, pythontk
+
+- `mayatk` — [`PlannedShot`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L113)
+- `pythontk` — [`PlannedShot`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L126)
+
+### `ScenePersistence` — mayatk, pythontk
+
+- `mayatk` — [`ScenePersistence`](mayatk/anim_utils/shots/_shots.py#L102)
+- `pythontk` — [`ScenePersistence`](pythontk/core_utils/engines/shots/shot_model.py#L71)
 
 ### `Selection` — blendertk, mayatk, tentacle
 
@@ -26,6 +92,83 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L10)
+
+### `SettingsChanged` — mayatk, pythontk
+
+- `mayatk` — [`SettingsChanged`](mayatk/anim_utils/shots/_shots.py#L448)
+- `pythontk` — [`SettingsChanged`](pythontk/core_utils/engines/shots/shot_model.py#L264)
+
+### `ShotBlock` — mayatk, pythontk
+
+- `mayatk` — [`ShotBlock`](mayatk/anim_utils/shots/_shots.py#L292)
+- `pythontk` — [`ShotBlock`](pythontk/core_utils/engines/shots/shot_model.py#L108)
+
+### `ShotDefined` — mayatk, pythontk
+
+- `mayatk` — [`ShotDefined`](mayatk/anim_utils/shots/_shots.py#L416)
+- `pythontk` — [`ShotDefined`](pythontk/core_utils/engines/shots/shot_model.py#L232)
+
+### `ShotManifest` — mayatk, pythontk
+
+- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L705)
+- `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L172)
+
+### `ShotMove` — mayatk, pythontk
+
+- `mayatk` — [`ShotMove`](mayatk/anim_utils/shots/_shot_plan.py#L41)
+- `pythontk` — [`ShotMove`](pythontk/core_utils/engines/shots/shot_plan.py#L35)
+
+### `ShotRemoved` — mayatk, pythontk
+
+- `mayatk` — [`ShotRemoved`](mayatk/anim_utils/shots/_shots.py#L432)
+- `pythontk` — [`ShotRemoved`](pythontk/core_utils/engines/shots/shot_model.py#L248)
+
+### `ShotStore` — mayatk, pythontk
+
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L478)
+- `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L294)
+
+### `ShotUpdated` — mayatk, pythontk
+
+- `mayatk` — [`ShotUpdated`](mayatk/anim_utils/shots/_shots.py#L424)
+- `pythontk` — [`ShotUpdated`](pythontk/core_utils/engines/shots/shot_model.py#L240)
+
+### `StepStatus` — mayatk, pythontk
+
+- `mayatk` — [`StepStatus`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L293)
+- `pythontk` — [`StepStatus`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L181)
+
+### `StoreEvent` — mayatk, pythontk
+
+- `mayatk` — [`StoreEvent`](mayatk/anim_utils/shots/_shots.py#L404)
+- `pythontk` — [`StoreEvent`](pythontk/core_utils/engines/shots/shot_model.py#L220)
+
+### `StoreInvalidated` — mayatk, pythontk
+
+- `mayatk` — [`StoreInvalidated`](mayatk/anim_utils/shots/_shots.py#L462)
+- `pythontk` — [`StoreInvalidated`](pythontk/core_utils/engines/shots/shot_model.py#L278)
+
+### `TaskFactory` — blendertk, mayatk, pythontk
+
+- `blendertk` — [`TaskFactory`](blendertk/env_utils/scene_exporter/task_factory.py#L14)
+- `mayatk` — [`TaskFactory`](mayatk/env_utils/scene_exporter/task_factory.py#L9)
+- `pythontk` — [`TaskFactory`](pythontk/core_utils/task_factory.py#L23)
+
+### `Weights` — blendertk, mayatk, pythontk
+
+- `blendertk` — [`Weights`](blendertk/anim_utils/blendshape_animator/weights.py#L13)
+- `mayatk` — [`Weights`](mayatk/anim_utils/blendshape_animator/weights.py#L7)
+- `pythontk` — [`Weights`](pythontk/math_utils/weights.py#L12)
+
+### `apply` — mayatk, pythontk
+
+- `mayatk` — [`apply`](mayatk/anim_utils/shots/_shot_apply.py#L128)
+- `pythontk` — [`apply`](pythontk/core_utils/engines/shots/shot_apply.py#L43)
+
+### `compute_duration` — mayatk, pythontk
+
+- `mayatk` — [`compute_duration`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L617)
+- `pythontk` — [`compute_duration`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L229)
 
 ### `defaults` — blendertk, mayatk, uitk
 
@@ -43,10 +186,37 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L326)
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
 
+### `detect_behaviors` — mayatk, pythontk
+
+- `mayatk` — [`detect_behaviors`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L339)
+- `pythontk` — [`detect_behaviors`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L227)
+
+### `discover` — mayatk, pythontk
+
+- `mayatk` — [`discover`](mayatk/anim_utils/shots/shot_manifest/mapping/_mapping.py#L103)
+- `pythontk` — [`discover`](pythontk/core_utils/engines/shots/manifest/mapping/_mapping.py#L103)
+
+### `format_markdown` — mayatk, pythontk
+
+- `mayatk` — [`format_markdown`](mayatk/anim_utils/shots/shot_manifest/behaviors/_spec.py#L110)
+- `mayatk` — [`format_markdown`](mayatk/anim_utils/shots/shot_manifest/mapping/_spec.py#L123)
+- `pythontk` — [`format_markdown`](pythontk/core_utils/engines/shots/manifest/behaviors/_spec.py#L111)
+- `pythontk` — [`format_markdown`](pythontk/core_utils/engines/shots/manifest/mapping/_spec.py#L123)
+
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
 - `tentacle` — [`launch`](tentacle/tcl_blender.py#L1405)
+
+### `leaf_name` — mayatk, pythontk
+
+- `mayatk` — [`leaf_name`](mayatk/core_utils/_core_utils.py#L42)
+- `pythontk` — [`leaf_name`](pythontk/core_utils/engines/shots/shot_model.py#L39)
+
+### `list_behaviors` — mayatk, pythontk
+
+- `mayatk` — [`list_behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L127)
+- `pythontk` — [`list_behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L124)
 
 ### `list_template_modes` — blendertk, mayatk, pythontk
 
@@ -70,6 +240,16 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`list_templates`](mayatk/ui_utils/style_setter/_style_setter.py#L113)
 - `pythontk` — [`list_templates`](pythontk/core_utils/script_template.py#L47)
 
+### `load_behavior` — mayatk, pythontk
+
+- `mayatk` — [`load_behavior`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L69)
+- `pythontk` — [`load_behavior`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L71)
+
+### `load_mapping` — mayatk, pythontk
+
+- `mayatk` — [`load_mapping`](mayatk/anim_utils/shots/shot_manifest/mapping/_mapping.py#L126)
+- `pythontk` — [`load_mapping`](pythontk/core_utils/engines/shots/manifest/mapping/_mapping.py#L126)
+
 ### `main` — blendertk, mayatk, uitk
 
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L26)
@@ -81,6 +261,31 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
 - `uitk` — [`main`](uitk/compile.py#L526)
+
+### `parse_csv` — mayatk, pythontk
+
+- `mayatk` — [`parse_csv`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L530)
+- `pythontk` — [`parse_csv`](pythontk/core_utils/engines/shots/manifest/manifest_model.py#L418)
+
+### `plan_respace` — mayatk, pythontk
+
+- `mayatk` — [`plan_respace`](mayatk/anim_utils/shots/_shot_plan.py#L215)
+- `pythontk` — [`plan_respace`](pythontk/core_utils/engines/shots/shot_plan.py#L209)
+
+### `plan_ripple_downstream` — mayatk, pythontk
+
+- `mayatk` — [`plan_ripple_downstream`](mayatk/anim_utils/shots/_shot_plan.py#L255)
+- `pythontk` — [`plan_ripple_downstream`](pythontk/core_utils/engines/shots/shot_plan.py#L249)
+
+### `plan_ripple_upstream` — mayatk, pythontk
+
+- `mayatk` — [`plan_ripple_upstream`](mayatk/anim_utils/shots/_shot_plan.py#L291)
+- `pythontk` — [`plan_ripple_upstream`](pythontk/core_utils/engines/shots/shot_plan.py#L359)
+
+### `prune_to_top_boundaries` — mayatk, pythontk
+
+- `mayatk` — [`prune_to_top_boundaries`](mayatk/anim_utils/shots/shot_manifest/manifest_data.py#L84)
+- `pythontk` — [`prune_to_top_boundaries`](pythontk/core_utils/engines/shots/manifest/range_resolver.py#L16)
 
 ### `python_literal` — blendertk, mayatk, uitk
 
@@ -120,6 +325,31 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L331)
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
 
+### `resolve` — mayatk, pythontk
+
+- `mayatk` — [`resolve`](mayatk/anim_utils/shots/shot_manifest/mapping/_mapping.py#L175)
+- `pythontk` — [`resolve`](pythontk/core_utils/engines/shots/manifest/mapping/_mapping.py#L175)
+
+### `resolve_clip_specs` — mayatk, pythontk
+
+- `mayatk` — [`resolve_clip_specs`](mayatk/anim_utils/shots/_shots.py#L376)
+- `pythontk` — [`resolve_clip_specs`](pythontk/core_utils/engines/shots/shot_model.py#L192)
+
+### `resolve_duration` — mayatk, pythontk
+
+- `mayatk` — [`resolve_duration`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L154)
+- `pythontk` — [`resolve_duration`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L48)
+
+### `resolve_keys` — mayatk, pythontk
+
+- `mayatk` — [`resolve_keys`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L176)
+- `pythontk` — [`resolve_keys`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L173)
+
+### `resolve_ranges` — mayatk, pythontk
+
+- `mayatk` — [`resolve_ranges`](mayatk/anim_utils/shots/shot_manifest/range_resolver.py#L17)
+- `pythontk` — [`resolve_ranges`](pythontk/core_utils/engines/shots/manifest/range_resolver.py#L37)
+
 ### `run_batch` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`run_batch`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/job.py#L30)
@@ -134,9 +364,41 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`template_modes`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L64)
 - `pythontk` — [`template_modes`](pythontk/core_utils/script_template.py#L56)
 
+### `templates` — mayatk, pythontk
+
+- `mayatk` — [`templates`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L45)
+- `mayatk` — [`templates`](mayatk/anim_utils/shots/shot_manifest/mapping/_mapping.py#L80)
+- `pythontk` — [`templates`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L48)
+- `pythontk` — [`templates`](pythontk/core_utils/engines/shots/manifest/mapping/_mapping.py#L80)
+
+### `validate_attributes` — mayatk, pythontk
+
+- `mayatk` — [`validate_attributes`](mayatk/anim_utils/shots/shot_manifest/behaviors/_spec.py#L46)
+- `pythontk` — [`validate_attributes`](pythontk/core_utils/engines/shots/manifest/behaviors/_spec.py#L47)
+
+### `validate_audio_resolve` — mayatk, pythontk
+
+- `mayatk` — [`validate_audio_resolve`](mayatk/anim_utils/shots/shot_manifest/mapping/_spec.py#L76)
+- `pythontk` — [`validate_audio_resolve`](pythontk/core_utils/engines/shots/manifest/mapping/_spec.py#L76)
+
+### `validate_default_behaviors` — mayatk, pythontk
+
+- `mayatk` — [`validate_default_behaviors`](mayatk/anim_utils/shots/shot_manifest/mapping/_spec.py#L89)
+- `pythontk` — [`validate_default_behaviors`](pythontk/core_utils/engines/shots/manifest/mapping/_spec.py#L89)
+
+### `validate_duration` — mayatk, pythontk
+
+- `mayatk` — [`validate_duration`](mayatk/anim_utils/shots/shot_manifest/behaviors/_spec.py#L28)
+- `pythontk` — [`validate_duration`](pythontk/core_utils/engines/shots/manifest/behaviors/_spec.py#L29)
+
+### `validate_verify` — mayatk, pythontk
+
+- `mayatk` — [`validate_verify`](mayatk/anim_utils/shots/shot_manifest/behaviors/_spec.py#L37)
+- `pythontk` — [`validate_verify`](pythontk/core_utils/engines/shots/manifest/behaviors/_spec.py#L38)
+
 ---
 
-## Intentional mayatk↔blendertk port parity (203)
+## Intentional mayatk↔blendertk port parity (200)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -229,7 +491,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `NamingSlots`
 - `NodeUtils`
 - `NurbsUtils`
-- `OutputStream`
 - `PainterRpcClient`
 - `Preview`
 - `ReferenceManagerSlots`
@@ -262,7 +523,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SubstanceConnection`
 - `Target`
 - `Targets`
-- `TaskFactory`
 - `TaskManager`
 - `TelescopeRig`
 - `TelescopeRigSlots`
@@ -281,7 +541,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UnityBridgeSlots`
 - `UvUtils`
 - `Validator`
-- `Weights`
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`

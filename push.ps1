@@ -63,7 +63,13 @@ param(
     [switch]$SkipPypiCheck,
     [switch]$UsePR,
     [int]$PRMergeTimeoutSeconds = 1800,
-    [int]$WorkflowTimeoutSeconds = 900,
+    # 2400s (40 min), not 900s: the publish workflow reliably runs ~17 min for
+    # uitk (build + verify-install + twine upload), which OVERRAN the old 900s
+    # default and made the script abort a still-in-progress-but-successful
+    # publish as "workflow failed", stopping the whole cascade one package in.
+    # The manual-dispatch fallback + `twine upload --skip-existing` make an
+    # over-generous wait safe; a genuinely hung run just costs a longer wait.
+    [int]$WorkflowTimeoutSeconds = 2400,
     [int]$WorkflowPollSeconds = 15,
     [int]$PypiVisibilityTimeoutSeconds = 180,
     [string]$WorkflowFile = "publish.yml",

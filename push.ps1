@@ -581,7 +581,11 @@ function Wait-ForWorkflow {
         }
 
         $matching = @($runs | Where-Object { $_.headSha -eq $Sha })
-        if (-not $matching -or $matching.Count -eq 0) { return "pending" }
+        # "norun" (no run for this SHA yet) is distinct from "pending" (a run
+        # exists and is still going): the manual-dispatch fallback below fires
+        # only on "norun", so an already auto-triggered run isn't shadowed by a
+        # redundant second dispatch.
+        if (-not $matching -or $matching.Count -eq 0) { return "norun" }
 
         $inProgress = @($matching | Where-Object { $_.status -ne "completed" })
         if ($inProgress.Count -gt 0) { return "pending" }
@@ -592,8 +596,22 @@ function Wait-ForWorkflow {
         return "success"
     }
 
+    # publish.yml's push trigger is path-filtered (paths: [<pkg>/**,
+    # pyproject.toml]), and the final commit push.ps1 merges to main is the
+    # "Update dependencies & bump version to X [skip ci]" pin-sync bump. GitHub
+    # skips the workflow for a [skip ci] head, so NO run auto-queues on that push.
+    # Rather than burn the whole $maxWait budget polling for a run that will never
+    # appear (the old code did, then left only a 180s window for a late dispatch --
+    # far too short for a real publish run, so the cascade aborted after one
+    # package), proactively dispatch publish.yml once a short grace passes with no
+    # matching run, then keep polling the FULL budget for that run to finish.
+    # Safe to retry: the publish job's own version-vs-PyPI check plus
+    # `twine upload --skip-existing` make a redundant dispatch a no-op, and the
+    # per-ref concurrency group serializes any auto+manual pair.
     $maxWait = $WorkflowTimeoutSeconds
     $elapsed = 0
+    $dispatched = $false
+    $dispatchAfter = 90
 
     while ($elapsed -lt $maxWait) {
         if ($elapsed -eq 0) {
@@ -605,9 +623,18 @@ function Wait-ForWorkflow {
         }
 
         $verdict = Get-MatchingRunVerdict -RepoSlug $repoSlug -Sha $headSha
-        if ($verdict -eq "pending") {
+        if ($verdict -eq "norun" -or $verdict -eq "pending") {
+            # Only dispatch when NO run exists for this SHA (norun). If one is
+            # already in-progress (pending -- the push auto-triggered it), wait
+            # it out rather than queue a redundant second run.
+            if ($verdict -eq "norun" -and -not $dispatched -and $elapsed -ge $dispatchAfter) {
+                Write-Host "    No auto-triggered run after ${elapsed}s (merged head is a [skip ci] bump); dispatching publish.yml manually..." -ForegroundColor Yellow
+                gh workflow run $WorkflowFile --repo $repoSlug --ref main 2>&1 | Out-Null
+                $dispatched = $true
+            }
             if ($elapsed % 60 -eq 0) {
-                Write-Host "    Waiting for workflow... ($elapsed/$maxWait seconds)" -ForegroundColor Gray
+                $mode = if ($dispatched) { "dispatched" } elseif ($verdict -eq "pending") { "auto" } else { "waiting" }
+                Write-Host "    Waiting for workflow ($mode)... ($elapsed/$maxWait seconds)" -ForegroundColor Gray
             }
             continue
         }
@@ -617,36 +644,6 @@ function Wait-ForWorkflow {
         }
         Write-Err "Workflow concluded with '$verdict'"
         return $false
-    }
-
-    # No matching run ever appeared. publish.yml's push trigger is
-    # path-filtered (paths: [<pkg>/**, pyproject.toml]) - a push whose diff
-    # is entirely CI-workflow/docs/changelog (no package-source paths)
-    # never queues a run at all, so continuing to poll here would wait
-    # forever. Force one manual workflow_dispatch and give it a shorter,
-    # bounded second window before truly giving up. Safe to retry: the
-    # publish job's own version-vs-PyPI check plus `twine upload
-    # --skip-existing` make a redundant dispatch a no-op, not a double-publish.
-    Write-Host "    No matching run after ${maxWait}s - dispatching publish.yml manually (push may be path-filtered)..." -ForegroundColor Yellow
-    gh workflow run $WorkflowFile --repo $repoSlug --ref main 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        $fallbackWait = 180
-        $fallbackElapsed = 0
-        Start-Sleep -Seconds 10
-        $fallbackElapsed += 10
-        while ($fallbackElapsed -lt $fallbackWait) {
-            $verdict = Get-MatchingRunVerdict -RepoSlug $repoSlug -Sha $headSha
-            if ($verdict -eq "success") {
-                Write-Success "Workflow completed (publish.yml, manually dispatched)"
-                return $true
-            }
-            if ($verdict -ne "pending") {
-                Write-Err "Workflow concluded with '$verdict'"
-                return $false
-            }
-            Start-Sleep -Seconds $WorkflowPollSeconds
-            $fallbackElapsed += $WorkflowPollSeconds
-        }
     }
 
     Write-Host "    Warning: Timeout waiting for workflow (${maxWait}s)" -ForegroundColor Yellow

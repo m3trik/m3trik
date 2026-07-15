@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-07-14_
+_Generated: 2026-07-15_
 
 ## Genuine cross-layer collisions (21)
 
@@ -105,7 +105,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
-- `uitk` — [`main`](uitk/compile.py#L526)
+- `uitk` — [`main`](uitk/compile.py#L521)
 
 ### `python_literal` — blendertk, mayatk, uitk
 

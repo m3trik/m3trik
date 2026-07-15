@@ -16,7 +16,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L692)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L721)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
@@ -54,7 +54,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`defaults`](blendertk/mat_utils/marmoset_bridge/parameters.py#L240)
 - `blendertk` — [`defaults`](blendertk/mat_utils/marmoset_bridge/template_params.py#L60)
 - `blendertk` — [`defaults`](blendertk/mat_utils/substance_bridge/parameters.py#L179)
-- `blendertk` — [`defaults`](blendertk/uv_utils/rizom_bridge/parameters.py#L91)
+- `blendertk` — [`defaults`](blendertk/uv_utils/rizom_bridge/parameters.py#L332)
 - `mayatk` — [`defaults`](mayatk/env_utils/blender_bridge/parameters.py#L110)
 - `mayatk` — [`defaults`](mayatk/env_utils/unity_bridge/parameters.py#L147)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
@@ -119,7 +119,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`referenced_keys`](blendertk/env_utils/unity_bridge/parameters.py#L140)
 - `blendertk` — [`referenced_keys`](blendertk/mat_utils/marmoset_bridge/parameters.py#L235)
 - `blendertk` — [`referenced_keys`](blendertk/mat_utils/substance_bridge/parameters.py#L174)
-- `blendertk` — [`referenced_keys`](blendertk/uv_utils/rizom_bridge/parameters.py#L86)
+- `blendertk` — [`referenced_keys`](blendertk/uv_utils/rizom_bridge/parameters.py#L327)
 - `mayatk` — [`referenced_keys`](mayatk/env_utils/blender_bridge/parameters.py#L105)
 - `mayatk` — [`referenced_keys`](mayatk/env_utils/unity_bridge/parameters.py#L142)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
@@ -138,7 +138,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`render_context`](blendertk/env_utils/maya_bridge/parameters.py#L116)
 - `blendertk` — [`render_context`](blendertk/env_utils/unity_bridge/parameters.py#L150)
 - `blendertk` — [`render_context`](blendertk/mat_utils/marmoset_bridge/parameters.py#L245)
-- `blendertk` — [`render_context`](blendertk/uv_utils/rizom_bridge/parameters.py#L96)
+- `blendertk` — [`render_context`](blendertk/uv_utils/rizom_bridge/parameters.py#L337)
 - `mayatk` — [`render_context`](mayatk/env_utils/blender_bridge/parameters.py#L115)
 - `mayatk` — [`render_context`](mayatk/env_utils/unity_bridge/parameters.py#L152)
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
@@ -171,7 +171,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (221)
+## Intentional mayatk↔blendertk port parity (222)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -389,6 +389,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `start_server`
 - `start_toolbag_log_tail`
 - `stop_server`
+- `strip_unsupported`
 - `summary`
 - `to_context`
 - `toggle`

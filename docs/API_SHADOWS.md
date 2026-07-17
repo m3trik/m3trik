@@ -4,7 +4,7 @@ _Symbols whose simple name is defined in more than one ecosystem package. Review
 
 _Generated: 2026-07-17_
 
-## Genuine cross-layer collisions (23)
+## Genuine cross-layer collisions (21)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -19,16 +19,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L721)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
-
-### `EmbeddedMenuWidget` — mayatk, uitk
-
-- `mayatk` — [`EmbeddedMenuWidget`](mayatk/ui_utils/maya_native_menus.py#L23)
-- `uitk` — [`EmbeddedMenuWidget`](uitk/widgets/embeddedMenu.py#L24)
-
-### `PersistentMenu` — mayatk, uitk
-
-- `mayatk` — [`PersistentMenu`](mayatk/ui_utils/maya_native_menus.py#L14)
-- `uitk` — [`PersistentMenu`](uitk/widgets/embeddedMenu.py#L15)
 
 ### `Selection` — blendertk, mayatk, tentacle
 
@@ -111,6 +101,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L191)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L28)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L32)
@@ -181,7 +172,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (222)
+## Intentional mayatk↔blendertk port parity (221)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -260,7 +251,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `LightmapBaker`
 - `LightmapBakerSlots`
 - `MacroManager`
-- `MacroManagerSlots`
 - `Macros`
 - `ManifestTableMixin`
 - `MarkerManagerMixin`

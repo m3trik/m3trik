@@ -35,6 +35,7 @@ import argparse
 import ast
 import importlib.util
 import json
+import os
 import sys
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -736,6 +737,14 @@ def regenerate(
                         stale.append(path.relative_to(repo_root).as_posix())
                 else:
                     path.write_text(content, encoding="utf-8")
+            elif not check_only:
+                # Content already current — still refresh the mtime.
+                # generate_parity_audit.py's freshness guard compares the
+                # JSON sidecar's mtime against package source, so a
+                # source edit that doesn't change the public surface
+                # (import-path sync, comment) would otherwise trip it
+                # with no way to clear it by running this generator.
+                os.utime(path, None)
 
     # Cross-package shadow report. Build the FULL ecosystem picture even on a
     # partial/single-package run: freshly walked packages plus the rest

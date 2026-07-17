@@ -58,7 +58,7 @@ widget.menu.add(
 | mayatk · edit_utils | [`mirror.py`](../../mayatk/mayatk/edit_utils/mirror.py) |
 | mayatk · edit_utils | [`naming/naming_slots.py`](../../mayatk/mayatk/edit_utils/naming/naming_slots.py) |
 | mayatk · edit_utils | [`snap.py`](../../mayatk/mayatk/edit_utils/snap.py) |
-| mayatk · env_utils | [`hierarchy_manager/hierarchy_manager_slots.py`](../../mayatk/mayatk/env_utils/hierarchy_manager/hierarchy_manager_slots.py) |
+| mayatk · env_utils | [`hierarchy_sync/hierarchy_sync_slots.py`](../../mayatk/mayatk/env_utils/hierarchy_sync/hierarchy_sync_slots.py) |
 | mayatk · env_utils | [`reference_manager.py`](../../mayatk/mayatk/env_utils/reference_manager.py) |
 | mayatk · env_utils | [`scene_exporter/_scene_exporter.py`](../../mayatk/mayatk/env_utils/scene_exporter/_scene_exporter.py) |
 | mayatk · env_utils | [`workspace_map.py`](../../mayatk/mayatk/env_utils/workspace_map.py) |

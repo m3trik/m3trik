@@ -16,7 +16,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L721)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L742)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
@@ -97,7 +97,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `main` — blendertk, mayatk, uitk
 
+- `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L30)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L323)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L220)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L26)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L32)
@@ -174,7 +176,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (219)
+## Intentional mayatk↔blendertk port parity (225)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -237,6 +239,9 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `HdrManagerSlots`
 - `HierarchyMapBuilder`
 - `HierarchySidecar`
+- `HierarchySync`
+- `HierarchySyncController`
+- `HierarchySyncSlots`
 - `HierarchyTreeRenderer`
 - `ImageToPlane`
 - `ImageToPlaneSlots`
@@ -268,6 +273,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `NamingSlots`
 - `NodeUtils`
 - `NurbsUtils`
+- `ObjectSwapper`
 - `PainterRpcClient`
 - `Preview`
 - `ReferenceManagerSlots`
@@ -324,6 +330,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UiUtils`
 - `UnityBridge`
 - `UnityBridgeSlots`
+- `UsdUtils`
 - `UvUtils`
 - `Validator`
 - `WheelRig`
@@ -349,6 +356,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `describe`
 - `describe_op`
 - `dispatch_log_lines`
+- `export_usd`
 - `extract_attributes`
 - `find_material`
 - `find_painter_exe`

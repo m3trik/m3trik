@@ -97,6 +97,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `main` — blendertk, mayatk, uitk
 
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L323)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L26)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L32)
@@ -172,7 +173,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (221)
+## Intentional mayatk↔blendertk port parity (222)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -397,3 +398,4 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `user_plugin_dir`
 - `version`
 - `wire_materials_from_manifest`
+- `write_texture_manifest`

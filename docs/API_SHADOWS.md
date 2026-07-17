@@ -103,6 +103,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L191)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L85)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L28)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L32)
@@ -173,7 +174,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (222)
+## Intentional mayatk↔blendertk port parity (219)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -234,9 +235,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `GapManagerMixin`
 - `GeometryMatcher`
 - `HdrManagerSlots`
-- `HierarchyManager`
-- `HierarchyManagerController`
-- `HierarchyManagerSlots`
 - `HierarchyMapBuilder`
 - `HierarchySidecar`
 - `HierarchyTreeRenderer`

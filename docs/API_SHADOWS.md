@@ -4,7 +4,7 @@ _Symbols whose simple name is defined in more than one ecosystem package. Review
 
 _Generated: 2026-07-19_
 
-## Genuine cross-layer collisions (41)
+## Genuine cross-layer collisions (21)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -14,27 +14,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L84)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L15)
 
-### `Call` — extapps, pythontk
-
-- `extapps` — [`Call`](extapps/substance_workflow/job.py#L18)
-- `pythontk` — [`Call`](pythontk/net_utils/rpc/job.py#L30)
-
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L746)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L220)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L742)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
-
-### `MarmosetEngine` — blendertk, extapps, mayatk
-
-- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L83)
-- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L83)
-- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L83)
-
-### `Result` — extapps, pythontk
-
-- `extapps` — [`Result`](extapps/substance_workflow/job.py#L27)
-- `pythontk` — [`Result`](pythontk/net_utils/rpc/job.py#L42)
 
 ### `Selection` — blendertk, mayatk, tentacle
 
@@ -45,7 +29,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotManifest` — mayatk, pythontk
 
-- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L114)
+- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L156)
 - `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L167)
 
 ### `ShotStore` — mayatk, pythontk
@@ -53,47 +37,17 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L272)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L294)
 
-### `all_ops` — blendertk, extapps, mayatk
-
-- `blendertk` — [`all_ops`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L41)
-- `extapps` — [`all_ops`](extapps/substance_workflow/registry.py#L43)
-- `mayatk` — [`all_ops`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L41)
-
 ### `apply` — mayatk, pythontk
 
-- `mayatk` — [`apply`](mayatk/anim_utils/shots/_shot_apply.py#L135)
+- `mayatk` — [`apply`](mayatk/anim_utils/shots/_shot_apply.py#L133)
 - `pythontk` — [`apply`](pythontk/core_utils/engines/shots/shot_apply.py#L43)
-
-### `apply_sky_preset` — blendertk, extapps, mayatk
-
-- `blendertk` — [`apply_sky_preset`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L433)
-- `extapps` — [`apply_sky_preset`](extapps/marmoset_workflow/_toolbag_helpers.py#L433)
-- `mayatk` — [`apply_sky_preset`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L433)
-
-### `begin_log` — blendertk, extapps, mayatk
-
-- `blendertk` — [`begin_log`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L55)
-- `extapps` — [`begin_log`](extapps/marmoset_workflow/_toolbag_helpers.py#L55)
-- `mayatk` — [`begin_log`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L55)
-
-### `classify_log_line` — blendertk, extapps, mayatk
-
-- `blendertk` — [`classify_log_line`](blendertk/mat_utils/marmoset_bridge/toolbag_log.py#L83)
-- `extapps` — [`classify_log_line`](extapps/marmoset_workflow/toolbag_log.py#L83)
-- `mayatk` — [`classify_log_line`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L83)
-
-### `collect_mesh_objects` — blendertk, extapps, mayatk
-
-- `blendertk` — [`collect_mesh_objects`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L393)
-- `extapps` — [`collect_mesh_objects`](extapps/marmoset_workflow/_toolbag_helpers.py#L393)
-- `mayatk` — [`collect_mesh_objects`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L393)
 
 ### `compute_duration` — mayatk, pythontk
 
-- `mayatk` — [`compute_duration`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L453)
+- `mayatk` — [`compute_duration`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L449)
 - `pythontk` — [`compute_duration`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L258)
 
-### `defaults` — blendertk, extapps, mayatk, uitk
+### `defaults` — blendertk, mayatk, uitk
 
 - `blendertk` — [`defaults`](blendertk/env_utils/maya_bridge/parameters.py#L111)
 - `blendertk` — [`defaults`](blendertk/env_utils/unity_bridge/parameters.py#L145)
@@ -101,12 +55,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`defaults`](blendertk/mat_utils/marmoset_bridge/template_params.py#L60)
 - `blendertk` — [`defaults`](blendertk/mat_utils/substance_bridge/parameters.py#L179)
 - `blendertk` — [`defaults`](blendertk/uv_utils/rizom_bridge/parameters.py#L332)
-- `extapps` — [`defaults`](extapps/marmoset_workflow/parameters.py#L68)
-- `extapps` — [`defaults`](extapps/marmoset_workflow/template_params.py#L60)
-- `extapps` — [`defaults`](extapps/photogrammetry/gaussian_splat_workflow/parameters.py#L108)
-- `extapps` — [`defaults`](extapps/photogrammetry/metashape_workflow/parameters.py#L281)
-- `extapps` — [`defaults`](extapps/photogrammetry/realityscan_workflow/parameters.py#L125)
-- `extapps` — [`defaults`](extapps/unity_workflow/parameters.py#L96)
 - `mayatk` — [`defaults`](mayatk/env_utils/blender_bridge/parameters.py#L110)
 - `mayatk` — [`defaults`](mayatk/env_utils/unity_bridge/parameters.py#L147)
 - `mayatk` — [`defaults`](mayatk/mat_utils/marmoset_bridge/parameters.py#L240)
@@ -115,89 +63,39 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`defaults`](mayatk/uv_utils/rizom_bridge/parameters.py#L326)
 - `uitk` — [`defaults`](uitk/bridge/parameters.py#L48)
 
-### `derive_per_run_log_path` — blendertk, extapps, mayatk
-
-- `blendertk` — [`derive_per_run_log_path`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L41)
-- `extapps` — [`derive_per_run_log_path`](extapps/marmoset_workflow/_toolbag_helpers.py#L41)
-- `mayatk` — [`derive_per_run_log_path`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L41)
-
-### `describe` — blendertk, extapps, mayatk
-
-- `blendertk` — [`describe`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L46)
-- `extapps` — [`describe`](extapps/substance_workflow/registry.py#L47)
-- `mayatk` — [`describe`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L46)
-
-### `dispatch_log_lines` — blendertk, extapps, mayatk
-
-- `blendertk` — [`dispatch_log_lines`](blendertk/mat_utils/marmoset_bridge/toolbag_log.py#L134)
-- `extapps` — [`dispatch_log_lines`](extapps/marmoset_workflow/toolbag_log.py#L134)
-- `mayatk` — [`dispatch_log_lines`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L134)
-
-### `find_material` — blendertk, extapps, mayatk
-
-- `blendertk` — [`find_material`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L153)
-- `extapps` — [`find_material`](extapps/marmoset_workflow/_toolbag_helpers.py#L153)
-- `mayatk` — [`find_material`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L153)
-
-### `frame_in_viewport` — blendertk, extapps, mayatk
-
-- `blendertk` — [`frame_in_viewport`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L457)
-- `extapps` — [`frame_in_viewport`](extapps/marmoset_workflow/_toolbag_helpers.py#L457)
-- `mayatk` — [`frame_in_viewport`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L457)
-
-### `get` — blendertk, extapps, mayatk
-
-- `blendertk` — [`get`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L36)
-- `extapps` — [`get`](extapps/substance_workflow/registry.py#L39)
-- `mayatk` — [`get`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L36)
-
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1633)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1564)
 
 ### `leaf_name` — mayatk, pythontk
 
-- `mayatk` — [`leaf_name`](mayatk/core_utils/_core_utils.py#L43)
+- `mayatk` — [`leaf_name`](mayatk/core_utils/_core_utils.py#L42)
 - `pythontk` — [`leaf_name`](pythontk/core_utils/engines/shots/shot_model.py#L39)
 
-### `list_template_modes` — blendertk, extapps, mayatk, pythontk
+### `list_template_modes` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`list_template_modes`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L81)
 - `blendertk` — [`list_template_modes`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L73)
 - `blendertk` — [`list_template_modes`](blendertk/mat_utils/substance_bridge/_substance_bridge.py#L186)
-- `extapps` — [`list_template_modes`](extapps/marmoset_workflow/_marmoset_engine.py#L73)
 - `mayatk` — [`list_template_modes`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L73)
 - `mayatk` — [`list_template_modes`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L73)
 - `mayatk` — [`list_template_modes`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L206)
 - `pythontk` — [`list_template_modes`](pythontk/core_utils/script_template.py#L81)
 
-### `list_templates` — blendertk, extapps, mayatk, pythontk
+### `list_templates` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`list_templates`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L71)
 - `blendertk` — [`list_templates`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L59)
 - `blendertk` — [`list_templates`](blendertk/mat_utils/substance_bridge/_substance_bridge.py#L106)
-- `blendertk` — [`list_templates`](blendertk/ui_utils/style_setter/_style_setter.py#L147)
-- `extapps` — [`list_templates`](extapps/marmoset_workflow/_marmoset_engine.py#L59)
+- `blendertk` — [`list_templates`](blendertk/ui_utils/style_setter/_style_setter.py#L99)
 - `mayatk` — [`list_templates`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L63)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L59)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L126)
 - `mayatk` — [`list_templates`](mayatk/ui_utils/style_setter/_style_setter.py#L113)
 - `pythontk` — [`list_templates`](pythontk/core_utils/script_template.py#L47)
 
-### `load_manifest` — blendertk, extapps, mayatk
-
-- `blendertk` — [`load_manifest`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L168)
-- `extapps` — [`load_manifest`](extapps/marmoset_workflow/_toolbag_helpers.py#L168)
-- `mayatk` — [`load_manifest`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L168)
-
-### `log` — blendertk, extapps, mayatk
-
-- `blendertk` — [`log`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L75)
-- `extapps` — [`log`](extapps/marmoset_workflow/_toolbag_helpers.py#L75)
-- `mayatk` — [`log`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L75)
-
-### `main` — blendertk, extapps, mayatk, uitk
+### `main` — blendertk, mayatk, uitk
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L30)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L323)
@@ -206,13 +104,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
-- `extapps` — [`main`](extapps/marmoset_workflow/templates/import.py#L32)
-- `extapps` — [`main`](extapps/marmoset_workflow/templates/lookdev.py#L41)
-- `extapps` — [`main`](extapps/photogrammetry/gaussian_splat_workflow/_install_brush.py#L19)
-- `extapps` — [`main`](extapps/photogrammetry/gaussian_splat_workflow/run_combined.py#L46)
-- `extapps` — [`main`](extapps/photogrammetry/metashape_workflow/run_combined.py#L224)
-- `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L133)
-- `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L191)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L85)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L28)
@@ -221,25 +112,19 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L41)
 - `uitk` — [`main`](uitk/compile.py#L521)
 
-### `python_literal` — blendertk, extapps, mayatk, uitk
+### `python_literal` — blendertk, mayatk, uitk
 
 - `blendertk` — [`python_literal`](blendertk/mat_utils/marmoset_bridge/template_params.py#L49)
-- `extapps` — [`python_literal`](extapps/marmoset_workflow/template_params.py#L49)
 - `mayatk` — [`python_literal`](mayatk/mat_utils/marmoset_bridge/template_params.py#L49)
 - `uitk` — [`python_literal`](uitk/bridge/formatters.py#L29)
 
-### `referenced_keys` — blendertk, extapps, mayatk, uitk
+### `referenced_keys` — blendertk, mayatk, uitk
 
 - `blendertk` — [`referenced_keys`](blendertk/env_utils/maya_bridge/parameters.py#L106)
 - `blendertk` — [`referenced_keys`](blendertk/env_utils/unity_bridge/parameters.py#L140)
 - `blendertk` — [`referenced_keys`](blendertk/mat_utils/marmoset_bridge/parameters.py#L235)
 - `blendertk` — [`referenced_keys`](blendertk/mat_utils/substance_bridge/parameters.py#L174)
 - `blendertk` — [`referenced_keys`](blendertk/uv_utils/rizom_bridge/parameters.py#L327)
-- `extapps` — [`referenced_keys`](extapps/marmoset_workflow/parameters.py#L63)
-- `extapps` — [`referenced_keys`](extapps/photogrammetry/gaussian_splat_workflow/parameters.py#L98)
-- `extapps` — [`referenced_keys`](extapps/photogrammetry/metashape_workflow/parameters.py#L264)
-- `extapps` — [`referenced_keys`](extapps/photogrammetry/realityscan_workflow/parameters.py#L111)
-- `extapps` — [`referenced_keys`](extapps/unity_workflow/parameters.py#L91)
 - `mayatk` — [`referenced_keys`](mayatk/env_utils/blender_bridge/parameters.py#L105)
 - `mayatk` — [`referenced_keys`](mayatk/env_utils/unity_bridge/parameters.py#L142)
 - `mayatk` — [`referenced_keys`](mayatk/mat_utils/marmoset_bridge/parameters.py#L235)
@@ -247,81 +132,51 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`referenced_keys`](mayatk/uv_utils/rizom_bridge/parameters.py#L321)
 - `uitk` — [`referenced_keys`](uitk/bridge/parameters.py#L34)
 
-### `register` — blendertk, extapps, mayatk, tentacle
+### `register` — blendertk, mayatk, tentacle
 
 - `blendertk` — [`register`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L1638)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L1569)
 
-### `render_context` — blendertk, extapps, mayatk, uitk
+### `render_context` — blendertk, mayatk, uitk
 
 - `blendertk` — [`render_context`](blendertk/env_utils/maya_bridge/parameters.py#L116)
 - `blendertk` — [`render_context`](blendertk/env_utils/unity_bridge/parameters.py#L150)
 - `blendertk` — [`render_context`](blendertk/mat_utils/marmoset_bridge/parameters.py#L245)
 - `blendertk` — [`render_context`](blendertk/uv_utils/rizom_bridge/parameters.py#L337)
-- `extapps` — [`render_context`](extapps/marmoset_workflow/parameters.py#L73)
-- `extapps` — [`render_context`](extapps/unity_workflow/parameters.py#L101)
 - `mayatk` — [`render_context`](mayatk/env_utils/blender_bridge/parameters.py#L115)
 - `mayatk` — [`render_context`](mayatk/env_utils/unity_bridge/parameters.py#L152)
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
 - `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L331)
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
 
+### `resolve_duration` — mayatk, pythontk
+
+- `mayatk` — [`resolve_duration`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L110)
+- `pythontk` — [`resolve_duration`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L48)
+
 ### `resolve_ranges` — mayatk, pythontk
 
 - `mayatk` — [`resolve_ranges`](mayatk/anim_utils/shots/shot_manifest/range_resolver.py#L25)
 - `pythontk` — [`resolve_ranges`](pythontk/core_utils/engines/shots/manifest/range_resolver.py#L37)
 
-### `resolve_toolbag_log_path` — blendertk, extapps, mayatk
-
-- `blendertk` — [`resolve_toolbag_log_path`](blendertk/mat_utils/marmoset_bridge/toolbag_log.py#L29)
-- `extapps` — [`resolve_toolbag_log_path`](extapps/marmoset_workflow/toolbag_log.py#L29)
-- `mayatk` — [`resolve_toolbag_log_path`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L29)
-
-### `run_batch` — blendertk, extapps, mayatk, pythontk
+### `run_batch` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`run_batch`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/job.py#L30)
-- `extapps` — [`run_batch`](extapps/substance_workflow/job.py#L49)
 - `mayatk` — [`run_batch`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/job.py#L30)
 - `pythontk` — [`run_batch`](pythontk/net_utils/rpc/job.py#L55)
 
-### `split_high_low` — blendertk, extapps, mayatk
-
-- `blendertk` — [`split_high_low`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L311)
-- `extapps` — [`split_high_low`](extapps/marmoset_workflow/_toolbag_helpers.py#L311)
-- `mayatk` — [`split_high_low`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L311)
-
-### `start_toolbag_log_tail` — blendertk, extapps, mayatk
-
-- `blendertk` — [`start_toolbag_log_tail`](blendertk/mat_utils/marmoset_bridge/toolbag_log.py#L148)
-- `extapps` — [`start_toolbag_log_tail`](extapps/marmoset_workflow/toolbag_log.py#L148)
-- `mayatk` — [`start_toolbag_log_tail`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L148)
-
-### `template_modes` — blendertk, extapps, mayatk, pythontk
+### `template_modes` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`template_modes`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L76)
 - `blendertk` — [`template_modes`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L64)
-- `extapps` — [`template_modes`](extapps/marmoset_workflow/_marmoset_engine.py#L64)
 - `mayatk` — [`template_modes`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L68)
 - `mayatk` — [`template_modes`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L64)
 - `pythontk` — [`template_modes`](pythontk/core_utils/script_template.py#L56)
 
-### `to_context` — blendertk, extapps, mayatk
-
-- `blendertk` — [`to_context`](blendertk/mat_utils/marmoset_bridge/template_params.py#L65)
-- `extapps` — [`to_context`](extapps/marmoset_workflow/template_params.py#L65)
-- `mayatk` — [`to_context`](mayatk/mat_utils/marmoset_bridge/template_params.py#L65)
-
-### `wire_materials_from_manifest` — blendertk, extapps, mayatk
-
-- `blendertk` — [`wire_materials_from_manifest`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L185)
-- `extapps` — [`wire_materials_from_manifest`](extapps/marmoset_workflow/_toolbag_helpers.py#L185)
-- `mayatk` — [`wire_materials_from_manifest`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L185)
-
 ---
 
-## Intentional mayatk↔blendertk port parity (206)
+## Intentional mayatk↔blendertk port parity (225)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -406,6 +261,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `MarmosetBridge`
 - `MarmosetBridgeSlots`
 - `MarmosetConnection`
+- `MarmosetEngine`
 - `MatManifest`
 - `MatUpdater`
 - `MatUpdaterSlots`
@@ -481,23 +337,34 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `WheelRigSlots`
 - `XformUtils`
 - `active_object_set`
+- `all_ops`
+- `apply_sky_preset`
 - `apply_template`
 - `auto_instance`
 - `autostart`
+- `begin_log`
 - `build_bake_pairs_manifest`
 - `build_curve_preview`
 - `build_hierarchy_structure`
+- `classify_log_line`
 - `clear`
+- `collect_mesh_objects`
 - `collect_segments`
 - `curves_for_attr`
 - `default_log_path`
+- `derive_per_run_log_path`
+- `describe`
 - `describe_op`
+- `dispatch_log_lines`
 - `export_usd`
 - `extract_attributes`
+- `find_material`
 - `find_painter_exe`
 - `find_tree_item_by_name`
 - `fmt_behavior`
 - `format_behavior_html`
+- `frame_in_viewport`
+- `get`
 - `get_bounding_box`
 - `get_selected_object_names`
 - `get_selected_tree_items`
@@ -509,6 +376,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `list_materials`
 - `list_ops`
 - `list_styles`
+- `load_manifest`
+- `log`
 - `node_ref`
 - `parse_template`
 - `ping`
@@ -516,18 +385,23 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `render_js_context`
 - `resolve_painter_log_path`
 - `resolve_ref`
+- `resolve_toolbag_log_path`
 - `restore_session`
 - `run_on_main_thread`
 - `scale_attribute_keys`
 - `set_style`
 - `should_keep_node_by_type`
 - `show`
+- `split_high_low`
 - `start_server`
+- `start_toolbag_log_tail`
 - `stop_server`
 - `strip_unsupported`
 - `summary`
+- `to_context`
 - `toggle`
 - `uninstall`
 - `user_plugin_dir`
 - `version`
+- `wire_materials_from_manifest`
 - `write_texture_manifest`

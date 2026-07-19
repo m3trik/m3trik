@@ -16,7 +16,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L742)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L746)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L220)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
@@ -88,7 +88,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`list_templates`](blendertk/env_utils/maya_bridge/_maya_bridge.py#L71)
 - `blendertk` — [`list_templates`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L59)
 - `blendertk` — [`list_templates`](blendertk/mat_utils/substance_bridge/_substance_bridge.py#L106)
-- `blendertk` — [`list_templates`](blendertk/ui_utils/style_setter/_style_setter.py#L99)
+- `blendertk` — [`list_templates`](blendertk/ui_utils/style_setter/_style_setter.py#L147)
 - `mayatk` — [`list_templates`](mayatk/env_utils/blender_bridge/_blender_bridge.py#L63)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L59)
 - `mayatk` — [`list_templates`](mayatk/mat_utils/substance_bridge/_substance_bridge.py#L126)

@@ -299,7 +299,10 @@ class Surface:
 
     # -------------------------------------------------------------- main walk
     def _extract(self):
-        tree = ast.parse(read(self.path))
+        try:  # a syntax error in a panel/slot file must name the file, not raise a raw traceback
+            tree = ast.parse(self.src, filename=self.path)
+        except SyntaxError as e:
+            sys.exit(f"{self.path}:{e.lineno}: invalid syntax — {e.msg}")
         self.tables, header_items = _collect_tables(tree)
         for label, obj, *_ in ((i[0], i[1]) if len(i) >= 2 else (None, None) for i in header_items):
             key = obj or label

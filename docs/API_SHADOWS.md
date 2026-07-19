@@ -4,7 +4,7 @@ _Symbols whose simple name is defined in more than one ecosystem package. Review
 
 _Generated: 2026-07-19_
 
-## Genuine cross-layer collisions (21)
+## Genuine cross-layer collisions (20)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -17,7 +17,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L742)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L219)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L220)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
 ### `Selection` — blendertk, mayatk, tentacle
@@ -29,7 +29,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotManifest` — mayatk, pythontk
 
-- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L156)
+- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L114)
 - `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L167)
 
 ### `ShotStore` — mayatk, pythontk
@@ -39,12 +39,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `apply` — mayatk, pythontk
 
-- `mayatk` — [`apply`](mayatk/anim_utils/shots/_shot_apply.py#L133)
+- `mayatk` — [`apply`](mayatk/anim_utils/shots/_shot_apply.py#L135)
 - `pythontk` — [`apply`](pythontk/core_utils/engines/shots/shot_apply.py#L43)
 
 ### `compute_duration` — mayatk, pythontk
 
-- `mayatk` — [`compute_duration`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L449)
+- `mayatk` — [`compute_duration`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L453)
 - `pythontk` — [`compute_duration`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L258)
 
 ### `defaults` — blendertk, mayatk, uitk
@@ -70,7 +70,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `leaf_name` — mayatk, pythontk
 
-- `mayatk` — [`leaf_name`](mayatk/core_utils/_core_utils.py#L42)
+- `mayatk` — [`leaf_name`](mayatk/core_utils/_core_utils.py#L43)
 - `pythontk` — [`leaf_name`](pythontk/core_utils/engines/shots/shot_model.py#L39)
 
 ### `list_template_modes` — blendertk, mayatk, pythontk
@@ -149,11 +149,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`render_context`](mayatk/mat_utils/marmoset_bridge/parameters.py#L245)
 - `mayatk` — [`render_context`](mayatk/uv_utils/rizom_bridge/parameters.py#L331)
 - `uitk` — [`render_context`](uitk/bridge/parameters.py#L53)
-
-### `resolve_duration` — mayatk, pythontk
-
-- `mayatk` — [`resolve_duration`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L110)
-- `pythontk` — [`resolve_duration`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L48)
 
 ### `resolve_ranges` — mayatk, pythontk
 

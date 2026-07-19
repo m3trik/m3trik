@@ -66,7 +66,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1564)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1633)
 
 ### `leaf_name` — mayatk, pythontk
 
@@ -136,7 +136,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`register`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L1569)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L1638)
 
 ### `render_context` — blendertk, mayatk, uitk
 

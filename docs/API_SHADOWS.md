@@ -4,21 +4,40 @@ _Symbols whose simple name is defined in more than one ecosystem package. Review
 
 _Generated: 2026-07-26_
 
-## Genuine cross-layer collisions (7)
+## Genuine cross-layer collisions (11)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `AudioUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L66)
-- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L84)
+- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L85)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L15)
+
+### `Behaviors` — mayatk, pythontk
+
+- `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L144)
+- `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L83)
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L746)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L220)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L171)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
+
+### `Parameters` — mayatk, uitk
+
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L100)
+- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L137)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L230)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L168)
+- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L447)
+- `uitk` — [`Parameters`](uitk/bridge/parameters.py#L38)
+
+### `RangeResolver` — mayatk, pythontk
+
+- `mayatk` — [`RangeResolver`](mayatk/anim_utils/shots/shot_manifest/range_resolver.py#L28)
+- `pythontk` — [`RangeResolver`](pythontk/core_utils/engines/shots/manifest/range_resolver.py#L19)
 
 ### `Selection` — blendertk, mayatk, tentacle
 
@@ -27,14 +46,19 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L10)
 
+### `ShotApply` — mayatk, pythontk
+
+- `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L148)
+- `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L46)
+
 ### `ShotManifest` — mayatk, pythontk
 
-- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L114)
+- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L111)
 - `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L91)
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L272)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L310)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L269)
 
 ### `launch` — mayatk, tentacle
@@ -46,11 +70,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`register`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
+- `mayatk` — [`register`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L26)
 - `tentacle` — [`register`](tentacle/tcl_blender.py#L1638)
 
 ---
 
-## Intentional mayatk↔blendertk port parity (234)
+## Intentional mayatk↔blendertk port parity (179)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -210,81 +235,26 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`
-- `active_object_set`
 - `all_ops`
-- `apply_sky_preset`
-- `apply_template`
 - `auto_instance`
 - `autostart`
-- `begin_log`
-- `build_bake_pairs_manifest`
-- `build_curve_preview`
-- `build_hierarchy_structure`
-- `classify_log_line`
 - `clear`
-- `collect_mesh_objects`
-- `collect_segments`
 - `curves_for_attr`
-- `default_log_path`
-- `defaults`
-- `derive_per_run_log_path`
 - `describe`
 - `describe_op`
-- `dispatch_log_lines`
 - `export_usd`
-- `extract_attributes`
-- `find_material`
-- `find_painter_exe`
-- `find_tree_item_by_name`
-- `fmt_behavior`
-- `format_behavior_html`
-- `frame_in_viewport`
 - `get`
-- `get_bounding_box`
-- `get_selected_object_names`
-- `get_selected_tree_items`
-- `install`
-- `is_installed`
+- `import_fbx`
 - `is_main_thread_marshalling_active`
 - `is_running`
-- `list_delivery_modes`
 - `list_materials`
 - `list_ops`
-- `list_styles`
-- `list_template_modes`
-- `list_templates`
-- `load_manifest`
-- `log`
 - `main`
-- `node_ref`
-- `parse_template`
 - `ping`
-- `python_literal`
-- `referenced_keys`
-- `render_cli_context`
-- `render_context`
-- `render_js_context`
-- `resolve_painter_log_path`
-- `resolve_ref`
-- `resolve_toolbag_log_path`
-- `restore_session`
-- `run_batch`
 - `run_on_main_thread`
 - `scale_attribute_keys`
-- `set_style`
-- `should_keep_node_by_type`
-- `show`
-- `split_high_low`
 - `start_server`
-- `start_toolbag_log_tail`
 - `stop_server`
-- `strip_unsupported`
 - `summary`
-- `template_modes`
-- `to_context`
-- `toggle`
-- `uninstall`
-- `user_plugin_dir`
 - `version`
-- `wire_materials_from_manifest`
 - `write_texture_manifest`

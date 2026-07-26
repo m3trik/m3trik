@@ -21,12 +21,17 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L746)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L166)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L171)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
-### `Parameters` — mayatk, uitk
+### `Parameters` — blendertk, mayatk, uitk
 
+- `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L101)
+- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L135)
+- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L230)
+- `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L168)
+- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L453)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L100)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L137)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L230)
@@ -41,7 +46,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Selection` — blendertk, mayatk, tentacle
 
-- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L33)
+- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L34)
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L10)
@@ -69,13 +74,14 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `register` — blendertk, mayatk, tentacle
 
 - `blendertk` — [`register`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
+- `blendertk` — [`register`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L26)
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
 - `mayatk` — [`register`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L26)
 - `tentacle` — [`register`](tentacle/tcl_blender.py#L1638)
 
 ---
 
-## Intentional mayatk↔blendertk port parity (179)
+## Intentional mayatk↔blendertk port parity (191)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -92,6 +98,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `BakeAnalysis`
 - `BakeResult`
 - `BakeSessionStore`
+- `BatchJob`
 - `Bevel`
 - `BevelSlots`
 - `BlendshapeAnimator`
@@ -146,6 +153,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ImageToPlaneSlots`
 - `ImageTracer`
 - `ImageTracerSlots`
+- `Installer`
 - `InstanceCandidate`
 - `InstanceGroup`
 - `InstancingStrategy`
@@ -155,6 +163,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `LightmapBakerSlots`
 - `MacroManager`
 - `Macros`
+- `ManifestData`
 - `ManifestTableMixin`
 - `MarkerManagerMixin`
 - `MarmosetBridge`
@@ -187,6 +196,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SceneExporterSlots`
 - `ScriptConsole`
 - `ScriptJobManager`
+- `SegmentCollector`
 - `SelectionMacros`
 - `ShaderTemplatesSlots`
 - `ShadowRig`
@@ -216,8 +226,11 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `TaskManager`
 - `TelescopeRig`
 - `TelescopeRigSlots`
+- `TemplateParams`
 - `TextureBaker`
 - `TexturePathEditorSlots`
+- `ToolbagHelpers`
+- `ToolbagLog`
 - `TransformDiagnostics`
 - `TreePathMatcher`
 - `TubePath`
@@ -236,25 +249,30 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `WheelRigSlots`
 - `XformUtils`
 - `all_ops`
+- `apply_manifest`
 - `auto_instance`
 - `autostart`
 - `clear`
-- `curves_for_attr`
+- `close_plugin`
 - `describe`
 - `describe_op`
+- `eval_python`
 - `export_usd`
 - `get`
 - `import_fbx`
 - `is_main_thread_marshalling_active`
 - `is_running`
+- `js_evaluate`
 - `list_materials`
 - `list_ops`
 - `main`
+- `mesh_reload`
+- `mesh_reload_status`
 - `ping`
+- `project_info`
 - `run_on_main_thread`
-- `scale_attribute_keys`
+- `start_plugin`
 - `start_server`
 - `stop_server`
 - `summary`
 - `version`
-- `write_texture_manifest`

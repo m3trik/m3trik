@@ -83,12 +83,44 @@ def ui_interactive(ui_path):
     return sum(1 for c in re.findall(r'<widget class="([^"]+)"', read(ui_path)) if c in INTERACTIVE)
 
 
+def is_message_box(node):
+    return isinstance(node, ast.Call) and (
+        (isinstance(node.func, ast.Attribute) and node.func.attr == "message_box")
+        or (isinstance(node.func, ast.Name) and node.func.id == "message_box")
+    )
+
+
+def does_work(node):
+    """True if `node`'s subtree performs work beyond composing/popping a message box.
+
+    A `message_box` call's own subtree is skipped — its arguments are just the message
+    (f-strings, `.format()`, `str()`), never the handler's action.
+    """
+    if is_message_box(node):
+        return False
+    if isinstance(node, (ast.Call, ast.Assign, ast.AugAssign, ast.AnnAssign)):
+        return True
+    return any(does_work(c) for c in ast.iter_child_nodes(node))
+
+
 def code_metrics(path):
-    """(lines, code-built controls, option boxes, handlers, hollow handlers) for a slot/panel file."""
+    """(lines, code-built controls, option boxes, handlers, hollow handlers) for a slot/panel file.
+
+    *hollow* = a handler that ONLY pops a message box and is not closed by hiding its widget
+    — i.e. parity theater: a visible control that does nothing. This is deliberately narrow.
+    A guard clause (`if not selection: message_box(...); return`) on a handler that goes on to
+    do real work is NOT hollow, and neither is a control correctly retired via
+    `<name>_init -> setVisible(False)` (the documented treatment for a no-Blender-equivalent
+    control — see tentacle/docs/parity_map.py). An earlier substring heuristic ("mentions
+    message_box, calls no `btk.`/`bpy.ops`/`cmds.`") could see neither shape: it flagged
+    blendertk's 11 guard clauses plus its 2 correctly-hidden controls, putting "13 hollow
+    handlers" in the headline scorecard when the true count on both DCCs is 0.
+    """
     src = read(path)
     lines = src.count("\n") + 1
     controls = len(re.findall(r"\.add\(", src)) - len(re.findall(r'\.add\(\s*["\']Separator', src))
-    opt_boxes = handlers = hollow = 0
+    opt_boxes = handlers = 0
+    hidden, message_only = set(), set()
     try:
         tree = ast.parse(src)
     except SyntaxError:
@@ -100,14 +132,21 @@ def code_metrics(path):
             seg = ast.get_source_segment(src, n) or ""
             if ".option_box." in seg:
                 opt_boxes += 1
-            if HANDLER.match(n.name) and not n.name.endswith("_init"):
+            if n.name.endswith("_init"):
+                if "setVisible(False)" in seg:
+                    hidden.add(n.name[: -len("_init")])
+                continue
+            if HANDLER.match(n.name):
                 handlers += 1
-                body = seg.split("\n", 1)[1] if "\n" in seg else ""
-                if "message_box" in body and not re.search(
-                    r"\b(btk|mtk)\.\w|\bbpy\.(ops|context|data)\b|\bcmds\.\w|\bmel\.\w|\bbmesh\.\w", body
-                ):
-                    hollow += 1
-    return dict(lines=lines, controls=controls, opt_boxes=opt_boxes, handlers=handlers, hollow=hollow)
+                body = n.body[1:] if ast.get_docstring(n) else n.body
+                if any(
+                    is_message_box(c) for stmt in body for c in ast.walk(stmt)
+                ) and not any(does_work(stmt) for stmt in body):
+                    message_only.add(n.name)
+    return dict(
+        lines=lines, controls=controls, opt_boxes=opt_boxes, handlers=handlers,
+        hollow=len(message_only - hidden),
+    )
 
 
 def pct(a, b):
@@ -359,7 +398,10 @@ def build():
     w("---\n\n## Layer 2 — Shared-menu slot depth")
     w("")
     w("The 27 shared menus both DCCs load. *Controls* = `.add(` calls (option-box sub-controls + menu "
-      "items).")
+      "items). *Hollow* = parity theater: a **visible** control whose handler only pops a message box. "
+      "A guard clause (`if not selection: message_box(...); return`) on a handler that then does work "
+      "is not hollow, and neither is a control correctly retired via `<name>_init → setVisible(False)` "
+      "— that is the documented treatment for a no-Blender-equivalent control.")
     w("")
     w("> ⚠️ **This per-domain % is an UPPER BOUND on the gap, NOT the gap — confirm by reading the slot "
       "pair before acting.** It is wrong in two directions, both proven by spot-checks: (1) it "

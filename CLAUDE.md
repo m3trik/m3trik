@@ -21,4 +21,9 @@
 
 - [scripts/](scripts/CLAUDE.md) — Repo-maintenance helpers (inventory, API registry, credential rotation).
 
+## Cross-repo standards (this repo owns them)
+
+- [docs/TEST_BADGE_STANDARD.md](docs/TEST_BADGE_STANDARD.md) — README **Tests** badges count *individual test cases* (never suites/modules/categories), skips excluded. One writer: `ptk.StatusBadge`. Read before touching any `test/run_tests.py` or a CI badge step.
+- [docs/DOCS_STANDARD.md](docs/DOCS_STANDARD.md) · [docs/CONTEXT_BUDGET.md](docs/CONTEXT_BUDGET.md) — markdown wiring + instruction-surface size caps.
+
 See [CHANGELOG.md](CHANGELOG.md) for history.

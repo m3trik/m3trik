@@ -51,12 +51,19 @@ def shared_domains() -> dict[str, set[str]]:
 
 
 def slot_methods(path: Path) -> set[str]:
+    """Handler names defined by ``path``'s slot classes, INCLUDING those inherited from the
+    panel's shared ``slots/_<panel>.py`` mixin (the one-mixin-per-panel convention —
+    e.g. ``PreferencesMixin.cmb004`` serves both DCC forks; counting only the per-DCC file
+    reported mixin-handled widgets as unhandled)."""
     methods: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.ClassDef):
             for x in node.body:
                 if isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     methods.add(x.name)
+    mixin = SLOTS_DIR / f"_{path.stem}.py"
+    if mixin.exists():
+        methods |= slot_methods(mixin)
     return methods
 
 

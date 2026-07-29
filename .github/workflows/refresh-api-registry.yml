@@ -57,15 +57,25 @@ jobs:
         env:
           TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
         run: |
-          # Tolerate per-repo auth/clone failures: the token may lack scope
-          # for newer repos, but the refresh should still cover the rest.
-          # The generator skips missing siblings gracefully.
+          # Tolerate per-repo clone failures: the refresh should still cover
+          # the rest. The generator skips missing siblings gracefully.
           # x-access-token works for both classic PATs and installation tokens.
+          #
+          # Prefer `dev` (the ecosystem chain's integration branch), but fall
+          # back to the repo's DEFAULT branch: `extapps` is a main-only
+          # standalone with no `dev`, so an unconditional `--branch dev` clone
+          # failed for it every run and the shadow report was generated
+          # WITHOUT extapps. That made CI's report permanently disagree with
+          # any local run (which has extapps on disk), so
+          # check_context_budget.py flagged API_SHADOWS.md stale forever and
+          # the two versions ping-ponged on m3trik/main. extapps belongs in
+          # the report on merit: it vendors mayatk's Marmoset engine, so its
+          # shadows are a real cross-layer DRY surface, not name noise.
           for repo in pythontk uitk mayatk blendertk tentacle unitytk extapps; do
-            if ! git clone --branch dev \
-                "https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git" \
-                "${repo}"; then
-              echo "::warning::Failed to clone ${repo} (token may lack scope) — skipping"
+            url="https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git"
+            if ! git clone --branch dev "${url}" "${repo}" 2>/dev/null \
+               && ! git clone "${url}" "${repo}"; then
+              echo "::warning::Failed to clone ${repo} — skipping"
             fi
           done
 
@@ -104,20 +114,25 @@ jobs:
               continue
             fi
             cd "${repo}"
+            # Push back to whatever branch we actually cloned — `dev` for the
+            # chain packages, the default branch for a main-only standalone
+            # (see the clone step). Hardcoding `dev` here would push extapps'
+            # registry to a branch it doesn't have.
+            branch="$(git rev-parse --abbrev-ref HEAD)"
             if git status --porcelain API_INDEX.md API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
               git add API_INDEX.md API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
               git commit -m "chore: refresh API registry [skip ci]"
               push_url="https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git"
               for attempt in 1 2; do
                 git -c http."https://github.com/".extraheader= \
-                    fetch "${push_url}" dev
+                    fetch "${push_url}" "${branch}"
                 git rebase FETCH_HEAD || {
                   echo "::warning::${repo}: rebase produced conflicts on attempt ${attempt} — aborting"
                   git rebase --abort
                   break
                 }
                 if git -c http."https://github.com/".extraheader= \
-                       push "${push_url}" HEAD:dev; then
+                       push "${push_url}" "HEAD:${branch}"; then
                   echo "${repo}: pushed (attempt ${attempt})"
                   break
                 elif [ "${attempt}" = "2" ]; then

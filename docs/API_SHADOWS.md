@@ -31,12 +31,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L135)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L230)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L168)
-- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L453)
+- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L437)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L100)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L137)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L230)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L168)
-- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L447)
+- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L432)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L38)
 
 ### `RangeResolver` — mayatk, pythontk
@@ -46,7 +46,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Selection` — blendertk, mayatk, tentacle
 
-- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L34)
+- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L35)
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
 - `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
 - `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L10)
@@ -81,7 +81,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (190)
+## Intentional mayatk↔blendertk port parity (193)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -95,6 +95,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `AssemblyReconstructor`
 - `AudioClipsSlots`
 - `AutoInstancer`
+- `AutoUnwrapResult`
 - `BakeAnalysis`
 - `BakeResult`
 - `BakeSessionStore`
@@ -135,6 +136,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `DynamicPipeSlots`
 - `EditMacros`
 - `EditUtils`
+- `EmissiveGroups`
+- `EmissiveGroupsSlots`
 - `EnvUtils`
 - `ExplodedViewSlots`
 - `FKChainStrategy`

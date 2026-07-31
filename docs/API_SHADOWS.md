@@ -27,7 +27,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L231)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L171)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
@@ -153,7 +153,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L133)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L94)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L191)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L211)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L85)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L28)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L123)

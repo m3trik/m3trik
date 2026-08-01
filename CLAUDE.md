@@ -12,6 +12,8 @@
 .\m3trik\push.ps1 -Packages pythontk,uitk -Strict -Merge
 ```
 
+**Push THIS repo first when `scripts/` changed.** Each package's `publish.yml` dispatches m3trik's [`refresh-api-registry.yml`](.github/workflows/refresh-api-registry.yml) on a successful upload; that workflow checks out **m3trik@main** and force-pushes regenerated registries back to every package's `dev`. So an unpushed generator change means the bot rewrites the packages' registries with the OLD generator, silently reverting the refresh you just released (measured 2026-08-01: mayatk −495 / blendertk −234 lines, which then failed tentacle's parity-audit gate twice, since that gate reads the sibling engines at `dev`).
+
 ## Release preflight — review gate
 
 `-Strict -Merge` refuses to release a package whose real code delta (dirty tree, unpushed dev, or non-housekeeping `origin/main..dev`) lacks a `review` receipt for the **current** tree. Receipts live in `.claude/receipts.json`, keyed `pkg@treehash` — any edit self-invalidates; max age 7 days; push.ps1 is the sole writer. Mechanical cascade commits (pin-sync/bump) and untouched packages are exempt.

@@ -238,6 +238,83 @@ def _is_property_accessor(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
+def _own_members(node: ast.ClassDef, owner: str) -> list[SymbolRecord]:
+    """Public methods declared directly in *node*'s body."""
+    out: list[SymbolRecord] = []
+    for member in node.body:
+        if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_public(member.name) or _is_property_accessor(member):
+            continue
+        kind, deprecated = _decorator_kinds(member)
+        out.append(
+            SymbolRecord(
+                name=member.name,
+                qualname=f"{owner}.{member.name}",
+                kind=kind,
+                signature=_format_signature(member),
+                summary=_first_sentence(ast.get_docstring(member)),
+                line=member.lineno,
+                deprecated=deprecated,
+            )
+        )
+    return out
+
+
+def _class_members(
+    node: ast.ClassDef,
+    owner: str,
+    local_classes: dict[str, ast.ClassDef],
+    _seen: set[str] | None = None,
+    _visited: set[str] | None = None,
+) -> list[SymbolRecord]:
+    """Public members of *node*, including those inherited from PRIVATE bases
+    declared in the same module.
+
+    Without this the registry silently omits a large slice of the real public
+    surface: the repo's convention puts capability groups on private mixins
+    (``Matrices(_MatrixMath, …)``, ``TaskManager(_TaskChecksMixin, …)``,
+    ``PackageManager(_PackageManagerHelperMixin, …)``), and a private class is
+    never emitted on its own.  ``mtk.Matrices.inverse`` and
+    ``ptk.PackageManager.install`` were both unfindable in ``API_INDEX.md``,
+    which defeats the "grep the registry before writing a helper" rule.
+
+    Only *private*, *same-module* bases are resolved.  A public base is
+    already documented under its own entry, so pulling its members up would
+    duplicate rather than reveal; a cross-module base can't be resolved from
+    one file's AST (``verify_runtime_surface.py`` is the gate for that).
+    Bases are walked left-to-right, depth-first, first definition winning —
+    Python's MRO for the single-inheritance-per-capability shape used here.
+
+    ``_visited`` guards the walk against a base graph that loops.  Python
+    itself could never run ``class _A(_A)`` or a mutual pair, but this walker
+    parses whatever is on disk — including half-written files, which is why
+    ``_walk_module`` already swallows ``SyntaxError`` — and an uncaught
+    ``RecursionError`` there would take down the whole registry build (and the
+    CI gate) over one bad file.  It also collapses a diamond so shared private
+    bases are traversed once.
+    """
+    seen = set() if _seen is None else _seen
+    visited = set() if _visited is None else _visited
+    visited.add(node.name)
+
+    out: list[SymbolRecord] = []
+    for rec in _own_members(node, owner):
+        if rec.name not in seen:
+            seen.add(rec.name)
+            out.append(rec)
+    for base in node.bases:
+        name = base.id if isinstance(base, ast.Name) else None
+        if name is None or _is_public(name) or name not in local_classes:
+            continue
+        if name in visited:
+            continue
+        out.extend(
+            _class_members(local_classes[name], owner, local_classes, seen, visited)
+        )
+    return out
+
+
 def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     """Parse one .py file. Return None if it has no public surface."""
     try:
@@ -254,6 +331,12 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
 
     funcs: list[SymbolRecord] = []
     classes: list[ClassEntry] = []
+
+    # Every class in the module, so a public class can resolve members it
+    # inherits from a private base declared alongside it.
+    local_classes = {
+        n.name: n for n in tree.body if isinstance(n, ast.ClassDef)
+    }
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -279,25 +362,7 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                 continue
             if any(node.name.startswith(p) for p in GENERATED_CLASS_PREFIXES):
                 continue
-            members: list[SymbolRecord] = []
-            for member in node.body:
-                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if not _is_public(member.name):
-                        continue
-                    if _is_property_accessor(member):
-                        continue
-                    kind, deprecated = _decorator_kinds(member)
-                    members.append(
-                        SymbolRecord(
-                            name=member.name,
-                            qualname=f"{node.name}.{member.name}",
-                            kind=kind,
-                            signature=_format_signature(member),
-                            summary=_first_sentence(ast.get_docstring(member)),
-                            line=member.lineno,
-                            deprecated=deprecated,
-                        )
-                    )
+            members = _class_members(node, node.name, local_classes)
             bases = [
                 ast.unparse(b) if not isinstance(b, ast.Name) else b.id
                 for b in node.bases

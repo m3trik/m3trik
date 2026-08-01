@@ -11,6 +11,8 @@ Core safety rules (Strict+Merge)
 - Stops on the first failure (build, merge conflict, workflow timeout, unsafe repo state).
 - Refuses to operate if a repo has an in-progress merge/rebase/cherry-pick.
 - Refuses to proceed if conflict markers exist in pyproject.toml (local OR remote origin/main|origin/dev).
+- Refuses to release a real code delta without a recorded review receipt for the current
+  tree (review gate; receipts in .claude/receipts.json — see m3trik/CLAUDE.md "Release preflight").
 - Keeps internal pyproject.toml pins in sync with the local versions being released, and
   waits for a just-published upstream version to become visible on PyPI before merging
   a downstream package that pins it.
@@ -40,6 +42,12 @@ Key flags
 -SkipPypiCheck        Skip all PyPI availability gates (downstream pin pre-check +
                       post-publish visibility wait). Meant for offline use only —
                       indexing lag is already handled by bounded retries.
+-SkipReview           Bypass the Strict+Merge review gate (emergencies only).
+-RecordReceipt        Record named verification receipt(s) (e.g. review,tests) for
+                      the current tree of -Packages, then exit. See "Release
+                      preflight" in m3trik/CLAUDE.md.
+-ShowReceipts         Show receipt validity for -Packages (default: strict set),
+                      then exit.
 -CommitMessage        Message for the auto-commit Sync-DevWithOrigin makes when
                               absorbing local changes (defaults to "Update").
 -WorkflowTimeoutSeconds / -WorkflowPollSeconds
@@ -61,6 +69,10 @@ param(
     [switch]$SkipBuild,
     [switch]$SkipWorkflowWait,
     [switch]$SkipPypiCheck,
+    [switch]$SkipReview,
+    [string[]]$RecordReceipt,
+    [switch]$ShowReceipts,
+    [int]$ReceiptMaxAgeDays = 7,
     [switch]$UsePR,
     [int]$PRMergeTimeoutSeconds = 1800,
     # 2400s (40 min), not 900s: the publish workflow reliably runs ~17 min for
@@ -98,6 +110,106 @@ $REQUIRED_PINS = @{
     "mayatk"    = @("pythontk", "uitk")
     "blendertk" = @("pythontk", "uitk")
     "tentacle"  = @("pythontk", "uitk", "mayatk", "blendertk")
+}
+
+# ------------------------------------------------------------------------------------------------
+# Verification receipts
+# One writer for .claude/receipts.json: a receipt records that a named check ("review",
+# "tests", ...) passed for a package at an EXACT tree state. The tree hash covers HEAD plus
+# the working-tree delta (tracked diff + untracked names/size/mtime), so any edit
+# self-invalidates. The Strict+Merge review gate consumes "review"; sessions consult
+# -ShowReceipts to skip re-running a suite already green for an identical tree.
+# Protocol: m3trik/CLAUDE.md "Release preflight".
+# ------------------------------------------------------------------------------------------------
+$RECEIPTS_PATH = Join-Path $ROOT ".claude\receipts.json"
+
+function Get-TreeHash {
+    param([string]$RepoPath)
+    Push-Location $RepoPath
+    try {
+        $head = (git rev-parse HEAD 2>$null)
+        $status = @(git status --porcelain 2>$null) -join "`n"
+        $diff = @(git diff HEAD 2>$null) -join "`n"
+        # Untracked content edits don't show in `git diff`; fold in size+mtime per file.
+        $untracked = @(git ls-files --others --exclude-standard 2>$null | ForEach-Object {
+                $fi = Get-Item -LiteralPath (Join-Path $RepoPath $_) -ErrorAction SilentlyContinue
+                if ($fi) { "$_|$($fi.Length)|$($fi.LastWriteTimeUtc.Ticks)" } else { $_ }
+            }) -join "`n"
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes("$head`n$status`n$diff`n$untracked")
+        $md5 = [System.Security.Cryptography.MD5]::Create()
+        try { $hex = -join ($md5.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) }
+        finally { $md5.Dispose() }
+        return $hex.Substring(0, 12)
+    }
+    finally { Pop-Location }
+}
+
+function Read-Receipts {
+    $map = @{}
+    if (-not (Test-Path $RECEIPTS_PATH)) { return $map }
+    try {
+        $obj = Get-Content $RECEIPTS_PATH -Raw | ConvertFrom-Json
+        foreach ($p in $obj.PSObject.Properties) { $map[$p.Name] = $p.Value }
+    } catch {}
+    return $map
+}
+
+function Save-Receipts {
+    param([hashtable]$Map)
+    $dir = Split-Path $RECEIPTS_PATH -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    if ($Map.Count -eq 0) {
+        $json = "{}"
+    } else {
+        $out = New-Object PSObject
+        foreach ($k in ($Map.Keys | Sort-Object)) {
+            $out | Add-Member -NotePropertyName $k -NotePropertyValue $Map[$k]
+        }
+        $json = $out | ConvertTo-Json -Depth 4
+    }
+    [System.IO.File]::WriteAllText($RECEIPTS_PATH, $json, (New-Object System.Text.UTF8Encoding $false))
+}
+
+function Write-ReceiptEntry {
+    param([string]$PackageName, [string]$RepoPath, [string[]]$Checks)
+    $key = "$PackageName@$(Get-TreeHash $RepoPath)"
+    $map = Read-Receipts
+    $entry = if ($map.ContainsKey($key)) { $map[$key] } else { New-Object PSObject }
+    $now = [DateTime]::UtcNow.ToString('o')
+    foreach ($c in $Checks) {
+        $entry | Add-Member -NotePropertyName $c -NotePropertyValue $now -Force
+    }
+    $map[$key] = $entry
+    # Prune entries whose every check is stale beyond any plausible validity window.
+    $cutoff = [DateTime]::UtcNow.AddDays(-30)
+    foreach ($k in @($map.Keys)) {
+        $live = $false
+        foreach ($p in $map[$k].PSObject.Properties) {
+            try { if ([DateTime]::Parse($p.Value).ToUniversalTime() -gt $cutoff) { $live = $true; break } } catch {}
+        }
+        if (-not $live) { $map.Remove($k) }
+    }
+    Save-Receipts $map
+    return $key
+}
+
+function Test-Receipt {
+    param(
+        [string]$PackageName,
+        [string]$RepoPath,
+        [string]$Check,
+        [string]$TreeHash  # optional precomputed hash (avoids recomputation)
+    )
+    if (-not $TreeHash) { $TreeHash = Get-TreeHash $RepoPath }
+    $map = Read-Receipts
+    $key = "$PackageName@$TreeHash"
+    if (-not $map.ContainsKey($key)) { return $false }
+    $prop = $map[$key].PSObject.Properties[$Check]
+    if (-not $prop) { return $false }
+    try {
+        $ts = [DateTime]::Parse($prop.Value).ToUniversalTime()
+        return (([DateTime]::UtcNow - $ts).TotalDays -le $ReceiptMaxAgeDays)
+    } catch { return $false }
 }
 
 function Get-RepoSlugFromOriginUrl {
@@ -923,6 +1035,43 @@ if ($Packages) {
     )
 }
 
+# Receipt utility modes: record/show verification receipts and exit (no repo mutations).
+if ($RecordReceipt -or $ShowReceipts) {
+    if ($RecordReceipt -and -not $Packages) {
+        Write-Err "-RecordReceipt requires -Packages (recording is an explicit per-package assertion)"
+        exit 1
+    }
+    $receiptPkgs = if ($Packages) { $Packages } else { $STRICT_PACKAGES }
+    $receiptFail = $false
+    foreach ($pkg in $receiptPkgs) {
+        $repoPath = Join-Path $ROOT $pkg
+        if (-not (Test-Path (Join-Path $repoPath ".git"))) {
+            Write-Err "Not a git repo: $repoPath"
+            $receiptFail = $true
+            continue
+        }
+        if ($RecordReceipt) {
+            $checks = @($RecordReceipt | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            $key = Write-ReceiptEntry -PackageName $pkg -RepoPath $repoPath -Checks $checks
+            Write-Success "Recorded [$($checks -join ', ')] for $key"
+        } else {
+            $hash = Get-TreeHash $repoPath
+            $map = Read-Receipts
+            $key = "$pkg@$hash"
+            if ($map.ContainsKey($key)) {
+                $states = foreach ($p in $map[$key].PSObject.Properties) {
+                    $valid = Test-Receipt -PackageName $pkg -RepoPath $repoPath -Check $p.Name -TreeHash $hash
+                    "$($p.Name)=$(if ($valid) { 'VALID' } else { 'EXPIRED' })"
+                }
+                Write-Host "  $key : $($states -join ', ')" -ForegroundColor Cyan
+            } else {
+                Write-Host "  $key : no receipts for current tree" -ForegroundColor DarkGray
+            }
+        }
+    }
+    if ($receiptFail) { exit 1 } else { exit 0 }
+}
+
 $stopOnFailure = ($Merge -and $Strict)
 $localStrictVersions = $null
 if ($Strict) {
@@ -1008,6 +1157,66 @@ if ($reposToProcess.Count -gt 1) {
     }
     $remaining = $reposToProcess | Where-Object { $RELEASE_ORDER -notcontains $_.Name }
     $reposToProcess = @($ordered + $remaining)
+}
+
+# ------------------------------------------------------------------------------------------------
+# Review gate (Strict+Merge releases only). A package with a real code delta may not release
+# unless its CURRENT tree has a recorded "review" receipt. Runs as a pre-pass BEFORE any repo
+# mutation so (a) a failure has zero side effects and (b) the cascade's own mechanical commits
+# (pin-sync, version bump) can't void a receipt mid-run. No-delta and housekeeping-only
+# packages are exempt — "push everything" never demands review of untouched repos. The
+# failure text carries the full protocol so any session (or human) can complete preflight
+# without being re-instructed.
+# ------------------------------------------------------------------------------------------------
+if ($Merge -and $Strict -and -not $SkipReview) {
+    $reviewMissing = @()
+    foreach ($repo in $reposToProcess) {
+        $gateName = $repo.Name
+        if ($STRICT_PACKAGES -notcontains $gateName) { continue }
+        $gatePath = $repo.FullName
+        Push-Location $gatePath
+        try {
+            git fetch origin main dev --quiet 2>&1 | Out-Null
+            $gateDirty = [bool](git status --porcelain 2>$null)
+            $gateAhead = 0
+            $a = git rev-list --count origin/dev..dev 2>$null
+            if ($a) { $gateAhead = [int]$a }
+            $gateMainDelta = 0
+            $m = git rev-list --count origin/main..dev 2>$null
+            if ($m) { $gateMainDelta = [int]$m }
+        }
+        finally { Pop-Location }
+
+        if (-not ($gateDirty -or $gateAhead -gt 0 -or $gateMainDelta -gt 0)) { continue }
+        if (-not $gateDirty -and $gateAhead -eq 0 -and (Test-OnlyDevBumpChanges $gatePath $gateName)) {
+            Write-Skip "Review gate: $gateName delta is housekeeping only (exempt)"
+            continue
+        }
+
+        $gateHash = Get-TreeHash $gatePath
+        if (Test-Receipt -PackageName $gateName -RepoPath $gatePath -Check "review" -TreeHash $gateHash) {
+            Write-Success "Review receipt valid: $gateName@$gateHash"
+        } else {
+            $reviewMissing += "$gateName@$gateHash"
+        }
+    }
+    if ($reviewMissing.Count -gt 0) {
+        $missingNames = ($reviewMissing | ForEach-Object { ($_ -split '@')[0] }) -join ','
+        Write-Header "Review gate"
+        Write-Err "No review receipt for the current tree of: $($reviewMissing -join ', ')"
+        Write-Host @"
+  Release preflight (see m3trik/CLAUDE.md), for each package listed:
+    1. Review its release diff (git diff origin/main...dev + working tree):
+       correctness -> DRY -> simplification -> efficiency. Implement fixes;
+       out-of-scope findings -> .claude/BACKLOG.md.
+    2. Run its test suite, unless -ShowReceipts reports a valid "tests"
+       receipt for the unchanged tree.
+    3. Record, then re-run this same push command:
+       .\m3trik\push.ps1 -RecordReceipt review,tests -Packages $missingNames
+  Emergency bypass: -SkipReview (also required to DryRun past this gate).
+"@ -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 $results = @{}

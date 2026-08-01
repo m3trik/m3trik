@@ -176,6 +176,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "-DryRun",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-Packages",
                     "tentacle,blendertk,mayatk,pythontk,uitk",
                 ],
@@ -285,6 +286,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "pythontk,uitk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                 ],
@@ -331,6 +333,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "pythontk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                 ],
@@ -384,6 +387,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "pythontk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                     "-SkipPypiCheck",
@@ -448,6 +452,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "pythontk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                     "-SkipPypiCheck",
@@ -510,6 +515,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "pythontk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                     "-SkipPypiCheck",
@@ -567,6 +573,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "uitk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                 ],
@@ -618,6 +625,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "uitk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                     "-SkipPypiCheck",
@@ -666,6 +674,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "uitk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                     "-SkipPypiCheck",
@@ -713,6 +722,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "uitk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                     "-SkipPypiCheck",
@@ -751,6 +761,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "pythontk",
                     "-Strict",
                     "-Merge",
+                    "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
                     "-SkipPypiCheck",
@@ -762,6 +773,68 @@ class TestPushScriptRegressions(unittest.TestCase):
             out = result.stdout + result.stderr
             self.assertNotEqual(result.returncode, 0, out)
             self.assertIn("Origin remote is not a GitHub URL; cannot use PR mode", out)
+
+
+    def test_review_gate_blocks_unreviewed_delta_then_receipt_releases_it(self):
+        """The Strict+Merge review gate refuses a real code delta with no
+        receipt, and a recorded receipt for that exact tree lets it through.
+
+        Every other Strict+Merge test here passes ``-SkipReview`` because the
+        gate is a pre-pass that would short-circuit the rail it is exercising —
+        so without this test the gate itself ships uncovered. Both halves matter:
+        blocking proves the rail exists, and releasing after ``-RecordReceipt``
+        proves the tree hash the gate computes matches the one the recorder
+        writes (a drift there would deadlock every release).
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+
+            # A real (non-housekeeping) delta on dev — what the gate guards.
+            self._git(repo, "checkout", "dev")
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature")
+            self._git(repo, "push", "origin", "dev")
+
+            script = M3TRIK_DIR / "push.ps1"
+            base = [
+                "powershell",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script),
+                "-Root",
+                str(root),
+                "-Packages",
+                "pythontk",
+            ]
+            release = base + [
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+                "-SkipPypiCheck",
+            ]
+
+            blocked = self._run(release, cwd=root, timeout=120)
+            out = blocked.stdout + blocked.stderr
+            self.assertNotEqual(blocked.returncode, 0, out)
+            self.assertIn("No review receipt for the current tree", out)
+            # The failure must carry the protocol, not just a refusal.
+            self.assertIn("-RecordReceipt review", out)
+
+            recorded = self._run(
+                base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120
+            )
+            self.assertEqual(
+                recorded.returncode, 0, recorded.stdout + recorded.stderr
+            )
+
+            passed = self._run(release, cwd=root, timeout=180)
+            out2 = passed.stdout + passed.stderr
+            self.assertIn("Review receipt valid", out2)
+            self.assertNotIn("No review receipt for the current tree", out2)
 
 
 class TestPackageStructure(unittest.TestCase):

@@ -81,6 +81,38 @@ def load_static_surface(pkg_dir: Path) -> dict[str, dict[str, str]]:
 # ---------- runtime side ------------------------------------------------------
 
 
+def _own_and_private_base_records(obj: type) -> list:
+    """Records for *obj*'s own members plus those it inherits from a PRIVATE
+    base declared in the same module.
+
+    Mirrors ``generate_api_registry.py``'s static rule exactly, so the two
+    producers stay comparable.  ``_collect_records(inherited=False)`` is
+    ``cls.__dict__`` only, which drops the capability mixins this repo builds
+    its classes from (``Matrices(_MatrixMath, …)``,
+    ``PackageManager(_PackageManagerHelperMixin, …)``) — real public surface
+    (``ptk.PackageManager.install`` resolves through the MRO) that neither
+    side used to see.  ``inherited=True`` would over-report instead, pulling
+    in ``HelpMixin`` and every cross-module public base.
+    """
+    owners = [
+        klass
+        for klass in obj.__mro__
+        if klass is obj
+        or (
+            klass.__name__.startswith("_")
+            and getattr(klass, "__module__", None) == obj.__module__
+        )
+    ]
+    allowed = {name for klass in owners for name in vars(klass)}
+    records = obj._collect_records(inherited=True, private=False)
+    out, seen_names = [], set()
+    for rec in records:
+        if rec.name in allowed and rec.name not in seen_names:
+            seen_names.add(rec.name)
+            out.append(rec)
+    return out
+
+
 def runtime_surface_from_package(pkg_name: str) -> dict[str, list[dict]]:
     """Import ``pkg_name`` and dump ``{class_name: [record dict, ...]}`` for every
     exported ``HelpMixin`` subclass (own members only)."""
@@ -125,7 +157,7 @@ def runtime_surface_from_package(pkg_name: str) -> dict[str, list[dict]]:
             continue
         seen.add(id(obj))
         try:
-            records = obj._collect_records(inherited=False, private=False)
+            records = _own_and_private_base_records(obj)
         except Exception:  # noqa: BLE001
             skipped.append(obj.__name__)
             continue

@@ -12,6 +12,17 @@
 .\m3trik\push.ps1 -Packages pythontk,uitk -Strict -Merge
 ```
 
+## Release preflight — review gate
+
+`-Strict -Merge` refuses to release a package whose real code delta (dirty tree, unpushed dev, or non-housekeeping `origin/main..dev`) lacks a `review` receipt for the **current** tree. Receipts live in `.claude/receipts.json`, keyed `pkg@treehash` — any edit self-invalidates; max age 7 days; push.ps1 is the sole writer. Mechanical cascade commits (pin-sync/bump) and untouched packages are exempt.
+
+**On gate failure, do the preflight unprompted:**
+1. Review the release diff (`git diff origin/main...dev` + working tree): correctness → DRY → simplification → efficiency. Implement fixes; out-of-scope findings → `.claude/BACKLOG.md`.
+2. Run the package suite — unless `-ShowReceipts` shows a valid `tests` receipt for the unchanged tree (record once, never re-run green).
+3. `.\m3trik\push.ps1 -RecordReceipt review,tests -Packages <pkgs>`, then re-run the original push command.
+
+`-SkipReview` = emergency bypass (and required to DryRun past the gate).
+
 ## Style
 
 - PascalCase verbs (Verb-Noun).

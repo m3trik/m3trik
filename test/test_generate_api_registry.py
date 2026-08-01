@@ -108,5 +108,134 @@ class TestPropertyAccessorSkip(unittest.TestCase):
             self.assertEqual(sum(1 for n, _ in members if n == "val"), 1)
 
 
+class TestPrivateBaseMembersResolved(unittest.TestCase):
+    """A public class must expose members it inherits from a PRIVATE base
+    declared in the same module.
+
+    The repo composes its public classes from private capability mixins
+    (``Matrices(_MatrixMath, ...)``, ``TaskManager(_TaskChecksMixin, ...)``,
+    ``PackageManager(_PackageManagerHelperMixin, ...)``). A private class is
+    never emitted on its own, so before this ~100 genuinely public members
+    across four packages were unfindable in ``API_INDEX.md`` — which defeats
+    the "grep the registry before writing a helper" rule.
+    """
+
+    @staticmethod
+    def _walk(src: str):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            f = root / "m.py"
+            f.write_text(src, encoding="utf-8")
+            return g._walk_module(f, root)
+
+    def _members(self, src: str, cls_index: int = 0):
+        mod = self._walk(src)
+        return {(m.name, m.kind) for m in mod.classes[cls_index].members}
+
+    def test_private_base_members_are_pulled_up(self):
+        members = self._members(
+            "class _Mixin:\n"
+            "    def helper(self): pass\n"
+            "    @property\n"
+            "    def prop(self): pass\n"
+            "    def _hidden(self): pass\n"
+            "class Public(_Mixin):\n"
+            "    def own(self): pass\n"
+        )
+        self.assertIn(("own", "method"), members)
+        self.assertIn(("helper", "method"), members)
+        self.assertIn(("prop", "property"), members)
+        # a private member of a private base stays private
+        self.assertNotIn(("_hidden", "method"), {(n, k) for n, k in members})
+
+    def test_public_base_members_are_not_duplicated(self):
+        """A public base documents itself — pulling it up would duplicate."""
+        mod = self._walk(
+            "class Base:\n"
+            "    def shared(self): pass\n"
+            "class Derived(Base):\n"
+            "    def own(self): pass\n"
+        )
+        derived = next(c for c in mod.classes if c.name == "Derived")
+        self.assertNotIn("shared", {m.name for m in derived.members})
+
+    def test_override_wins_over_private_base(self):
+        """The class's own definition shadows the mixin's, and appears once."""
+        members = self._members(
+            "class _Mixin:\n"
+            "    def dupe(self): pass\n"
+            "class Public(_Mixin):\n"
+            "    @staticmethod\n"
+            "    def dupe(): pass\n"
+        )
+        self.assertIn(("dupe", "staticmethod"), members)
+        self.assertEqual(sum(1 for n, _ in members if n == "dupe"), 1)
+
+    def test_nested_private_bases_resolve(self):
+        """A private base's own private base is walked too."""
+        members = self._members(
+            "class _Deep:\n"
+            "    def deep(self): pass\n"
+            "class _Mid(_Deep):\n"
+            "    def mid(self): pass\n"
+            "class Public(_Mid):\n"
+            "    def own(self): pass\n"
+        )
+        self.assertEqual(
+            {"own", "mid", "deep"}, {n for n, _ in members}
+        )
+
+    def test_self_referential_base_does_not_recurse(self):
+        """A looping base graph must not crash the whole registry build.
+
+        Python could never run ``class _A(_A)``, but this walker parses
+        whatever is on disk (``_walk_module`` already swallows SyntaxError for
+        half-written files) and an uncaught RecursionError would take the CI
+        gate down over one bad file.
+        """
+        members = self._members(
+            "class _A(_A):\n"
+            "    def looped(self): pass\n"
+            "class Public(_A):\n"
+            "    def own(self): pass\n"
+        )
+        self.assertEqual({"own", "looped"}, {n for n, _ in members})
+
+    def test_mutually_referential_bases_do_not_recurse(self):
+        members = self._members(
+            "class _A(_B):\n"
+            "    def a(self): pass\n"
+            "class _B(_A):\n"
+            "    def b(self): pass\n"
+            "class Public(_A):\n"
+            "    def own(self): pass\n"
+        )
+        self.assertEqual({"own", "a", "b"}, {n for n, _ in members})
+
+    def test_diamond_private_bases_emit_once(self):
+        """A shared private base reached twice is traversed once."""
+        members = self._members(
+            "class _Base:\n"
+            "    def shared(self): pass\n"
+            "class _Left(_Base):\n"
+            "    def left(self): pass\n"
+            "class _Right(_Base):\n"
+            "    def right(self): pass\n"
+            "class Public(_Left, _Right):\n"
+            "    def own(self): pass\n"
+        )
+        names = [n for n, _ in members]
+        self.assertEqual({"own", "left", "right", "shared"}, set(names))
+        self.assertEqual(names.count("shared"), 1)
+
+    def test_cross_module_base_is_ignored(self):
+        """An unresolvable base name must not crash or invent members."""
+        members = self._members(
+            "class Public(_NotInThisFile, ptk.HelpMixin):\n"
+            "    def own(self): pass\n"
+        )
+        self.assertEqual({("own", "method")}, members)
+
+
 if __name__ == "__main__":
     unittest.main()

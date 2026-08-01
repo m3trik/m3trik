@@ -64,8 +64,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L35)
 - `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
-- `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L9)
-- `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L10)
+- `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L8)
+- `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L9)
 
 ### `ShotApply` — mayatk, pythontk
 
@@ -133,7 +133,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1780)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L1773)
 
 ### `main` — blendertk, extapps, mayatk
 
@@ -167,7 +167,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
 - `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
 - `mayatk` — [`register`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L26)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L1785)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L1778)
 
 ### `start_plugin` — blendertk, extapps, mayatk
 

@@ -39,12 +39,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `Parameters` — blendertk, mayatk, uitk
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L101)
-- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L182)
+- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L160)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L230)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L168)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L437)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L100)
-- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L184)
+- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L162)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L230)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L168)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L432)
@@ -141,7 +141,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L126)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L496)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L245)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L105)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L26)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L123)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L32)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L35)
@@ -177,7 +177,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (185)
+## Intentional mayatk↔blendertk port parity (183)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -238,7 +238,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ExplodedViewSlots`
 - `FKChainStrategy`
 - `FbxUtils`
-- `GameShader`
 - `GameShaderSlots`
 - `GapManagerMixin`
 - `GeometryMatcher`
@@ -324,7 +323,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Targets`
 - `TaskManager`
 - `TelescopeRig`
-- `TelescopeRigBundle`
 - `TelescopeRigSlots`
 - `TextureBaker`
 - `TexturePathEditorSlots`

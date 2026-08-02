@@ -16,10 +16,12 @@ none. These tests pin both directions: the metric must still fire on a genuinely
 visible control, and must stay silent on the two false-positive shapes."""
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -29,10 +31,8 @@ import generate_parity_audit as gpa  # noqa: E402
 
 class TestHollowHandlerMetric(unittest.TestCase):
     def _metrics(self, source):
-        import tempfile
-
         d = Path(tempfile.mkdtemp(prefix="gpa_"))
-        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        self.addCleanup(shutil.rmtree, d, True)
         p = d / "probe_slots.py"
         p.write_text(source, encoding="utf-8")
         return gpa.code_metrics(str(p))
@@ -141,49 +141,58 @@ class TestRegistryFreshnessGuard(unittest.TestCase):
     registry deliberately skips them. So `--check` failed with STALE INPUT after any panel
     had been opened, pointing the caller at a generator with nothing to regenerate."""
 
-    def _pkg(self, sources, registry_age=0):
-        """Build ROOT/<pkg>/{API_REGISTRY.json, <pkg>/...} with the registry stamped
-        `registry_age` seconds older than every source file."""
+    #: Arbitrary fixed epoch — the guard compares mtimes, so only the delta matters,
+    #: and a literal keeps the fixture independent of wall-clock resolution.
+    REGISTRY_MTIME = 1_700_000_000
+
+    def _pkg(self, sources, sources_newer_by=0):
+        """Build ROOT/<pkg>/{API_REGISTRY.json, <pkg>/...} and point `gpa.ROOT` at it.
+
+        Every source file is stamped `sources_newer_by` seconds AFTER the registry, so
+        the `newest > reg_m` comparison is exact rather than racing the filesystem's
+        timestamp resolution (0 = same instant, i.e. not stale).
+        """
         root = Path(tempfile.mkdtemp(prefix="gpa_fresh_"))
-        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        self.addCleanup(shutil.rmtree, root, True)
         pkg_dir = root / "probetk" / "probetk"
         pkg_dir.mkdir(parents=True)
 
         reg = root / "probetk" / "API_REGISTRY.json"
         reg.write_text("{}", encoding="utf-8")
+        os.utime(reg, (self.REGISTRY_MTIME, self.REGISTRY_MTIME))
 
+        stamp = self.REGISTRY_MTIME + sources_newer_by
         for name in sources:
             f = pkg_dir / name
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text("x = 1\n", encoding="utf-8")
-            # Stamp sources *after* the registry so the comparison is deterministic --
-            # a same-second mtime would make the `newest > reg_m` test flap.
-            os.utime(f, (1_700_000_000 + registry_age, 1_700_000_000 + registry_age))
-        os.utime(reg, (1_700_000_000, 1_700_000_000))
+            os.utime(f, (stamp, stamp))
 
-        self.enterContext(_patched(gpa, "ROOT", str(root)))
+        patcher = mock.patch.object(gpa, "ROOT", str(root))
+        patcher.start()
+        self.addCleanup(patcher.stop)
         return root
 
     def test_newer_ui_py_does_not_gate_freshness(self):
         # The regression: a compiler-regenerated `*_ui.py` is not registry input.
-        self._pkg(["panel_ui.py"], registry_age=500)
+        self._pkg(["panel_ui.py"], sources_newer_by=500)
         gpa.check_registry_freshness("probetk")  # must not SystemExit
 
     def test_newer_nested_ui_py_does_not_gate_freshness(self):
         # The glob is recursive; the exclusion must hold at any depth.
-        self._pkg(["rig_utils/telescope_rig_ui.py"], registry_age=500)
+        self._pkg(["rig_utils/telescope_rig_ui.py"], sources_newer_by=500)
         gpa.check_registry_freshness("probetk")
 
     def test_newer_real_source_still_gates_freshness(self):
         # The guard's whole point: a real source edit must still refuse the run.
-        self._pkg(["telescope_rig.py"], registry_age=500)
+        self._pkg(["telescope_rig.py"], sources_newer_by=500)
         with self.assertRaises(SystemExit) as cm:
             gpa.check_registry_freshness("probetk")
         self.assertIn("STALE INPUT", str(cm.exception))
 
     def test_ui_py_exclusion_does_not_mask_a_sibling_edit(self):
         # A `_ui.py` sitting next to a genuinely stale module must not hide it.
-        self._pkg(["panel_ui.py", "panel.py"], registry_age=500)
+        self._pkg(["panel_ui.py", "panel.py"], sources_newer_by=500)
         with self.assertRaises(SystemExit):
             gpa.check_registry_freshness("probetk")
 
@@ -193,22 +202,6 @@ class TestRegistryFreshnessGuard(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             gpa.check_registry_freshness("probetk")
         self.assertIn("missing", str(cm.exception))
-
-
-class _patched:
-    """Minimal setattr context manager (unittest.mock is not a dependency here)."""
-
-    def __init__(self, obj, name, value):
-        self.obj, self.name, self.value = obj, name, value
-
-    def __enter__(self):
-        self.old = getattr(self.obj, self.name)
-        setattr(self.obj, self.name, self.value)
-        return self.value
-
-    def __exit__(self, *exc):
-        setattr(self.obj, self.name, self.old)
-        return False
 
 
 if __name__ == "__main__":

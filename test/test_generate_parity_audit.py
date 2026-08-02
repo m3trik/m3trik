@@ -15,7 +15,9 @@ That reported "13 hollow handlers" in PARITY_AUDIT.md's headline scorecard where
 none. These tests pin both directions: the metric must still fire on a genuinely dead
 visible control, and must stay silent on the two false-positive shapes."""
 
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -130,6 +132,83 @@ class TestHollowHandlerMetric(unittest.TestCase):
         self.assertEqual(m["opt_boxes"], 2)  # both the _init and the handler reference it
         self.assertEqual(m["handlers"], 1)  # _init is not a handler
         self.assertEqual(m["controls"], 1)  # one .add( that is not a Separator
+
+
+class TestRegistryFreshnessGuard(unittest.TestCase):
+    """The L4 layer reads API_REGISTRY.json, so the guard refuses a registry older than the
+    package source. But its glob saw `*_ui.py` too -- uitk's compiler rewrites those every
+    time a panel's `.ui` changes (i.e. every time a tool is opened in a DCC), while the
+    registry deliberately skips them. So `--check` failed with STALE INPUT after any panel
+    had been opened, pointing the caller at a generator with nothing to regenerate."""
+
+    def _pkg(self, sources, registry_age=0):
+        """Build ROOT/<pkg>/{API_REGISTRY.json, <pkg>/...} with the registry stamped
+        `registry_age` seconds older than every source file."""
+        root = Path(tempfile.mkdtemp(prefix="gpa_fresh_"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        pkg_dir = root / "probetk" / "probetk"
+        pkg_dir.mkdir(parents=True)
+
+        reg = root / "probetk" / "API_REGISTRY.json"
+        reg.write_text("{}", encoding="utf-8")
+
+        for name in sources:
+            f = pkg_dir / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("x = 1\n", encoding="utf-8")
+            # Stamp sources *after* the registry so the comparison is deterministic --
+            # a same-second mtime would make the `newest > reg_m` test flap.
+            os.utime(f, (1_700_000_000 + registry_age, 1_700_000_000 + registry_age))
+        os.utime(reg, (1_700_000_000, 1_700_000_000))
+
+        self.enterContext(_patched(gpa, "ROOT", str(root)))
+        return root
+
+    def test_newer_ui_py_does_not_gate_freshness(self):
+        # The regression: a compiler-regenerated `*_ui.py` is not registry input.
+        self._pkg(["panel_ui.py"], registry_age=500)
+        gpa.check_registry_freshness("probetk")  # must not SystemExit
+
+    def test_newer_nested_ui_py_does_not_gate_freshness(self):
+        # The glob is recursive; the exclusion must hold at any depth.
+        self._pkg(["rig_utils/telescope_rig_ui.py"], registry_age=500)
+        gpa.check_registry_freshness("probetk")
+
+    def test_newer_real_source_still_gates_freshness(self):
+        # The guard's whole point: a real source edit must still refuse the run.
+        self._pkg(["telescope_rig.py"], registry_age=500)
+        with self.assertRaises(SystemExit) as cm:
+            gpa.check_registry_freshness("probetk")
+        self.assertIn("STALE INPUT", str(cm.exception))
+
+    def test_ui_py_exclusion_does_not_mask_a_sibling_edit(self):
+        # A `_ui.py` sitting next to a genuinely stale module must not hide it.
+        self._pkg(["panel_ui.py", "panel.py"], registry_age=500)
+        with self.assertRaises(SystemExit):
+            gpa.check_registry_freshness("probetk")
+
+    def test_missing_registry_is_reported(self):
+        root = self._pkg(["panel.py"])
+        (root / "probetk" / "API_REGISTRY.json").unlink()
+        with self.assertRaises(SystemExit) as cm:
+            gpa.check_registry_freshness("probetk")
+        self.assertIn("missing", str(cm.exception))
+
+
+class _patched:
+    """Minimal setattr context manager (unittest.mock is not a dependency here)."""
+
+    def __init__(self, obj, name, value):
+        self.obj, self.name, self.value = obj, name, value
+
+    def __enter__(self):
+        self.old = getattr(self.obj, self.name)
+        setattr(self.obj, self.name, self.value)
+        return self.value
+
+    def __exit__(self, *exc):
+        setattr(self.obj, self.name, self.old)
+        return False
 
 
 if __name__ == "__main__":

@@ -46,9 +46,12 @@ def check_registry_freshness(pkg):
     if not os.path.isfile(reg):
         sys.exit(f"missing {reg} — run generate_api_registry.py {pkg} first")
     reg_m = os.path.getmtime(reg)
+    # `*_ui.py` are gitignored compiler output (uitk regenerates them whenever a
+    # panel's .ui changes, i.e. every time a tool is opened) and carry no public
+    # symbols — the registry skips them, so they must not gate its freshness.
     newest = max(
         (os.path.getmtime(f) for f in glob.glob(rp(pkg, pkg, "**", "*.py"), recursive=True)
-         if "__pycache__" not in f),
+         if "__pycache__" not in f and not f.endswith("_ui.py")),
         default=0,
     )
     if newest > reg_m:

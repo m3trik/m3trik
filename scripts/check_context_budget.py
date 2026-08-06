@@ -10,6 +10,8 @@ Checks
 ------
   MEMORY    auto-memory index (MEMORY.md) byte cap + per-entry char cap +
             1-link-per-topic-file coverage (no orphans, no broken links).
+            An indexed HUB topic covers the sibling files its body links, so
+            a cap-managed family costs the index one entry (one level deep).
   CLAUDE    each CLAUDE.md size (advisory + hard caps).
   TOPIC     memory topic-file soft size cap (flag oversized files to split).
   DISPATCH  root CLAUDE.md dispatch table covers every ECOSYSTEM_PACKAGES member
@@ -56,6 +58,9 @@ DEFAULT_MEMORY_DIR = (
 
 _INDEX_ENTRY_RE = re.compile(r"^- \[.*?\]\(([^)]+\.md)\)")
 _LINK_RE = re.compile(r"\]\(([^)]+)\)")
+# Sibling-file link inside a topic body (no path separators / schemes) — how a
+# HUB topic indexes a family of files on MEMORY.md's behalf.
+_BODY_LINK_RE = re.compile(r"\]\(([\w.-]+\.md)\)")
 
 
 def _broken_links(text: str, base_dir: Path) -> list[str]:
@@ -134,17 +139,39 @@ def check_memory(memory_dir: Path, report: Report) -> None:
     linked_set = set(linked)
     dups = sorted(f for f in linked_set if linked.count(f) > 1)
     broken = sorted(linked_set - topic_files)
-    orphan = sorted(topic_files - linked_set)
+
+    # A topic file is also recallable through a HUB: an indexed topic whose body
+    # links sibling topic files, indexing a whole family on MEMORY.md's behalf
+    # (e.g. the live-pass queue's ~27 project files — per-family hubs are how the
+    # index stays under its byte cap). One level only: a hub's links count solely
+    # because the hub itself is indexed.
+    hub_linked: set[str] = set()
+    hub_broken: set[str] = set()
+    for hub in linked_set & topic_files:
+        body = (memory_dir / hub).read_text(encoding="utf-8", errors="replace")
+        for name in _BODY_LINK_RE.findall(body):
+            (hub_linked if name in topic_files else hub_broken).add(name)
+
+    orphan = sorted(topic_files - linked_set - hub_linked)
     if dups:
         report.fail(f"MEMORY.md: {len(dups)} topic file(s) linked more than once: {dups}")
     if broken:
         report.fail(f"MEMORY.md: {len(broken)} index link(s) point to missing files: {broken}")
+    if hub_broken:
+        report.fail(
+            f"MEMORY.md: {len(hub_broken)} hub link(s) point to missing files: {sorted(hub_broken)}"
+        )
     if orphan:
-        report.fail(f"MEMORY.md: {len(orphan)} topic file(s) have NO index entry (un-recallable): {orphan}")
-    if not (dups or broken or orphan):
+        report.fail(
+            f"MEMORY.md: {len(orphan)} topic file(s) have NO index entry and NO "
+            f"hub link (un-recallable): {orphan}"
+        )
+    if not (dups or broken or hub_broken or orphan):
+        hub_only = (topic_files - linked_set) & hub_linked
         report.ok(
-            f"MEMORY.md coverage clean: {len(linked)} entries == {len(topic_files)} "
-            f"topic files (longest entry {longest} chars)"
+            f"MEMORY.md coverage clean: {len(linked)} index entries + "
+            f"{len(hub_only)} hub-covered == {len(topic_files)} topic files "
+            f"(longest entry {longest} chars)"
         )
 
     big = [(p.name, p.stat().st_size) for p in topic_paths if p.stat().st_size > TOPIC_WARN]

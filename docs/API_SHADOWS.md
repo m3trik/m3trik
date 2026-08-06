@@ -33,7 +33,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
 - `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L57)
-- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L58)
+- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L57)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L57)
 
 ### `Parameters` — blendertk, mayatk, uitk
@@ -85,13 +85,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `TemplateParams` — blendertk, extapps, mayatk
 
 - `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L73)
-- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L50)
+- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L73)
 - `mayatk` — [`TemplateParams`](mayatk/mat_utils/marmoset_bridge/template_params.py#L73)
 
 ### `ToolbagHelpers` — blendertk, extapps, mayatk
 
 - `blendertk` — [`ToolbagHelpers`](blendertk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L200)
-- `extapps` — [`ToolbagHelpers`](extapps/marmoset_workflow/_toolbag_helpers.py#L120)
+- `extapps` — [`ToolbagHelpers`](extapps/marmoset_workflow/_toolbag_helpers.py#L200)
 - `mayatk` — [`ToolbagHelpers`](mayatk/mat_utils/marmoset_bridge/_toolbag_helpers.py#L200)
 
 ### `ToolbagLog` — blendertk, extapps, mayatk
@@ -111,7 +111,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `close_plugin` — blendertk, extapps, mayatk
 
 - `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L45)
-- `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L75)
+- `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L121)
 - `mayatk` — [`close_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L45)
 
 ### `describe` — blendertk, extapps, mayatk
@@ -146,8 +146,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L358)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)
-- `extapps` — [`main`](extapps/marmoset_workflow/templates/import.py#L32)
-- `extapps` — [`main`](extapps/marmoset_workflow/templates/lookdev.py#L35)
+- `extapps` — [`main`](extapps/marmoset_workflow/templates/import.py#L35)
+- `extapps` — [`main`](extapps/marmoset_workflow/templates/lookdev.py#L38)
 - `extapps` — [`main`](extapps/photogrammetry/gaussian_splat_workflow/_install_brush.py#L19)
 - `extapps` — [`main`](extapps/photogrammetry/gaussian_splat_workflow/run_combined.py#L46)
 - `extapps` — [`main`](extapps/photogrammetry/metashape_workflow/run_combined.py#L224)
@@ -181,12 +181,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `start_plugin` — blendertk, extapps, mayatk
 
 - `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L33)
-- `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L61)
+- `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L107)
 - `mayatk` — [`start_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L33)
 
 ---
 
-## Intentional mayatk↔blendertk port parity (194)
+## Intentional mayatk↔blendertk port parity (195)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -351,6 +351,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UsdUtils`
 - `UvUtils`
 - `Validator`
+- `WebXrPreview`
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`

@@ -28,7 +28,7 @@ is what enforces it.
 
 - `MEMORY.md` ≤ **24,400 bytes** (the harness load cap). Over → the index is silently truncated.
 - Each `MEMORY.md` index entry ≤ **280 chars** (slug + link + one ≤200-char relevance hook).
-- Every `memory/*.md` topic file has **exactly one** index link — no orphans (un-recallable), no broken links.
+- Every `memory/*.md` topic file has **exactly one** index link — no orphans (un-recallable), no broken links — **or** one link from an indexed **hub** topic (a family index like the live-pass queue: the whole family costs MEMORY.md one entry; hub links are checked too, one level deep).
 - Each `CLAUDE.md` ≤ **10,240 bytes**.
 - Registries fresh vs source (`generate_api_registry.py --check`).
 - Root dispatch table covers **every** `ECOSYSTEM_PACKAGES` member.

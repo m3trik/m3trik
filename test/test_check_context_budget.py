@@ -78,6 +78,28 @@ class TestMemoryGuard(unittest.TestCase):
         _write(self.dir, "MEMORY.md", "# Memory Index\n\n- [A](reference_a.md) — ok\n")
         self.assertTrue(any("NO index entry" in f for f in self._run().fails))
 
+    def test_hub_linked_topic_is_not_orphan(self):
+        # An indexed HUB topic covers the sibling files its body links — a
+        # cap-managed family costs MEMORY.md one entry (the live-pass pattern).
+        _write(self.dir, "project_hub.md", "Hub.\n\n- [Child](project_child.md) — detail\n")
+        _write(self.dir, "project_child.md", "child detail")
+        _write(self.dir, "MEMORY.md", "# Memory Index\n\n- [Hub](project_hub.md) — family hub\n")
+        self.assertEqual(self._run().fails, [])
+
+    def test_hub_link_to_missing_file_fails(self):
+        _write(self.dir, "project_hub.md", "Hub.\n\n- [Gone](project_gone.md) — dangling\n")
+        _write(self.dir, "MEMORY.md", "# Memory Index\n\n- [Hub](project_hub.md) — family hub\n")
+        self.assertTrue(any("hub link" in f for f in self._run().fails))
+
+    def test_unindexed_hub_confers_no_coverage(self):
+        # One level only: links in a topic that is NOT itself indexed cover nothing.
+        _write(self.dir, "project_hub.md", "- [Child](project_child.md)\n")
+        _write(self.dir, "project_child.md", "child")
+        _write(self.dir, "MEMORY.md", "# Memory Index\n")
+        fails = self._run().fails
+        self.assertTrue(any("project_hub.md" in f and "un-recallable" in f for f in fails))
+        self.assertTrue(any("project_child.md" in f for f in fails))
+
     def test_missing_memory_dir_warns_not_fails(self):
         rep = self._run()  # empty dir, no MEMORY.md
         self.assertEqual(rep.fails, [])

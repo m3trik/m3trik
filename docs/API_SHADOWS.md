@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-08-06_
+_Generated: 2026-08-07_
 
 ## Genuine cross-layer collisions (24)
 
@@ -186,7 +186,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (195)
+## Intentional mayatk↔blendertk port parity (194)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -351,7 +351,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UsdUtils`
 - `UvUtils`
 - `Validator`
-- `WebXrPreview`
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`

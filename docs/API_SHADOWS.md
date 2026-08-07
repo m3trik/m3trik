@@ -30,11 +30,27 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
 
+### `MainThreadMarshaller` — blendertk, mayatk, pythontk
+
+- `blendertk` — [`MainThreadMarshaller`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L162)
+- `blendertk` — [`MainThreadMarshaller`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L162)
+- `mayatk` — [`MainThreadMarshaller`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L162)
+- `mayatk` — [`MainThreadMarshaller`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L162)
+- `pythontk` — [`MainThreadMarshaller`](pythontk/net_utils/rpc/plugin_core.py#L162)
+
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
 - `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L57)
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L57)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L57)
+
+### `OpRegistry` — blendertk, mayatk, pythontk
+
+- `blendertk` — [`OpRegistry`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L84)
+- `blendertk` — [`OpRegistry`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L84)
+- `mayatk` — [`OpRegistry`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L84)
+- `mayatk` — [`OpRegistry`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L84)
+- `pythontk` — [`OpRegistry`](pythontk/net_utils/rpc/plugin_core.py#L84)
 
 ### `Parameters` — blendertk, mayatk, uitk
 
@@ -59,6 +75,14 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `extapps` — [`Result`](extapps/substance_workflow/job.py#L27)
 - `pythontk` — [`Result`](pythontk/net_utils/rpc/job.py#L86)
+
+### `RpcPlugin` — blendertk, mayatk, pythontk
+
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L326)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L326)
+- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L326)
+- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L326)
+- `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L326)
 
 ### `Selection` — blendertk, mayatk, tentacle
 
@@ -100,35 +124,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`ToolbagLog`](extapps/marmoset_workflow/toolbag_log.py#L30)
 - `mayatk` — [`ToolbagLog`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L30)
 
-### `all_ops` — blendertk, extapps, mayatk
-
-- `blendertk` — [`all_ops`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L41)
-- `blendertk` — [`all_ops`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L46)
-- `extapps` — [`all_ops`](extapps/substance_workflow/registry.py#L43)
-- `mayatk` — [`all_ops`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L41)
-- `mayatk` — [`all_ops`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L46)
-
 ### `close_plugin` — blendertk, extapps, mayatk
 
-- `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L45)
+- `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L76)
 - `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L121)
-- `mayatk` — [`close_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L45)
-
-### `describe` — blendertk, extapps, mayatk
-
-- `blendertk` — [`describe`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L46)
-- `blendertk` — [`describe`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L51)
-- `extapps` — [`describe`](extapps/substance_workflow/registry.py#L47)
-- `mayatk` — [`describe`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L46)
-- `mayatk` — [`describe`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L51)
-
-### `get` — blendertk, extapps, mayatk
-
-- `blendertk` — [`get`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L36)
-- `blendertk` — [`get`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L41)
-- `extapps` — [`get`](extapps/substance_workflow/registry.py#L39)
-- `mayatk` — [`get`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L36)
-- `mayatk` — [`get`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L41)
+- `mayatk` — [`close_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L76)
 
 ### `launch` — mayatk, tentacle
 
@@ -162,13 +162,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)
 
-### `register` — blendertk, extapps, mayatk, tentacle
+### `register` — extapps, tentacle
 
-- `blendertk` — [`register`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `blendertk` — [`register`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L26)
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
-- `mayatk` — [`register`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/registry.py#L21)
-- `mayatk` — [`register`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/registry.py#L26)
 - `tentacle` — [`register`](tentacle/tcl_blender.py#L1778)
 
 ### `set_resolution` — blendertk, extapps, mayatk
@@ -180,13 +176,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `start_plugin` — blendertk, extapps, mayatk
 
-- `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L33)
+- `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L69)
 - `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L107)
-- `mayatk` — [`start_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L33)
+- `mayatk` — [`start_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L69)
 
 ---
 
-## Intentional mayatk↔blendertk port parity (194)
+## Intentional mayatk↔blendertk port parity (189)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -351,6 +347,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UsdUtils`
 - `UvUtils`
 - `Validator`
+- `WebXrPreview`
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`
@@ -358,24 +355,18 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `apply_manifest`
 - `apply_mesh_maps`
 - `autostart`
-- `clear`
 - `collect_instance_groups`
-- `describe_op`
 - `eval_python`
 - `export_usd`
 - `import_source`
-- `is_main_thread_marshalling_active`
 - `is_running`
 - `js_evaluate`
 - `list_materials`
-- `list_ops`
 - `mesh_reload`
 - `mesh_reload_status`
 - `pending_setup`
-- `ping`
 - `project_info`
 - `restore_empty_groups`
-- `run_on_main_thread`
 - `set_high_poly`
 - `start_server`
 - `stop_server`

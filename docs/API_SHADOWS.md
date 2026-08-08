@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-08-07_
+_Generated: 2026-08-08_
 
 ## Genuine cross-layer collisions (24)
 
@@ -36,7 +36,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`MainThreadMarshaller`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L162)
 - `mayatk` — [`MainThreadMarshaller`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L162)
 - `mayatk` — [`MainThreadMarshaller`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L162)
-- `pythontk` — [`MainThreadMarshaller`](pythontk/net_utils/rpc/plugin_core.py#L162)
+- `pythontk` — [`MainThreadMarshaller`](pythontk/net_utils/rpc/plugin_core.py#L200)
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
@@ -82,7 +82,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L326)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L326)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L326)
-- `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L326)
+- `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L394)
 
 ### `Selection` — blendertk, mayatk, tentacle
 

@@ -32,15 +32,15 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`MainThreadMarshaller`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L162)
-- `blendertk` — [`MainThreadMarshaller`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L162)
+- `blendertk` — [`MainThreadMarshaller`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L200)
+- `blendertk` — [`MainThreadMarshaller`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L200)
 - `mayatk` — [`MainThreadMarshaller`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L200)
 - `mayatk` — [`MainThreadMarshaller`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L200)
 - `pythontk` — [`MainThreadMarshaller`](pythontk/net_utils/rpc/plugin_core.py#L200)
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
-- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L57)
+- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L57)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
 
@@ -56,7 +56,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L112)
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L165)
-- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L324)
+- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L404)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L265)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L452)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L268)
@@ -78,8 +78,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `RpcPlugin` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L326)
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L326)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L394)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L394)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L394)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L394)
 - `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L394)
@@ -108,7 +108,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `TemplateParams` — blendertk, extapps, mayatk
 
-- `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L73)
+- `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L93)
 - `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L73)
 - `mayatk` — [`TemplateParams`](mayatk/mat_utils/marmoset_bridge/template_params.py#L93)
 
@@ -126,7 +126,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `close_plugin` — blendertk, extapps, mayatk
 
-- `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L76)
+- `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L80)
 - `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L121)
 - `mayatk` — [`close_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L80)
 
@@ -143,7 +143,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L428)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L148)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L193)
-- `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L358)
+- `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L642)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)
 - `extapps` — [`main`](extapps/marmoset_workflow/templates/import.py#L35)
@@ -177,13 +177,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `start_plugin` — blendertk, extapps, mayatk
 
-- `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L69)
+- `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L73)
 - `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L107)
 - `mayatk` — [`start_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L73)
 
 ---
 
-## Intentional mayatk↔blendertk port parity (189)
+## Intentional mayatk↔blendertk port parity (190)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -299,6 +299,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SceneDataSidecar`
 - `SceneExporter`
 - `SceneExporterSlots`
+- `SceneState`
 - `ScriptConsole`
 - `ScriptJobManager`
 - `SegmentCollector`

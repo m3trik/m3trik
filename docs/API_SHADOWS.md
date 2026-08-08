@@ -41,7 +41,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
 - `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
-- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L57)
+- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L58)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk
@@ -109,7 +109,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `TemplateParams` — blendertk, extapps, mayatk
 
 - `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L93)
-- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L73)
+- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L93)
 - `mayatk` — [`TemplateParams`](mayatk/mat_utils/marmoset_bridge/template_params.py#L93)
 
 ### `ToolbagHelpers` — blendertk, extapps, mayatk

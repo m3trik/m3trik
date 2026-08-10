@@ -42,7 +42,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L58)
-- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
+- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk
 
@@ -59,7 +59,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L404)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L265)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L452)
-- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L268)
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L228)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L404)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L265)
@@ -157,9 +157,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L239)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L227)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L99)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L254)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L113)
-- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L642)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L423)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L138)
+- `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L644)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)
 

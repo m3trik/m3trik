@@ -40,7 +40,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
-- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L58)
+- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L58)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
 
@@ -143,7 +143,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L428)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L148)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L193)
-- `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L642)
+- `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L644)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)
 - `extapps` — [`main`](extapps/marmoset_workflow/templates/import.py#L35)

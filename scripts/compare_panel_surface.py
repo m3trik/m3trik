@@ -793,6 +793,14 @@ def diff_pair(maya_py, blend_py, pair_key, ledger, is_slot, domain=None):
 
 
 # =========================================================================== discovery
+def _slots_classes(path):
+    """``*Slots`` class names defined in *path* — what makes a file a panel."""
+    try:
+        return re.findall(r"^class (\w+Slots)\b", read(path), re.M)
+    except OSError:
+        return []
+
+
 def _classes(pkg):
     """Map ``*Slots`` class name -> file for a package (skips build/ + tests)."""
     out = {}
@@ -800,11 +808,7 @@ def _classes(pkg):
         fp = f.replace("\\", "/")
         if "/build/" in fp or "/temp_tests/" in fp or "__pycache__" in fp:
             continue
-        try:
-            src = read(f)
-        except OSError:
-            continue
-        for cn in re.findall(r"^class (\w+Slots)\b", src, re.M):
+        for cn in _slots_classes(f):
             out.setdefault(cn, f)
     return out
 
@@ -816,20 +820,60 @@ def _slot_files(dcc):
 
 
 def _resolve(panel):
-    def _find(pkg):
+    """Resolve ``--panel <name>`` to the (maya, blender) panel file pair.
+
+    Filenames first (``<panel>.py`` / ``<panel>_slots.py``), then the same
+    ``*Slots``-class pairing ``--all`` uses.  Both steps are needed, because a
+    filename is not what makes a file a panel:
+
+    - A package can ship BOTH forms for one tool -- blendertk's scene exporter
+      is ``_scene_exporter.py`` (the Qt-free engine, which defines no controls)
+      *and* ``scene_exporter_slots.py`` (the panel).  Only files defining a
+      ``*Slots`` class are accepted here, so the engine can never win.
+    - The twin need not share the Maya file's stem at all: mayatk
+      ``_scene_exporter.py`` pairs with blendertk ``scene_exporter_slots.py``,
+      which no ``_scene_exporter*`` glob can find.  Whichever side resolves is
+      therefore used to look the other up by class name.
+
+    Resolving to the engine diffed the Maya panel against an empty surface and
+    reported all 11 of its real controls as phantom gaps -- indistinguishable
+    from a genuine parity regression.  ``--all`` was never affected: it pairs
+    by class from the start.
+    """
+    tables = {pkg: _classes(pkg) for pkg in ("mayatk", "blendertk")}
+
+    def _by_name(pkg):
+        # Matched against the class table rather than a second glob: it is
+        # already only panel files, at their real on-disk casing.  A glob whose
+        # final segment holds no wildcard is answered by an existence check on
+        # Windows, so it echoes the PATTERN's casing back -- `--panel Widget`
+        # returned `.../Widget_slots.py` for a file named `widget_slots.py`,
+        # and that basename becomes the key every parity_map lookup is done
+        # with, so the mis-cased spelling silently missed every ledger entry.
+        by_base = {}
+        for f in tables[pkg].values():
+            by_base.setdefault(os.path.basename(f), f)
         for name in (panel + ".py", panel + "_slots.py"):
-            hits = [h for h in glob.glob(os.path.join(ROOT, pkg, pkg, "**", name), recursive=True)
-                    if "__pycache__" not in h]
-            if hits:
-                return hits[0]
+            if name in by_base:
+                return by_base[name]
         return None
 
-    out = {}
-    for pkg in ("mayatk", "blendertk"):
-        hit = _find(pkg)
+    # A class name is accepted too, so the panel names printed by --all
+    # (`SceneExporter`) can be pasted straight back in.
+    out = {
+        pkg: _by_name(pkg) or tables[pkg].get(panel) or tables[pkg].get(panel + "Slots")
+        for pkg in tables
+    }
+    for src, dst in (("mayatk", "blendertk"), ("blendertk", "mayatk")):
+        if out[src] and not out[dst]:
+            out[dst] = next(
+                (tables[dst][cn] for cn in _slots_classes(out[src]) if cn in tables[dst]),
+                None,
+            )
+
+    for pkg, hit in out.items():
         if not hit:
-            sys.exit(f"could not resolve {panel}.py (or {panel}_slots.py) under {pkg}/")
-        out[pkg] = hit
+            sys.exit(f"could not resolve {panel!r} to a *Slots panel under {pkg}/")
     return out["mayatk"], out["blendertk"]
 
 

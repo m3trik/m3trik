@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-08-10_
+_Generated: 2026-08-11_
 
 ## Genuine cross-layer collisions (24)
 
@@ -41,7 +41,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
 - `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
-- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L58)
+- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L66)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk

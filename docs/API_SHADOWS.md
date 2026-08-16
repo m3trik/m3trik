@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-08-13_
+_Generated: 2026-08-15_
 
 ## Genuine cross-layer collisions (24)
 
@@ -103,7 +103,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L310)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L306)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L269)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -150,8 +150,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/marmoset_workflow/templates/lookdev.py#L38)
 - `extapps` — [`main`](extapps/photogrammetry/gaussian_splat_workflow/_install_brush.py#L19)
 - `extapps` — [`main`](extapps/photogrammetry/gaussian_splat_workflow/run_combined.py#L46)
-- `extapps` — [`main`](extapps/photogrammetry/metashape_workflow/run_combined.py#L224)
-- `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L133)
+- `extapps` — [`main`](extapps/photogrammetry/metashape_workflow/run_combined.py#L249)
+- `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L169)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L239)

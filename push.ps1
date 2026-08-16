@@ -53,7 +53,8 @@ Key flags
 -WorkflowTimeoutSeconds / -WorkflowPollSeconds
                               Control workflow wait behavior.
 -PypiVisibilityTimeoutSeconds How long to wait for a just-published version to become
-                              visible on PyPI's API before continuing (default 180).
+                              visible on PyPI's simple index (the surface pip
+                              resolves against) before continuing (default 300).
 
 Notes
 - Install requirements come from pyproject.toml (requirements.txt is deprecated repo-wide).
@@ -83,7 +84,7 @@ param(
     # over-generous wait safe; a genuinely hung run just costs a longer wait.
     [int]$WorkflowTimeoutSeconds = 2400,
     [int]$WorkflowPollSeconds = 15,
-    [int]$PypiVisibilityTimeoutSeconds = 180,
+    [int]$PypiVisibilityTimeoutSeconds = 300,
     [string]$WorkflowFile = "publish.yml",
     [string]$Root = "O:\Cloud\Code\_scripts",
     [string]$CommitMessage = "Update"
@@ -238,13 +239,46 @@ function Test-PypiHasVersion {
         [string]$Version
     )
 
+    # Probe the SIMPLE index (PEP 691 JSON form) — the surface pip actually
+    # resolves against. The JSON API (`/pypi/<name>/json`) updates ahead of it
+    # after an upload, so gating there let the cascade proceed while a
+    # downstream workflow's `pip install <pkg>>=<ver>` still failed with
+    # "No matching distribution found" (measured 2026-08-13: this gate
+    # confirmed uitk==1.3.76 while /simple/uitk/ still listed 1.3.73).
     try {
-        $url = "https://pypi.org/pypi/$ProjectName/json"
-        $data = Invoke-RestMethod -Uri $url -Method Get -ErrorAction Stop
-        if (-not $data -or -not $data.releases) {
+        # PEP 503 name normalization: lowercase; runs of ., -, _ collapse to -.
+        $normalized = $ProjectName.ToLowerInvariant() -replace '[-_.]+', '-'
+        $url = "https://pypi.org/simple/$normalized/"
+        $data = Invoke-RestMethod -Uri $url -Method Get -ErrorAction Stop -Headers @{
+            Accept = "application/vnd.pypi.simple.v1+json"
+        }
+        # PS 5.1 only auto-parses recognized JSON content types; the vendored
+        # +json type may come back as a raw string.
+        if ($data -is [string]) { $data = $data | ConvertFrom-Json }
+        if (-not $data) {
             return $false
         }
-        return $data.releases.PSObject.Properties.Name -contains $Version
+        if ($data.versions) {
+            return @($data.versions) -contains $Version
+        }
+        # Strict PEP 691 v1.0 indexes may omit the PEP 700 `versions` key and
+        # only list `files`; fall back to matching the version against filenames.
+        # Anchored on the real delimiters so the bound cuts both ways: a version
+        # is preceded by `-` (PEP 427 wheel / PEP 625 sdist both use
+        # `{name}-{version}`) and followed by `-` (wheel) or the archive suffix
+        # (sdist). That rejects "1.3.7" against "...-1.3.76-..." AND still
+        # matches an sdist-only listing — a trailing [^0-9A-Za-z.] class excludes
+        # the dot, so it never matched "pkg-1.3.76.tar.gz" at all.
+        if ($data.files) {
+            $escaped = [regex]::Escape($Version)
+            $pattern = "(?:^|-)$escaped(?:-|\.tar\.gz$|\.zip$)"
+            foreach ($f in @($data.files)) {
+                if ($f.filename -and ($f.filename -match $pattern)) {
+                    return $true
+                }
+            }
+        }
+        return $false
     }
     catch {
         # If offline or rate-limited, fail safe in strict merge mode unless explicitly skipped.
@@ -1160,6 +1194,58 @@ if ($reposToProcess.Count -gt 1) {
 }
 
 # ------------------------------------------------------------------------------------------------
+# m3trik-first guard (Strict+Merge releases only). Each package's publish.yml dispatches
+# m3trik's refresh-api-registry.yml, which checks out m3trik@MAIN and force-pushes regenerated
+# registries back to every package's dev. Releasing while local m3trik/scripts differs from
+# origin/main means the bot regenerates with the OLD tooling and silently reverts the
+# registries this release just produced (measured 2026-08-01: mayatk -495 / blendertk -234
+# lines, two failed parity-audit gates, a full re-release cycle). Push m3trik first.
+# Runs BEFORE the review gate: it is cheaper, and its remedy (push m3trik) precedes preflight.
+# ------------------------------------------------------------------------------------------------
+if ($Merge -and $Strict -and -not $SkipReview) {
+    $m3trikPath = Join-Path $ROOT "m3trik"
+    if ((Test-Path (Join-Path $m3trikPath "scripts")) -and (Test-Path (Join-Path $m3trikPath ".git"))) {
+        $m3trikDrift = $false
+        $originMain = $null
+        Push-Location $m3trikPath
+        try {
+            git fetch origin main --quiet 2>&1 | Out-Null
+            $originMain = git rev-parse --verify -q origin/main 2>$null
+            if ($originMain) {
+                git diff --quiet origin/main -- scripts 2>$null
+                if ($LASTEXITCODE -ne 0) { $m3trikDrift = $true }
+                if (-not $m3trikDrift) {
+                    $untrackedScripts = git ls-files --others --exclude-standard -- scripts 2>$null
+                    if ($untrackedScripts) { $m3trikDrift = $true }
+                }
+            }
+        }
+        finally { Pop-Location }
+        if (-not $originMain) {
+            Write-Header "m3trik-first guard"
+            Write-Err "m3trik-first guard: cannot resolve origin/main (fetch failed?) - refusing to release"
+            exit 1
+        }
+        if ($m3trikDrift) {
+            Write-Header "m3trik-first guard"
+            Write-Err "m3trik/scripts differs from origin/main (uncommitted, unpushed, or untracked changes)."
+            Write-Host @"
+  The publish-triggered refresh-api-registry.yml runs the generator and gates from
+  m3trik@main. Releasing now would have the bot regenerate every package's registries
+  with the OLD tooling, force-pushing over what this release just produced.
+  Fix: sync m3trik main first (pull, or commit and push), then re-run this same command.
+  Emergency bypass: -SkipReview.
+"@ -ForegroundColor Yellow
+            exit 1
+        }
+        Write-Success "m3trik-first guard: m3trik/scripts matches origin/main"
+    }
+    else {
+        Write-Skip "m3trik-first guard: skipped (m3trik/scripts or m3trik/.git not found at $m3trikPath)"
+    }
+}
+
+# ------------------------------------------------------------------------------------------------
 # Review gate (Strict+Merge releases only). A package with a real code delta may not release
 # unless its CURRENT tree has a recorded "review" receipt. Runs as a pre-pass BEFORE any repo
 # mutation so (a) a failure has zero side effects and (b) the cascade's own mechanical commits
@@ -1357,9 +1443,10 @@ foreach ($repo in $reposToProcess) {
                         if ($localStrictVersions.ContainsKey($dep)) {
                             $depVer = $localStrictVersions[$dep]
                             $pypiName = Get-PypiProjectName $dep
-                            # Short retry window: absorbs residual API lag when
-                            # the dep was published minutes ago in this cascade.
-                            $ok = Wait-PypiHasVersion $pypiName $depVer -TimeoutSeconds 60
+                            # Retry window sized to simple-index propagation:
+                            # the dep may have published minutes ago in this
+                            # cascade, and 60s was measured too short 2026-08-13.
+                            $ok = Wait-PypiHasVersion $pypiName $depVer -TimeoutSeconds 180
                             if (-not $ok) {
                                 $results[$pkgName] = "pypi-missing"
                                 $anyErrors = $true

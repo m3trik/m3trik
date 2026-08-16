@@ -9,10 +9,12 @@
 **The** release path for ecosystem packages. Handles dependency sync, PyPI publication, version bumps. Never `git push` these packages manually. On publish it also tags `vX.Y.Z` + cuts a GitHub Release (notes = `CHANGELOG.md` lines added since the last release, via `Get-ChangelogDelta`/`git diff origin/main..dev`); additive + non-fatal.
 
 ```powershell
-.\m3trik\push.ps1 -Packages pythontk,uitk -Strict -Merge
+.\m3trik\push.ps1 -Packages pythontk,uitk -Strict -Merge -UsePR
 ```
 
-**Push THIS repo first when `scripts/` changed.** Each package's `publish.yml` dispatches m3trik's [`refresh-api-registry.yml`](.github/workflows/refresh-api-registry.yml) on a successful upload; that workflow checks out **m3trik@main** and force-pushes regenerated registries back to every package's `dev`. So an unpushed generator change means the bot rewrites the packages' registries with the OLD generator, silently reverting the refresh you just released (measured 2026-08-01: mayatk −495 / blendertk −234 lines, which then failed tentacle's parity-audit gate twice, since that gate reads the sibling engines at `dev`).
+`-UsePR` is the default release form — without it the dev→main merge is an admin bypass of branch protection and skips the pre-merge `tests.yml` gate, so a red commit can land on main (measured 2026-08-07: uitk main red ~40 min). Drop it only in emergencies.
+
+**Push THIS repo first when `scripts/` changed.** Each package's `publish.yml` dispatches m3trik's [`refresh-api-registry.yml`](.github/workflows/refresh-api-registry.yml) on a successful upload; that workflow checks out **m3trik@main** and force-pushes regenerated registries back to every package's `dev`. So an unpushed generator change means the bot rewrites the packages' registries with the OLD generator, silently reverting the refresh you just released (measured 2026-08-01: mayatk −495 / blendertk −234 lines, which then failed tentacle's parity-audit gate twice, since that gate reads the sibling engines at `dev`). Enforced since 2026-08-14: the Strict+Merge pre-pass fails when `m3trik/scripts` differs from `origin/main` (bypass: `-SkipReview`).
 
 ## Release preflight — review gate
 

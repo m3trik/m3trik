@@ -542,6 +542,26 @@ def run_workspace(ws_root: Path, report: Report) -> List[str]:
         report,
     )
 
+    # Repo-standard changelog headers: entries live under a year (or version)
+    # heading; a `## [Unreleased]` section defeats "which release shipped this"
+    # (root CLAUDE.md: no [Unreleased] ritual). Checked here rather than in the
+    # link pass because CHANGELOGs are link-check exempt.
+    for repo_name, repo in repos:
+        changelog = repo / "CHANGELOG.md"
+        if not changelog.exists():
+            continue
+        try:
+            text = changelog.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if re.search(r"^##\s*\[Unreleased\]", text, re.MULTILINE | re.IGNORECASE):
+            report.fail(
+                "changelog",
+                f"{repo_name}/CHANGELOG.md carries a '## [Unreleased]' header — "
+                "the repo standard files entries under a year/version heading "
+                "(root CLAUDE.md: no [Unreleased] ritual)",
+            )
+
     tracked_cache: Dict[str, Optional[Set[str]]] = {
         name: _git_tracked_md(repo) for name, repo in repos
     }

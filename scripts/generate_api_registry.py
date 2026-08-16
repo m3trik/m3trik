@@ -6,8 +6,15 @@ For each package, emits:
                                   method names, no bodies/docstrings)
   - <package>/API_REGISTRY.md   — human-readable registry of public symbols
   - <package>/API_REGISTRY.json — machine-readable sidecar (for diffing)
-  - <package>/API_CHANGES.md    — diff vs the prior JSON sidecar (added /
-                                  removed / signature-changed since last run)
+  - <package>/API_CHANGES.md    — public-API diff vs the last RELEASE (the
+                                  JSON sidecar at origin/main; falls back to
+                                  the working-tree sidecar when no such
+                                  baseline resolves). Caveat: this reads the
+                                  LOCAL origin/main without fetching, so "since
+                                  the last release" really means "since the
+                                  last release this checkout has fetched" —
+                                  a stale remote-tracking ref understates the
+                                  delta.
 
 Also emits a monorepo-level cross-package shadow report:
   - m3trik/docs/API_SHADOWS.md  — symbols whose simple name collides across
@@ -36,6 +43,7 @@ import ast
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -44,7 +52,6 @@ from typing import Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DOCS_ROOT = REPO_ROOT / "m3trik" / "docs"
 
 
 def _load_symbol_record() -> type:
@@ -400,7 +407,7 @@ def _iter_py_files(root: Path) -> Iterable[Path]:
         yield path
 
 
-def walk_package(pkg_dir: Path) -> PackageData:
+def walk_package(pkg_dir: Path, repo_root: Path = REPO_ROOT) -> PackageData:
     """Walk <repo>/<pkg>/<pkg>/ and collect public API."""
     name = pkg_dir.name
     source_root = pkg_dir / name
@@ -417,7 +424,7 @@ def walk_package(pkg_dir: Path) -> PackageData:
 
     return PackageData(
         name=name,
-        source_root=source_root.relative_to(REPO_ROOT).as_posix(),
+        source_root=source_root.relative_to(repo_root).as_posix(),
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         modules=modules,
     )
@@ -559,6 +566,79 @@ def _package_data_from_json(d: dict) -> PackageData:
 
 # ---------- Diff against prior JSON ------------------------------------------
 
+BASELINE_REF = "origin/main"
+
+
+def _git_output(pkg_dir: Path, *args: str) -> str | None:
+    """stdout of ``git -C <pkg_dir> <args>``, or None on any failure."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(pkg_dir), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _baseline_registry_json(pkg_dir: Path) -> tuple[dict | None, str]:
+    """Resolve the API_CHANGES diff baseline: the JSON sidecar as of the last
+    release (``origin/main``), falling back to the working-tree sidecar.
+
+    The baseline must NOT be the working-tree JSON this run is about to
+    rewrite: every regeneration advanced it, so a second run in the same
+    session (or a subset run, or a release-time conflict resolution) diffed
+    against the first run's own output and reported "no changes" — silently
+    erasing the recorded delta. ``origin/main`` only advances when a release
+    merges dev, so anchoring there makes regeneration idempotent and gives
+    the diff a stable meaning: public API changes since the last release —
+    where "last release" means the last release reflected in this checkout's
+    LOCAL ``origin/main``. This function does not fetch, so a stale
+    remote-tracking ref (no recent ``git fetch``) silently understates the
+    delta rather than erroring.
+    """
+    baseline_resolves = (
+        _git_output(pkg_dir, "rev-parse", "--verify", "-q", BASELINE_REF) is not None
+    )
+    prefix = _git_output(pkg_dir, "rev-parse", "--show-prefix")
+    if prefix is not None:
+        rel = f"{prefix.strip()}API_REGISTRY.json"
+        content = _git_output(pkg_dir, "show", f"{BASELINE_REF}:{rel}")
+        if content is not None:
+            try:
+                prior = json.loads(content)
+            except json.JSONDecodeError:
+                prior = None
+            if prior is not None:
+                sha = (
+                    _git_output(pkg_dir, "rev-parse", "--short", BASELINE_REF)
+                    or ""
+                ).strip()
+                return prior, f"the last release ({BASELINE_REF} @ {sha or 'unknown'})"
+    path = pkg_dir / "API_REGISTRY.json"
+    if path.exists():
+        try:
+            if baseline_resolves:
+                reason = (
+                    f"the last refresh (working tree; {BASELINE_REF} resolves "
+                    "but holds no valid sidecar)"
+                )
+            else:
+                reason = (
+                    f"the last refresh (working tree; {BASELINE_REF} unresolvable)"
+                )
+            return (
+                json.loads(path.read_text(encoding="utf-8")),
+                reason,
+            )
+        except json.JSONDecodeError:
+            pass
+    return None, "none"
+
 
 def _flatten_signatures(pkg: PackageData) -> dict[str, str]:
     """{module:qualname: signature} for all public callables."""
@@ -574,7 +654,11 @@ def _flatten_signatures(pkg: PackageData) -> dict[str, str]:
     return out
 
 
-def emit_changes_markdown(pkg: PackageData, prior_json: dict | None) -> str:
+def emit_changes_markdown(
+    pkg: PackageData,
+    prior_json: dict | None,
+    baseline_label: str = "prior baseline",
+) -> str:
     new = _flatten_signatures(pkg)
     if prior_json is None:
         return (
@@ -600,11 +684,11 @@ def emit_changes_markdown(pkg: PackageData, prior_json: dict | None) -> str:
 
     lines = [f"# {pkg.name} — API Changes", ""]
     lines.append(
-        f"_Diff vs prior baseline. Generated {pkg.generated_at}._"
+        f"_Diff vs {baseline_label}. Generated {pkg.generated_at}._"
     )
     lines.append("")
     if not (added or removed or changed):
-        lines.append("No public API changes since last refresh.")
+        lines.append(f"No public API changes since {baseline_label}.")
         return "\n".join(lines) + "\n"
 
     if removed:
@@ -762,21 +846,15 @@ def regenerate(
             print(f"warning: skipping {name} — directory not found", file=sys.stderr)
             continue
         try:
-            data = walk_package(pkg_dir)
+            data = walk_package(pkg_dir, repo_root)
         except FileNotFoundError as exc:
             print(f"warning: skipping {name} — {exc}", file=sys.stderr)
             continue
         packages.append(data)
 
         registry_md = emit_registry_markdown(data)
-        registry_json_path = pkg_dir / "API_REGISTRY.json"
-        prior: dict | None = None
-        if registry_json_path.exists():
-            try:
-                prior = json.loads(registry_json_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                prior = None
-        changes_md = emit_changes_markdown(data, prior)
+        prior, baseline_label = _baseline_registry_json(pkg_dir)
+        changes_md = emit_changes_markdown(data, prior, baseline_label)
         registry_json = json.dumps(_to_jsonable(data), indent=2, ensure_ascii=False)
 
         targets = {
@@ -829,8 +907,11 @@ def regenerate(
             except (json.JSONDecodeError, KeyError, TypeError):
                 pass
     if shadow_inputs:
-        DOCS_ROOT.mkdir(parents=True, exist_ok=True)
-        shadow_path = DOCS_ROOT / "API_SHADOWS.md"
+        # Derived from repo_root so a test repo_root never writes into the
+        # real monorepo's docs.
+        docs_root = repo_root / "m3trik" / "docs"
+        docs_root.mkdir(parents=True, exist_ok=True)
+        shadow_path = docs_root / "API_SHADOWS.md"
         shadow_md = emit_shadow_report(
             [shadow_inputs[n] for n in sorted(shadow_inputs)]
         )

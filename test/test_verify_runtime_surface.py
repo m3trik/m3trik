@@ -8,10 +8,11 @@ import sys
 import unittest
 from pathlib import Path
 
-SCRIPTS = Path(r"O:\Cloud\Code\_scripts\m3trik\scripts")
+_WORKSPACE = Path(__file__).resolve().parents[2]
+SCRIPTS = _WORKSPACE / "m3trik" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 # pythontk source on path for the integration test (no install required).
-sys.path.insert(0, r"O:\Cloud\Code\_scripts\pythontk")
+sys.path.insert(0, str(_WORKSPACE / "pythontk"))
 
 import verify_runtime_surface as v  # noqa: E402
 

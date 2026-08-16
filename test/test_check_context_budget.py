@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPTS = Path(r"O:\Cloud\Code\_scripts\m3trik\scripts")
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import check_context_budget as guard  # noqa: E402

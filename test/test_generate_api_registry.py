@@ -3,13 +3,15 @@ context-budget pass: shadow-report parity bucketing and JSON reconstruction of
 non-walked packages (so a partial run still produces a complete shadow report)."""
 
 import ast
+import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
 
-SCRIPTS = Path(r"O:\Cloud\Code\_scripts\m3trik\scripts")
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import generate_api_registry as g  # noqa: E402
@@ -235,6 +237,86 @@ class TestPrivateBaseMembersResolved(unittest.TestCase):
             "    def own(self): pass\n"
         )
         self.assertEqual({("own", "method")}, members)
+
+
+class TestChangesBaseline(unittest.TestCase):
+    """API_CHANGES.md must diff against the last RELEASE (origin/main), not
+    the working-tree JSON the run is about to rewrite. The working-tree
+    baseline advanced on every regeneration, so a second run in one session
+    (or a subset run, or a release-time conflict resolution) reported "no
+    changes" and silently erased the recorded delta — including 4 of 5
+    packages shipping empty API_CHANGES on the 2026-08-10 release."""
+
+    @staticmethod
+    def _git(repo: Path, *args: str) -> None:
+        subprocess.run(
+            [
+                "git", "-C", str(repo),
+                "-c", "user.email=test@test", "-c", "user.name=test",
+                *args,
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+    @staticmethod
+    def _make_pkg(root: Path, name: str) -> Path:
+        pkg = root / name
+        (pkg / name).mkdir(parents=True)
+        (pkg / name / "mod.py").write_text(
+            '"""Mod."""\n\n\nclass Widget:\n    def spin(self):\n        pass\n',
+            encoding="utf-8",
+        )
+        return pkg
+
+    def _commit_empty_baseline(self, pkg: Path) -> None:
+        """Point origin/main at a sidecar that predates Widget."""
+        baseline = {
+            "name": pkg.name,
+            "source_root": f"{pkg.name}/{pkg.name}",
+            "generated_at": "2026-01-01",
+            "modules": [],
+        }
+        (pkg / "API_REGISTRY.json").write_text(
+            json.dumps(baseline), encoding="utf-8"
+        )
+        self._git(pkg, "init")
+        self._git(pkg, "add", "API_REGISTRY.json")
+        self._git(pkg, "commit", "-m", "release baseline")
+        self._git(pkg, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def test_repeated_and_multi_package_regens_keep_the_delta(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            root = Path(td)
+            for name in ("pkga", "pkgb"):
+                self._commit_empty_baseline(self._make_pkg(root, name))
+            for run in (1, 2):  # the second run must NOT absorb the delta
+                g.regenerate(["pkga", "pkgb"], repo_root=root)
+                for name in ("pkga", "pkgb"):
+                    changes = (root / name / "API_CHANGES.md").read_text(
+                        encoding="utf-8"
+                    )
+                    self.assertIn(
+                        "Added", changes,
+                        f"{name} run {run}: the delta was absorbed",
+                    )
+                    self.assertIn("Widget", changes)
+                    self.assertIn("origin/main", changes)
+
+    def test_no_git_falls_back_to_working_tree_sidecar(self):
+        """Without a resolvable origin/main (fresh public clone, no remote)
+        the pre-anchor behavior is preserved: diff vs the working-tree
+        sidecar, labeled as such."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            root = Path(td)
+            self._make_pkg(root, "pkga")  # no git repo at all
+            g.regenerate(["pkga"], repo_root=root)
+            first = (root / "pkga" / "API_CHANGES.md").read_text(encoding="utf-8")
+            self.assertIn("No prior baseline", first)
+            g.regenerate(["pkga"], repo_root=root)
+            second = (root / "pkga" / "API_CHANGES.md").read_text(encoding="utf-8")
+            self.assertIn("No public API changes", second)
+            self.assertIn("origin/main unresolvable", second)
 
 
 if __name__ == "__main__":

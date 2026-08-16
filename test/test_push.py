@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 import unittest
 
-ROOT = Path(r"O:\Cloud\Code\_scripts")
+ROOT = Path(__file__).resolve().parents[2]
 M3TRIK_DIR = ROOT / "m3trik"
 PACKAGES = ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"]
 DUMMY_VERSIONS = ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0"]
@@ -835,6 +835,84 @@ class TestPushScriptRegressions(unittest.TestCase):
             out2 = passed.stdout + passed.stderr
             self.assertIn("Review receipt valid", out2)
             self.assertNotIn("No review receipt for the current tree", out2)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_m3trik_first_guard_blocks_release_on_scripts_drift(self):
+        """A Strict+Merge release must refuse to run while m3trik/scripts
+        differs from origin/main. The publish-triggered refresh-api-registry
+        bot regenerates from m3trik@main, so local tooling drift means the
+        bot force-pushes OLD-generator registries over the ones this release
+        just produced (measured 2026-08-01: mayatk -495 / blendertk -234
+        lines and a full re-release cycle)."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+
+            # A real delta so a PASSING guard proceeds to the review gate.
+            self._git(repo, "checkout", "dev")
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature")
+            self._git(repo, "push", "origin", "dev")
+
+            # An m3trik repo whose scripts/ is pushed to origin/main...
+            m3trik = root / "m3trik"
+            (m3trik / "scripts").mkdir(parents=True)
+            gen = m3trik / "scripts" / "generate_api_registry.py"
+            gen.write_text("VERSION = 1\n", encoding="utf-8")
+            self._git(m3trik, "init")
+            self._git(m3trik, "config", "user.email", "ci@example.com")
+            self._git(m3trik, "config", "user.name", "CI")
+            self._git(m3trik, "add", "-A")
+            self._git(m3trik, "commit", "-m", "init")
+            self._git(m3trik, "branch", "-M", "main")
+            remotes = root / "_remotes"
+            remotes.mkdir(exist_ok=True)
+            origin = remotes / "m3trik.git"
+            self._git(remotes, "init", "--bare", str(origin))
+            self._git(m3trik, "remote", "add", "origin", str(origin))
+            self._git(m3trik, "push", "-u", "origin", "main")
+
+            # ...then drifts locally (a generator edit the bot would not have).
+            gen.write_text("VERSION = 2\n", encoding="utf-8")
+
+            release = [
+                "powershell",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(M3TRIK_DIR / "push.ps1"),
+                "-Root",
+                str(root),
+                "-Packages",
+                "pythontk",
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+                "-SkipPypiCheck",
+            ]
+
+            blocked = self._run(release, cwd=root, timeout=120)
+            out = blocked.stdout + blocked.stderr
+            self.assertNotEqual(blocked.returncode, 0, out)
+            self.assertIn("m3trik/scripts differs from origin/main", out)
+            # The guard must fire BEFORE the review gate.
+            self.assertNotIn("No review receipt", out)
+
+            # Pushing m3trik clears the guard; the run proceeds to the
+            # review gate (the next pre-pass in line).
+            self._git(m3trik, "add", "-A")
+            self._git(m3trik, "commit", "-m", "generator change")
+            self._git(m3trik, "push", "origin", "main")
+
+            cleared = self._run(release, cwd=root, timeout=120)
+            out2 = cleared.stdout + cleared.stderr
+            self.assertIn(
+                "m3trik-first guard: m3trik/scripts matches origin/main", out2
+            )
+            self.assertNotIn("m3trik/scripts differs from origin/main", out2)
+            self.assertIn("No review receipt", out2)
 
 
 class TestPackageStructure(unittest.TestCase):

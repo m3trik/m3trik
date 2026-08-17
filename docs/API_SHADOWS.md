@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-08-16_
+_Generated: 2026-08-17_
 
 ## Genuine cross-layer collisions (24)
 
@@ -28,7 +28,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L231)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
-- `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L14)
+- `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
 
@@ -58,12 +58,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L165)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L404)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L265)
-- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L452)
+- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L228)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L404)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L265)
-- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L447)
+- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L474)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L38)
 
 ### `RangeResolver` — mayatk, pythontk

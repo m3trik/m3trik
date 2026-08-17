@@ -63,7 +63,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L404)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L265)
-- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L447)
+- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L474)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L38)
 
 ### `RangeResolver` — mayatk, pythontk

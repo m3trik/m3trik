@@ -40,7 +40,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
-- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
+- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L79)
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L79)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L79)
 
@@ -139,11 +139,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L30)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L197)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L590)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L748)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L428)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L148)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L193)
-- `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L644)
+- `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)
 - `extapps` — [`main`](extapps/marmoset_workflow/templates/import.py#L35)
@@ -183,7 +183,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (190)
+## Intentional mayatk↔blendertk port parity (191)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -335,6 +335,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `TelescopeRigSlots`
 - `TextureBaker`
 - `TexturePathEditorSlots`
+- `TextureTransfer`
 - `TransformDiagnostics`
 - `TreePathMatcher`
 - `TubePath`

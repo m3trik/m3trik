@@ -468,15 +468,38 @@ function Sync-PyProjectDepsToLocalVersions {
         # so this is the actually-published version to pin against.
         $ver = $LocalVersions[$dep]
 
-        $pattern = '"' + $dep + '>=[0-9.]+"'
+        $pattern = '"' + $dep + '>=([0-9.]+)"'
         $replacement = '"' + $dep + '>=' + $ver + '"'
         
         if ($newContent -match $pattern) {
              # Check if it's already correct to avoid unnecessary writes
              $currentMatch = $matches[0]
+             $currentFloor = $matches[1]
              if ($currentMatch -ne $replacement) {
-                 $newContent = $newContent -replace $pattern, $replacement
-                 $changed = $true
+                 # NEVER lower a declared floor. $LocalVersions is clamped to
+                 # what is PUBLISHED, so on a run that does not include the
+                 # upstream this would rewrite a deliberately-raised floor back
+                 # down to the old release and silently reintroduce the break
+                 # the raise existed to prevent (measured 2026-08-19:
+                 # `-Packages mayatk` alone walked `pythontk>=0.9.25` back to
+                 # `>=0.9.24`, and mayatk reads a 0.9.25 attribute in a CLASS
+                 # BODY, i.e. AttributeError at import). A floor states what the
+                 # CODE needs; the sync may only ratchet it UP to what it is
+                 # publishing. An unparseable version keeps the historical
+                 # behaviour -- every real version here is 3-part semver, which
+                 # Bump-LocalVersion's own regex enforces.
+                 $isLower = $false
+                 try {
+                     $isLower = ([version]$ver -lt [version]$currentFloor)
+                 } catch {
+                     $isLower = $false
+                 }
+                 if ($isLower) {
+                     Write-Host "    Keeping $dep>=$currentFloor (declared floor is above the $ver being pinned)" -ForegroundColor DarkGray
+                 } else {
+                     $newContent = $newContent -replace $pattern, $replacement
+                     $changed = $true
+                 }
              }
         }
     }

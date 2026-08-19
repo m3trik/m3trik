@@ -615,6 +615,57 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn('"pythontk>=0.7.51"', btk_toml)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pin_sync_never_lowers_a_declared_floor(self):
+        """A floor ABOVE the version being pinned must survive the sync.
+
+        ``Get-LocalStrictVersions`` clamps every version down to what PyPI
+        actually publishes, so a run that does NOT include the upstream would
+        otherwise rewrite a deliberately raised floor back to the old release --
+        reintroducing exactly the break the raise existed to prevent. Measured
+        2026-08-19 on mayatk's ``pythontk>=0.9.25``, which is needed because
+        ``task_manager`` reads a 0.9.25 attribute in a CLASS BODY (an
+        AttributeError at import, not at first use).
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
+            # uitk declares a floor ABOVE pythontk's published version, the way a
+            # package does when its code needs an unreleased upstream.
+            self._init_dummy_repo(root, "uitk", "1.0.51", ["qtpy", "pythontk>=0.7.96"])
+
+            script = M3TRIK_DIR / "push.ps1"
+            result = self._run(
+                [
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-Root",
+                    str(root),
+                    "-Packages",
+                    "uitk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipReview",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                ],
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+
+            toml = (root / "uitk" / "pyproject.toml").read_text(encoding="utf-8")
+            self.assertIn(
+                '"pythontk>=0.7.96"',
+                toml,
+                f"the sync lowered a declared floor\n{out}",
+            )
+            self.assertNotIn('"pythontk>=0.7.51"', toml, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_fails_when_conflict_markers_in_pyproject(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

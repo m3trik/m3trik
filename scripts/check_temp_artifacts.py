@@ -1,6 +1,10 @@
 # !/usr/bin/python
 # coding=utf-8
-"""Fail when production code allocates temp files/dirs outside ``ptk.TempArtifacts``.
+"""Fail on unowned artifacts: unmanaged temp allocations, and stray files in a package.
+
+Two halves, one defect -- an artifact nobody is responsible for. The first half
+reads code that *mints* one; the second walks the tree for one that is simply
+lying there.
 
 Why this gate exists
 --------------------
@@ -18,6 +22,12 @@ collection rather than a permanent leak::
     path = ptk.TempArtifacts("my_prefix").path(extension=".fbx")   # a file
     work = ptk.TempArtifacts("my_prefix").dir_path()               # a directory
 
+The AST half cannot see an artifact with no code behind it: a ``cProfile -o prof``
+dump written into the package directory, a hand-made ``.bak``, an experiment saved
+next to the module it was testing. Nothing imports them and no wheel ships them,
+so they are residue by definition -- and a ``.gitignore`` entry only hides them.
+The second half finds those by walking the package tree instead.
+
 Scope
 -----
 Production source only. Tests are exempt: a test harness owns its own teardown and
@@ -32,14 +42,16 @@ Usage
 -----
     python m3trik/scripts/check_temp_artifacts.py            # all packages
     python m3trik/scripts/check_temp_artifacts.py mayatk     # one package
-    python m3trik/scripts/check_temp_artifacts.py --list     # show allowlist
+    python m3trik/scripts/check_temp_artifacts.py --list     # show allowlists
 
-Exit code 0 = clean, 1 = an unallowed allocation was found.
+Exit code 0 = clean, 1 = an unallowed allocation or a stray artifact was found.
 """
+
 from __future__ import annotations
 
 import argparse
 import ast
+import fnmatch
 import os
 import sys
 from typing import Dict, List, Optional, Tuple
@@ -89,9 +101,48 @@ ALLOWLIST: Dict[str, str] = {
 
 # Directories skipped anywhere in the walk.
 SKIP_DIRS = {
-    "test", "tests", "temp_tests", "build", "dist", "__pycache__",
-    ".git", ".venv", ".archive", "node_modules", "site-packages",
+    "test",
+    "tests",
+    "temp_tests",
+    "build",
+    "dist",
+    "__pycache__",
+    ".git",
+    ".venv",
+    ".archive",
+    "node_modules",
+    "site-packages",
 }
+
+# A file inside an importable package is legitimate only if Python loads it
+# (.py/.pyi/py.typed) or the package DECLARES it as shipped data. Declaration is
+# the right yardstick because it is already load-bearing: an undeclared file is
+# absent from the wheel, so it cannot be something the installed package needs.
+# That also makes the check self-maintaining -- a new data type has to be declared
+# for the wheel anyway, and declaring it satisfies this gate for free. Packages
+# declaring nothing at all are skipped: with no contract there is nothing to
+# check against, and inventing one produces noise, not findings.
+LOADED_SUFFIXES = (".py", ".pyi")
+LOADED_NAMES = {"py.typed"}
+
+# Extension-less files at a package repo ROOT. Each is a sentinel some tool looks
+# up by exact name. Anything else with no extension there is almost always a
+# mistyped output path -- `-o prof` run one directory up lands exactly here.
+ROOT_SENTINELS = {
+    "LICENSE",
+    "LICENCE",
+    "COPYING",
+    "NOTICE",
+    "AUTHORS",
+    "Makefile",
+    "Dockerfile",
+    "CODEOWNERS",
+    "Procfile",
+}
+
+# Justified strays: "<repo-relative path>" -> reason. Same discipline as ALLOWLIST
+# above -- if this grows, the file probably wants declaring, not excusing.
+STRAY_ALLOWLIST: Dict[str, str] = {}
 
 
 class _Visitor(ast.NodeVisitor):
@@ -159,8 +210,7 @@ class _Visitor(ast.NodeVisitor):
         if resolved is not None:
             key, label = resolved
             if key in ALWAYS_FLAGGED or (
-                key in FLAGGED_WHEN_DELETE_FALSE
-                and self._opts_out_of_autodelete(node)
+                key in FLAGGED_WHEN_DELETE_FALSE and self._opts_out_of_autodelete(node)
             ):
                 if key in FLAGGED_WHEN_DELETE_FALSE:
                     label += "(delete=False)"
@@ -203,12 +253,127 @@ def scan(packages: List[str]) -> List[str]:
     return violations
 
 
+def _shipped_globs(package_dir: str) -> List[Tuple[str, str]]:
+    """Return (subtree, glob) pairs the owning project declares as shipped data.
+
+    Both declaration sites count, because either one alone is incomplete: wheels
+    are built from ``[tool.setuptools.package-data]``, sdists from ``MANIFEST.in``,
+    and setuptools folds the manifest into the wheel when ``include-package-data``
+    is on (the default for a pyproject build). Reading only one would flag files
+    that genuinely ship -- uitk's icons are declared solely in its manifest.
+
+    ``subtree`` is the package-relative directory the glob applies under, so a
+    ``recursive-include`` aimed at one subdirectory does not whitelist the tree.
+    """
+    repo_dir = os.path.dirname(package_dir)
+    pkg_name = os.path.basename(package_dir)
+    pairs: List[Tuple[str, str]] = []
+
+    pyproject = os.path.join(repo_dir, "pyproject.toml")
+    if os.path.isfile(pyproject):
+        try:
+            import tomllib
+
+            with open(pyproject, "rb") as fh:
+                data = tomllib.load(fh)
+            package_data = (
+                data.get("tool", {}).get("setuptools", {}).get("package-data", {})
+            )
+            for globs in package_data.values():
+                pairs += [("", g) for g in globs]
+        except (OSError, ImportError, ValueError):
+            pass  # unreadable/old interpreter: fall back to the manifest alone
+
+    manifest = os.path.join(repo_dir, "MANIFEST.in")
+    if os.path.isfile(manifest):
+        try:
+            with open(manifest, encoding="utf-8") as fh:
+                lines = fh.readlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            parts = line.split()
+            if not parts:
+                continue
+            command, rest = parts[0], parts[1:]
+            if command == "global-include":
+                pairs += [("", g) for g in rest]
+            elif command in ("recursive-include", "graft") and rest:
+                target = rest[0].replace("\\", "/").strip("/")
+                if target != pkg_name and not target.startswith(pkg_name + "/"):
+                    continue  # aimed outside the package (docs/, examples/)
+                subtree = target[len(pkg_name) :].strip("/")
+                globs = rest[1:] if command == "recursive-include" else ["*"]
+                pairs += [(subtree, g) for g in globs or ["*"]]
+    return pairs
+
+
+def _is_declared(rel_to_pkg: str, pairs: List[Tuple[str, str]]) -> bool:
+    name = os.path.basename(rel_to_pkg)
+    for subtree, glob in pairs:
+        if subtree and not rel_to_pkg.startswith(subtree + "/"):
+            continue
+        if fnmatch.fnmatch(name, glob):
+            return True
+    return False
+
+
+def scan_strays(packages: List[str]) -> List[str]:
+    """Return one violation line per file that nothing loads, ships, or excuses."""
+    violations: List[str] = []
+    swept_roots: set = set()
+
+    for pkg in packages:
+        root = os.path.join(REPO, PACKAGES[pkg])
+        if not os.path.isdir(root):
+            continue
+
+        pairs = _shipped_globs(root)
+        if pairs:  # no declaration -> no contract -> nothing to check against
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+                for filename in filenames:
+                    if filename.endswith(LOADED_SUFFIXES) or filename in LOADED_NAMES:
+                        continue
+                    full = os.path.join(dirpath, filename)
+                    rel_to_pkg = os.path.relpath(full, root).replace(os.sep, "/")
+                    if _is_declared(rel_to_pkg, pairs):
+                        continue
+                    rel = os.path.relpath(full, REPO).replace(os.sep, "/")
+                    if rel in STRAY_ALLOWLIST:
+                        continue
+                    violations.append(
+                        f"{rel}  (inside the package; not loaded, not shipped)"
+                    )
+
+        # Repo root, once per repo -- several packages can share one (comfyui).
+        repo_dir = os.path.dirname(root)
+        if repo_dir in swept_roots:
+            continue
+        swept_roots.add(repo_dir)
+        try:
+            entries = sorted(os.listdir(repo_dir))
+        except OSError:
+            continue
+        for name in entries:
+            full = os.path.join(repo_dir, name)
+            if "." in name or name in ROOT_SENTINELS or not os.path.isfile(full):
+                continue
+            rel = os.path.relpath(full, REPO).replace(os.sep, "/")
+            if rel in STRAY_ALLOWLIST:
+                continue
+            violations.append(f"{rel}  (repo root; no extension, not a known sentinel)")
+    return violations
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     # No argparse `choices`: with nargs="*" it validates the default list too and
     # rejects the no-argument (scan-everything) form.
     parser.add_argument(
-        "packages", nargs="*", help=f"packages to scan (default: all of {list(PACKAGES)})"
+        "packages",
+        nargs="*",
+        help=f"packages to scan (default: all of {list(PACKAGES)})",
     )
     parser.add_argument("--list", action="store_true", help="print the allowlist")
     args = parser.parse_args()
@@ -221,28 +386,60 @@ def main() -> int:
         print("Allowlisted raw temp allocations:")
         for key, reason in sorted(ALLOWLIST.items()):
             print(f"  {key}\n      {reason}")
+        print("")
+        print("Allowlisted stray artifacts:")
+        for key, reason in sorted(STRAY_ALLOWLIST.items()):
+            print(f"  {key}")
+            print(f"      {reason}")
+        if not STRAY_ALLOWLIST:
+            print("  (none)")
         return 0
 
     packages = args.packages or list(PACKAGES)
     violations = scan(packages)
+    strays = scan_strays(packages)
 
-    if not violations:
-        print(f"OK: no unmanaged temp allocations in {len(packages)} package(s).")
+    if not violations and not strays:
+        print(
+            f"OK: no unmanaged temp allocations or stray artifacts in "
+            f"{len(packages)} package(s)."
+        )
         return 0
 
-    print(f"FAIL: {len(violations)} unmanaged temp allocation(s):\n")
-    for v in violations:
-        print(f"  {v}")
-    print(
-        "\nRoute these through pythontk.TempArtifacts so an abandoned artifact is\n"
-        "still reclaimed by a later run's age-gated sweep:\n"
-        '    path = ptk.TempArtifacts("prefix").path(extension=".ext")\n'
-        '    work = ptk.TempArtifacts("prefix").dir_path()\n'
-        "Policies: scoped (delete on clean exit, keep on failure), session\n"
-        "(delete at interpreter exit), detached (default -- the consumer outlives\n"
-        "us; stale ones are swept).\n"
-        "If a site genuinely cannot use it, add it to ALLOWLIST with a reason."
-    )
+    if violations:
+        print(f"FAIL: {len(violations)} unmanaged temp allocation(s):")
+        print("")
+        for v in violations:
+            print(f"  {v}")
+        print(
+            "\nRoute these through pythontk.TempArtifacts so an abandoned artifact is\n"
+            "still reclaimed by a later run's age-gated sweep:\n"
+            '    path = ptk.TempArtifacts("prefix").path(extension=".ext")\n'
+            '    work = ptk.TempArtifacts("prefix").dir_path()\n'
+            "Policies: scoped (delete on clean exit, keep on failure), session\n"
+            "(delete at interpreter exit), detached (default -- the consumer outlives\n"
+            "us; stale ones are swept).\n"
+            "If a site genuinely cannot use it, add it to ALLOWLIST with a reason."
+        )
+
+    if strays:
+        if violations:
+            print("")
+        print(f"FAIL: {len(strays)} stray artifact(s):")
+        print("")
+        for s in strays:
+            print(f"  {s}")
+        print(
+            """
+Nothing imports or ships these, so they are residue -- a profile dump, a .bak,
+an experiment saved beside the module it was testing. Delete them. Scratch
+belongs in test/temp_tests/ (gitignored, swept when done), so give the tool that
+wrote it an explicit destination there rather than a bare -o:
+    python -m cProfile -o test/temp_tests/<name>.prof -m <module>
+If a file genuinely belongs, DECLARE it (pyproject package-data / MANIFEST.in)
+so the wheel actually ships it -- an undeclared data file is simply missing at
+runtime for every installed user. Last resort: STRAY_ALLOWLIST."""
+        )
     return 1
 
 

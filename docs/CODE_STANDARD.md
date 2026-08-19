@@ -102,7 +102,8 @@ Classes that report use `ptk.LoggingMixin` (`self.logger`, `log_level=` in `__in
 ## 10. Dead code and scratch files
 
 - Dead code is deleted, not commented out: grep-confirm zero callers across the workspace (all layers — a name can be a `.ui` slot or an entry point), then remove. Deleting a public name is a public-API change (§5): registry regen + `CHANGELOG.md` line.
-- No scratch files outside the repo: repros live in `test/temp_tests/` (gitignored) and are deleted when done; one-shot reports (audits, plans) are folded into the owning docs/CHANGELOG and archived, per [DOCS_STANDARD.md](DOCS_STANDARD.md).
+- No scratch files outside the repo: repros live in `test/temp_tests/` (gitignored) and are deleted when done; one-shot reports (audits, plans) are folded into the owning docs/CHANGELOG and archived, per [DOCS_STANDARD.md](DOCS_STANDARD.md). Point the tool that writes one at that directory rather than accepting its default — a bare `cProfile -o prof` drops the dump wherever you happened to be, and inside a package tree that is a file the wheel silently omits.
+- Scratch inside a package is a gate failure, not a `.gitignore` line: `check_temp_artifacts.py` flags any file under `<pkg>/<pkg>/` that Python does not load and neither `package-data` nor `MANIFEST.in` declares, plus extension-less files at a repo root. Ignoring it only hides the artifact from `git status`; if the file belongs, declare it so the wheel actually ships it.
 - Never overwrite a file you have not read this session; anchor edits on exact text — concurrent sessions and the user edit the same trees.
 
 ## 11. Public-repo hygiene

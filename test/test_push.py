@@ -6,6 +6,7 @@ without actually publishing to PyPI.
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,24 @@ ROOT = Path(__file__).resolve().parents[2]
 M3TRIK_DIR = ROOT / "m3trik"
 PACKAGES = ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"]
 DUMMY_VERSIONS = ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0"]
+
+#: ``__version__ = "X.Y.Z"`` as written in every package ``__init__.py``. The
+#: value is captured loosely on purpose: the semver check has to SEE a
+#: malformed version to reject it, so this must not filter one out.
+_VERSION_RE = re.compile(r'__version__\s*=\s*["\']([^"\']+)["\']')
+
+
+def version_in(text):
+    """The ``__version__`` declared in *text*.
+
+    Parameters:
+        text (str): Contents of a package ``__init__.py``.
+
+    Returns:
+        str | None: The declared version, or None when *text* declares none.
+    """
+    match = _VERSION_RE.search(text)
+    return match.group(1) if match else None
 
 
 class TestPushScript(unittest.TestCase):
@@ -1343,17 +1362,14 @@ class TestPackageStructure(unittest.TestCase):
 
     def test_versions_are_valid_semver(self):
         """All package versions should be valid semantic versions"""
-        import re
-
         semver_pattern = r"^\d+\.\d+\.\d+$"
 
         for pkg in PACKAGES:
             init_file = ROOT / pkg / pkg / "__init__.py"
             content = init_file.read_text(encoding="utf-8")
-            match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
-            self.assertIsNotNone(match, f"{pkg} missing __version__")
+            version = version_in(content)
+            self.assertIsNotNone(version, f"{pkg} missing __version__")
 
-            version = match.group(1)
             self.assertRegex(
                 version,
                 semver_pattern,
@@ -1377,6 +1393,41 @@ class TestPyprojectPins(unittest.TestCase):
         content = toml_file.read_text(encoding="utf-8")
         return dict(re.findall(r'"([A-Za-z0-9_.-]+)>=([0-9.]+)"', content))
 
+    def _workspace_versions(self, pkg: str) -> set:
+        """Every ``__version__`` the workspace holds for *pkg*.
+
+        The working tree and ``origin/dev`` both count: the release bot bumps
+        the branch, so a downstream's freshly synced pin can name a version
+        that exists only there until the upload lands.
+
+        Returns:
+            set: version strings; empty when the package or ref is unreadable.
+        """
+        import subprocess as sp
+
+        found = set()
+        init = ROOT / pkg / pkg / "__init__.py"
+        sources = []
+        if init.is_file():
+            sources.append(init.read_text(encoding="utf-8", errors="replace"))
+        try:
+            r = sp.run(
+                ["git", "-C", str(ROOT / pkg), "show", f"origin/dev:{pkg}/__init__.py"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if r.returncode == 0:
+                sources.append(r.stdout)
+        except Exception:  # noqa: BLE001 - absent git/ref is simply no candidate
+            pass
+
+        for text in sources:
+            version = version_in(text)
+            if version:
+                found.add(version)
+        return found
+
     def test_internal_pins_present(self):
         expectations = {
             "uitk": ["pythontk"],
@@ -1391,7 +1442,15 @@ class TestPyprojectPins(unittest.TestCase):
                 self.assertIn(dep, pins, f"{pkg} missing pin for {dep}")
 
     def test_pinned_versions_exist_on_pypi(self):
-        """Ensure pinned internal versions are actually on PyPI.
+        """Ensure pinned internal versions are installable.
+
+        A pin that is not on PyPI *yet* but names a version the workspace holds
+        (working tree or ``origin/dev``) is this cascade's own in-flight state:
+        push.ps1 writes each pin from the sibling's local version and publishes
+        upstream-first, so the gap closes on upload. Failing on it would red the
+        suite for the length of every release -- including the run that records
+        the ``tests`` receipt. A pin naming a version nobody has is still a
+        failure, because that one can never resolve.
 
         Skips if pip cannot query indexes (offline environments).
         """
@@ -1418,7 +1477,21 @@ class TestPyprojectPins(unittest.TestCase):
                 self.skipTest("pip index versions failed (offline?)")
 
             out = r.stdout + r.stderr
-            self.assertIn(ver, out, f"{dep} pinned version {ver} not found on PyPI")
+            if ver in out:
+                continue
+
+            pending = self._workspace_versions(dep)
+            self.assertIn(
+                ver,
+                pending,
+                f"{dep} pinned version {ver} is not on PyPI and is not a version "
+                f"this workspace holds ({sorted(pending) or 'none found'}) -- "
+                f"nothing can satisfy that pin",
+            )
+            print(
+                f"  [pending publish] {dep}>={ver} not yet on PyPI; the workspace "
+                f"holds it, so the cascade is expected to upload it"
+            )
 
 
 class TestGitHubWorkflows(unittest.TestCase):

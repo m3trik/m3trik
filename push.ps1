@@ -174,6 +174,45 @@ function Get-TreeHash {
     finally { Pop-Location }
 }
 
+function Get-RecentlyModifiedFiles {
+    <#
+      Changed files whose mtime is within $WithinMinutes. Used ONLY to explain a
+      failed receipt gate: a receipt is keyed on the tree hash, so a concurrent
+      writer already invalidates it -- but "no tests receipt" reads identically
+      to "you never ran the suite", and the fix for those two is opposite (wait
+      vs. run). Generated sidecars are excluded: regenerating the API registry
+      immediately before a release is the NORMAL flow and would otherwise make
+      every clean release look like a collision.
+    #>
+    param(
+        [string]$RepoPath,
+        [int]$WithinMinutes = 15
+    )
+    $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-$WithinMinutes)
+    Push-Location $RepoPath
+    try {
+        $paths = @(git status --porcelain 2>$null | ForEach-Object {
+                # Porcelain v1: 2 status chars + space, then the path. A rename
+                # reads "R  old -> new"; the post-rename path is what exists.
+                $p = $_.Substring(3).Trim('"')
+                if ($p -match ' -> ') { $p = ($p -split ' -> ')[-1] }
+                $p
+            })
+        $recent = foreach ($p in $paths) {
+            if ($p -match '^API_(INDEX|REGISTRY|CHANGES)\.(md|json)$') { continue }
+            $fi = Get-Item -LiteralPath (Join-Path $RepoPath $p) -ErrorAction SilentlyContinue
+            if ($fi -and -not $fi.PSIsContainer -and $fi.LastWriteTimeUtc -gt $cutoff) {
+                [pscustomobject]@{
+                    Path    = $p
+                    Minutes = [math]::Round(((Get-Date).ToUniversalTime() - $fi.LastWriteTimeUtc).TotalMinutes, 1)
+                }
+            }
+        }
+        return @($recent | Sort-Object Minutes)
+    }
+    finally { Pop-Location }
+}
+
 function Read-Receipts {
     $map = @{}
     if (-not (Test-Path $RECEIPTS_PATH)) { return $map }
@@ -1451,6 +1490,44 @@ if ($Merge -and $Strict -and -not $SkipReview) {
 # The failure text carries the full protocol so any session (or human) can complete preflight
 # without being re-instructed.
 # ------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------
+# Behind-remote preflight (-Merge). Every other rev-list in this script measures origin/dev..dev
+# -- AHEAD. Nothing measured the reverse, so a repo the bump-version / API-registry bots had
+# moved on looked pristine right up until the push failed, with every tree already mutated
+# (2026-08-19: all five cascade repos sat 2 commits back at once, and only a manual check found
+# it). Deliberately NOT under -SkipReview: that flag waives the review RECEIPT, and being behind
+# is a fact about the remote no review can settle. Runs before any mutation, so failing is free.
+# ------------------------------------------------------------------------------------------------
+if ($Merge) {
+    $behindRepos = @()
+    foreach ($repo in $reposToProcess) {
+        if ($STRICT_PACKAGES -notcontains $repo.Name) { continue }
+        Push-Location $repo.FullName
+        try {
+            git fetch origin dev --quiet 2>&1 | Out-Null
+            $bh = git rev-list --count dev..origin/dev 2>$null
+            if ($bh -and [int]$bh -gt 0) { $behindRepos += "$($repo.Name) ($bh)" }
+        }
+        finally { Pop-Location }
+    }
+    if ($behindRepos.Count -gt 0) {
+        Write-Header "Behind origin/dev"
+        Write-Err "Local dev is behind: $($behindRepos -join ', ')"
+        $behindNames = @($behindRepos | ForEach-Object { ($_ -split ' ')[0] })
+        Write-Host @"
+  Those commits are normally the bump-version / API-registry bots from the LAST
+  release. Releasing now mutates every tree and then fails at push.
+
+  Pull first, then re-run this command:
+    '$($behindNames -join "','")' | ForEach-Object { git -C (Join-Path '$Root' `$_) pull --rebase }
+
+  A pull changes the tree, so it also voids any receipt recorded before it --
+  record review/tests AFTER pulling, never before.
+"@ -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 if ($Merge -and $Strict -and -not $SkipReview) {
     $reviewMissing = @()
     $testsMissing = @()
@@ -1517,6 +1594,42 @@ if ($Merge -and $Strict -and -not $SkipReview) {
         if ($testsMissing.Count -gt 0) {
             Write-Err "No tests receipt for the current tree of: $($testsMissing -join ', ')"
         }
+
+        # A missing receipt has two opposite causes and, until now, one message.
+        # "Never ran the suite" -> run it. "Another session is editing this tree"
+        # -> running it records a receipt for a tree that is still moving, and the
+        # next edit voids it again. Fresh mtimes tell the two apart in one line.
+        $liveNames = @(@($reviewMissing + $testsMissing) |
+            ForEach-Object { ($_ -split '@')[0] } | Select-Object -Unique)
+        $liveFound = $false
+        foreach ($ln in $liveNames) {
+            $lp = Join-Path $Root $ln
+            if (-not (Test-Path $lp)) { continue }
+            $recent = Get-RecentlyModifiedFiles -RepoPath $lp -WithinMinutes 15
+            if ($recent.Count -gt 0) {
+                if (-not $liveFound) {
+                    Write-Host ""
+                    Write-Host "  Another session may be editing these trees RIGHT NOW:" -ForegroundColor Red
+                    $liveFound = $true
+                }
+                Write-Host "    $ln - $($recent.Count) file(s) changed in the last 15 min:" -ForegroundColor Yellow
+                foreach ($r in ($recent | Select-Object -First 8)) {
+                    Write-Host "      $($r.Minutes.ToString().PadLeft(5)) min ago  $($r.Path)" -ForegroundColor DarkGray
+                }
+                if ($recent.Count -gt 8) {
+                    Write-Host "      ... and $($recent.Count - 8) more" -ForegroundColor DarkGray
+                }
+            }
+        }
+        if ($liveFound) {
+            Write-Host @"
+  If that is not you: WAIT for it to settle, then review/test/record. Recording
+  now pins a receipt to a tree that is still changing, and -Merge does `git add
+  -A` -- it would publish the other session's in-progress work to PyPI, which
+  cannot be recalled.
+"@ -ForegroundColor Yellow
+        }
+
         Write-Host @"
   Release preflight (see m3trik/CLAUDE.md), for each package listed:
     1. Review its release diff (git diff origin/main...dev + working tree):

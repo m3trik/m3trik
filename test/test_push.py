@@ -615,6 +615,66 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn('"pythontk>=0.7.51"', btk_toml)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_refuses_to_release_while_behind_origin_dev(self):
+        """Behind origin/dev must fail BEFORE any tree is mutated.
+
+        Every other rev-list in push.ps1 measures origin/dev..dev (ahead);
+        nothing measured the reverse, so a repo the bump-version / API-registry
+        bots had moved on looked pristine until the push failed -- with the
+        trees already rewritten. Measured 2026-08-19: all five cascade repos sat
+        2 commits back simultaneously and only a manual check caught it.
+
+        -SkipReview is passed deliberately: that flag waives the review RECEIPT,
+        and being behind is a fact about the remote no review can settle, so the
+        check has to survive it.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _origin = self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
+
+            # Advance origin/dev, then rewind the local branch off it: the exact
+            # shape a bot's "Bump version ... [skip ci]" commit leaves behind.
+            (repo / "BOTFILE.md").write_text("bot commit", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "Bump version to 0.7.52 [skip ci]")
+            self._git(repo, "push", "origin", "dev")
+            self._git(repo, "reset", "--hard", "HEAD~1")
+
+            before = (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+            result = self._run(
+                [
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(M3TRIK_DIR / "push.ps1"),
+                    "-Root",
+                    str(root),
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipReview",
+                    "-DryRun",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                ],
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+
+            self.assertEqual(result.returncode, 1, out)
+            self.assertIn("behind", out.lower(), out)
+            # Failing free is the whole point of a pre-pass: nothing rewritten.
+            self.assertEqual(
+                before,
+                (repo / "pyproject.toml").read_text(encoding="utf-8"),
+                "pyproject was mutated even though the preflight failed: " + out,
+            )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_pin_sync_never_lowers_a_declared_floor(self):
         """A floor ABOVE the version being pinned must survive the sync.
 

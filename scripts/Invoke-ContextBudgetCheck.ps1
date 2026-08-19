@@ -23,7 +23,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = 'o:\Cloud\Code\_scripts',
+    # Default derived from this script's own location (<root>/m3trik/scripts/) rather than
+    # hardcoded: this repo is PUBLIC and must not ship a maintainer's drive layout.
+    [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
     [string]$LogPath  = "$env:LOCALAPPDATA\claude-context-budget.log"
 )
 
@@ -53,7 +55,15 @@ function Show-BudgetToast([string]$title, [string]$message) {
 
 # Near-cap early warning even when the guard still passes.
 $nearCap = $false
-$memFile = Join-Path $env:USERPROFILE '.claude\projects\o--Cloud-Code--scripts\memory\MEMORY.md'
+# Claude slugs a project dir from the workspace path (colon, separators and underscores
+# all folded to '-'), so derive it from $RepoRoot instead of hardcoding one machine's.
+# The class needs BOTH slashes: in .NET regex `\/` is an identity-escaped forward slash,
+# so a lone backslash in the class silently drops '\' from it and the derived path
+# never resolves on Windows -- which killed this whole near-cap branch once already.
+# Mirrors check_context_budget._default_memory_dir(); test_check_context_budget.py
+# pins the two expressions against each other.
+$slug = ($RepoRoot -replace '[:\\/_]', '-')
+$memFile = Join-Path $env:USERPROFILE (Join-Path '.claude\projects' (Join-Path $slug 'memory\MEMORY.md'))
 if (Test-Path $memFile) {
     if ((Get-Item $memFile).Length -gt 22400) { $nearCap = $true }
 }

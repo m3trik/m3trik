@@ -12,11 +12,15 @@ Checks
             1-link-per-topic-file coverage (no orphans, no broken links).
             An indexed HUB topic covers the sibling files its body links, so
             a cap-managed family costs the index one entry (one level deep).
-  CLAUDE    each CLAUDE.md size (advisory + hard caps).
+  CLAUDE    each CLAUDE.md size (advisory + hard caps; the root file gets a
+            larger advisory cap - it carries the ecosystem-wide rules).
   TOPIC     memory topic-file soft size cap (flag oversized files to split).
   DISPATCH  root CLAUDE.md dispatch table covers every ECOSYSTEM_PACKAGES member
             (SSoT == the generator tuple; catches the blendertk-style drift).
   LINKS     every relative markdown link in a CLAUDE.md resolves (no broken nav).
+  NAVDEPS   every registry-set package's CLAUDE.md `**Deps**:` line names each
+            ecosystem package its pyproject.toml declares (hand-written nav
+            must not lag the declared dependency graph).
   REGISTRY  generate_api_registry.py --check (registries fresh vs source).
 
 FAIL exits non-zero (CI gate). WARN is advisory and never fails the build.
@@ -38,23 +42,41 @@ import sys
 import time
 from pathlib import Path
 
+try:
+    import tomllib  # 3.11+ (CI and the workspace venv)
+except ImportError:  # pragma: no cover
+    tomllib = None
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]  # m3trik/scripts -> repo root
 
 # --- budgets -----------------------------------------------------------------
 MEMORY_BYTE_CAP = 24_400  # hard harness load cap for MEMORY.md (conservative decimal-KB read)
 MEMORY_ENTRY_CHAR_CAP = 280  # per index bullet (slug + link + ~200-char hook)
-CLAUDE_WARN = 6_144  # advisory: keep CLAUDE.md lean
+CLAUDE_WARN = 6_144  # advisory: keep a sub-repo CLAUDE.md lean
+CLAUDE_WARN_ROOT = 8_192  # advisory for the ROOT file: one-line rules for every sub-repo, no runbooks
 CLAUDE_FAIL = 10_240  # hard: a CLAUDE.md this big is paid on every adjacent query
 TOPIC_WARN = 20_480  # advisory: split / compress oversized topic files
 
-DEFAULT_MEMORY_DIR = (
-    Path.home()
-    / ".claude"
-    / "projects"
-    / "o--Cloud-Code--scripts"
-    / "memory"
-)
+def _default_memory_dir() -> Path:
+    """The harness's auto-memory directory for THIS workspace.
+
+    Claude Code names a project directory after the workspace path with the
+    drive colon, the path separators and underscores all folded to ``-``
+    (``c:\\work\\my_repo`` -> ``c--work-my-repo``), so derive it from
+    :data:`REPO_ROOT` instead of hardcoding one machine's path into a public
+    repo. ``CLAUDE_MEMORY_DIR`` overrides for a non-standard layout; a directory
+    that does not exist is reported by :func:`check_memory` as a WARN, never a
+    failure, so a wrong guess degrades to "skipped" rather than a false alarm.
+    """
+    override = os.environ.get("CLAUDE_MEMORY_DIR")
+    if override:
+        return Path(override)
+    slug = re.sub(r"[:\\/_]", "-", str(REPO_ROOT))
+    return Path.home() / ".claude" / "projects" / slug / "memory"
+
+
+DEFAULT_MEMORY_DIR = _default_memory_dir()
 
 _INDEX_ENTRY_RE = re.compile(r"^- \[.*?\]\(([^)]+\.md)\)")
 _LINK_RE = re.compile(r"\]\(([^)]+)\)")
@@ -199,23 +221,117 @@ def _claude_files() -> list[Path]:
     return sorted(out)
 
 
+def _claude_advisory_cap(path: Path) -> int:
+    """The root CLAUDE.md carries the ecosystem-wide one-line rules for every
+    sub-repo and no runbook content, so it gets the larger advisory cap; every
+    sub-repo file loaded beside it keeps the lean one."""
+    return CLAUDE_WARN_ROOT if path.resolve() == (REPO_ROOT / "CLAUDE.md").resolve() else CLAUDE_WARN
+
+
 def check_claude_sizes(report: Report) -> None:
     files = _claude_files()
     for p in files:
         sz = p.stat().st_size
         rel = p.relative_to(REPO_ROOT).as_posix()
+        warn_cap = _claude_advisory_cap(p)
         if sz > CLAUDE_FAIL:
             report.fail(f"CLAUDE {rel} is {sz:,} B > {CLAUDE_FAIL:,} B hard cap — move runbook content into <subdir>/docs/")
-        elif sz > CLAUDE_WARN:
-            report.warn(f"CLAUDE {rel} is {sz:,} B > {CLAUDE_WARN:,} B advisory cap")
-    report.ok(f"Scanned {len(files)} CLAUDE.md files (advisory>{CLAUDE_WARN:,} B, fail>{CLAUDE_FAIL:,} B)")
+        elif sz > warn_cap:
+            report.warn(f"CLAUDE {rel} is {sz:,} B > {warn_cap:,} B advisory cap")
+    report.ok(
+        f"Scanned {len(files)} CLAUDE.md files (advisory>{CLAUDE_WARN:,} B, root>{CLAUDE_WARN_ROOT:,} B, fail>{CLAUDE_FAIL:,} B)"
+    )
+
+
+# Distribution name only: the character class stops at the first `[`, `>`, `=`
+# or space, so extras and version pins never reach the caller.
+_DEP_NAME_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)")
+# The `**Deps**:` segment of a Nav line runs until the next `· **Label**:` marker.
+_NAV_DEPS_RE = re.compile(r"\*\*Deps\*\*:\s*(.*?)(?=\s·\s\*\*[A-Za-z][^*]*\*\*:|$)")
+_NAV_LINK_RE = re.compile(r"\]\(\.\./([^/)]+)/CLAUDE\.md\)")  # the path names the package, the text is free
+
+
+def _pyproject_ecosystem_deps(pyproject: Path, ecosystem: tuple[str, ...]) -> list[str]:
+    """Ecosystem packages named in `[project] dependencies` (extras and pins stripped)."""
+    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    deps = list(data.get("project", {}).get("dependencies", []))
+    wanted = {e.lower() for e in ecosystem}
+    names: list[str] = []
+    for d in deps:
+        m = _DEP_NAME_RE.match(d)
+        if not m:
+            continue
+        name = m.group(1).lower().replace("_", "-")
+        if name in wanted and name not in names:
+            names.append(name)
+    return names
+
+
+def _nav_deps(claude_md: Path) -> list[str] | None:
+    """Package names linked from the `**Deps**:` segment of the Nav line, or
+    None when the file has no such segment."""
+    for line in claude_md.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("**Nav**:"):
+            continue
+        m = _NAV_DEPS_RE.search(line)
+        if not m:
+            return None
+        return [n.lower() for n in _NAV_LINK_RE.findall(m.group(1))]
+    return None
+
+
+def _nav_deps_missing(pkg_dir: Path, ecosystem: tuple[str, ...]) -> list[str]:
+    """Ecosystem deps declared in pkg_dir/pyproject.toml that its CLAUDE.md Nav
+    `**Deps**:` segment fails to name."""
+    declared = _pyproject_ecosystem_deps(pkg_dir / "pyproject.toml", ecosystem)
+    if not declared:
+        return []
+    named = _nav_deps(pkg_dir / "CLAUDE.md") or []
+    return [d for d in declared if d not in named]
+
+
+def check_nav_deps(report: Report) -> None:
+    """A CLAUDE.md `**Deps**:` line is hand-maintained and used for routing; it
+    must name every ecosystem package the pyproject declares (extra entries,
+    e.g. host-provided engines, are fine)."""
+    if tomllib is None:
+        report.warn("NAVDEPS: needs Python 3.11+ (tomllib) - skipped")
+        return
+    try:
+        ECOSYSTEM_PACKAGES = _ecosystem_packages()
+    except Exception as exc:  # noqa: BLE001
+        report.fail(f"NAVDEPS: cannot import ECOSYSTEM_PACKAGES from generate_api_registry: {exc}")
+        return
+    checked = 0
+    for pkg in ECOSYSTEM_PACKAGES:
+        pkg_dir = REPO_ROOT / pkg
+        if not (pkg_dir / "pyproject.toml").exists() or not (pkg_dir / "CLAUDE.md").exists():
+            continue  # partial checkout (CI) - nothing to compare
+        checked += 1
+        missing = _nav_deps_missing(pkg_dir, ECOSYSTEM_PACKAGES)
+        if missing:
+            report.fail(
+                f"NAVDEPS: {pkg}/CLAUDE.md Nav `**Deps**:` omits declared ecosystem dep(s) {missing} "
+                f"(pyproject.toml is the SSoT - add the link)"
+            )
+    if checked:
+        report.ok(f"NAVDEPS: {checked} package CLAUDE.md Nav Deps lines cover their declared ecosystem deps")
+    else:
+        report.warn("NAVDEPS: no package pyproject/CLAUDE.md pairs found - skipped (partial checkout?)")
+
+
+def _ecosystem_packages() -> tuple[str, ...]:
+    """The package-set SSoT: generate_api_registry.ECOSYSTEM_PACKAGES."""
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
+    from generate_api_registry import ECOSYSTEM_PACKAGES  # type: ignore
+
+    return tuple(ECOSYSTEM_PACKAGES)
 
 
 def check_dispatch(report: Report) -> None:
-    if str(SCRIPT_DIR) not in sys.path:
-        sys.path.insert(0, str(SCRIPT_DIR))
     try:
-        from generate_api_registry import ECOSYSTEM_PACKAGES  # type: ignore
+        ECOSYSTEM_PACKAGES = _ecosystem_packages()
     except Exception as exc:  # noqa: BLE001
         report.fail(f"DISPATCH: cannot import ECOSYSTEM_PACKAGES from generate_api_registry: {exc}")
         return
@@ -338,6 +454,7 @@ def run_checks(
     check_claude_sizes(report)
     check_dispatch(report)
     check_claude_links(report)
+    check_nav_deps(report)
     if do_registry:
         check_registry_fresh(report)
     if do_runtime:

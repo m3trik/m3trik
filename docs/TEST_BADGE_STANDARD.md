@@ -53,7 +53,13 @@ shell alike) tests this case first.
   cosmetic: a plain tentacle run publishing its 197-of-541 count replaced a canonical
   `534 passed, 2 failed` with a green `197 passed`, erasing two real failures. Every runner
   guards itself — mayatk requires every in-scope module to have run, blendertk and unitytk
-  require a full sweep, tentacle requires the Maya suite — and all expose `--no-badge`.
+  require a full sweep, tentacle requires the Maya suite, and pythontk and uitk gate on
+  `StatusBadge.gate` (below) — and all expose `--no-badge`.
+- An **environment-gated skip is still green**, and must stay green whichever idiom
+  expressed it. A module skipped via `@unittest.skipUnless` and one skipped by raising
+  `SkipTest` in `setUpClass`/`setUpModule` both *ran*; only a module that never imported
+  (unittest substitutes a `unittest.loader` stand-in) did not. Conflating the two blocked
+  the badge permanently for any module whose cases are all `setUpClass`-gated.
 - A repo keeping **two front doors** (uitk: a landing `README.md` plus the packaged
   `docs/README.md`) stamps *both* — one showing a badge the other lacks, or a stale
   count, is the same inconsistency in miniature.
@@ -68,6 +74,18 @@ wording, colours, escaping or insert position:
 from pythontk.core_utils.status_badge import StatusBadge
 
 StatusBadge.update_test_badge(readme_path, passed, failed, test_dir=TEST_DIR)
+```
+
+The **run-completeness gate** lives there too, for the same reason — six runners stamp
+badges, so "did this run cover everything?" has to be one implementation:
+
+```python
+expected = StatusBadge.discover_module_names(TEST_DIR)   # derived from disk, never stale
+ran      = {StatusBadge.module_of(t) for t in cases
+            if not StatusBadge.is_import_standin(t)}
+allowed, reason = StatusBadge.gate(expected, ran, passed, failed)
+if not allowed:
+    print(f"[INFO] Badge not updated ({reason}).")
 ```
 
 It replaces an existing badge in place (matching any alt text or label casing, linked or

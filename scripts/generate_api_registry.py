@@ -24,6 +24,17 @@ Usage:
     python generate_api_registry.py            # all ecosystem packages
     python generate_api_registry.py pythontk   # one or more by name
     python generate_api_registry.py --check    # exit 1 if registries stale
+    python generate_api_registry.py uitk --check   # one package (the CI gate)
+
+``--check`` writes nothing and compares CONTENT HASHES, never mtimes — see
+``StalenessGate`` for exactly which artifacts are gated and which cosmetics are
+normalized out. It is wired into each ecosystem package's own CI (tests.yml /
+static-analysis.yml) as a per-package job, which is why the single-package form
+above has to stand on its own: that checkout holds the package, this repo and
+pythontk -- whose ``core_utils/symbol_record.py`` this module loads at import for
+the shared ``SymbolRecord`` DTO, so the pythontk sibling is a hard requirement of
+every job, not a convenience -- and nothing else. Anything cross-package (the
+shadow report) is therefore out of scope there.
 
 Design notes:
   * Walks <pkg>/<pkg>/ source root only — skips build/, dist/, test/, tests/,
@@ -40,9 +51,11 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
@@ -818,18 +831,72 @@ def _to_jsonable(pkg: PackageData) -> dict:
     return asdict(pkg)
 
 
-def _strip_generated(text: str | None) -> str | None:
-    """Drop the cosmetic generation-date line(s) so ``--check`` doesn't treat a
-    new day as staleness. The written output keeps the date; only the staleness
-    comparison ignores it (the `_Generated: <date>_` markdown line and the JSON
-    `"generated_at"` field are metadata, not source-derived API content)."""
-    if text is None:
-        return None
-    return "\n".join(
-        ln
-        for ln in text.splitlines()
-        if not ln.startswith("_Generated:") and '"generated_at"' not in ln
-    )
+class StalenessGate:
+    """Content-hash staleness comparison behind ``--check`` (the CI gate).
+
+    The gate answers one question: *does the committed registry still describe
+    the package's current public surface?* It compares a SHA-256 of the
+    normalized committed text against the same hash of a fresh generation —
+    never an mtime, which is meaningless in a fresh CI checkout and flapped
+    locally on a cloud-synced drive.
+
+    The gated per-package artifacts (:attr:`GATED_FILES`) are the two hand-read
+    docs: ``API_INDEX.md`` and ``API_REGISTRY.md``. Deliberately NOT gated:
+
+    * ``API_REGISTRY.json`` — the machine sidecar records a ``line`` for every
+      member, so inserting one import at the top of a module rewrites hundreds
+      of numbers while the public surface is untouched. Gating it made
+      ``--check`` a line-shift tripwire that went red on commits it had nothing
+      to say about.
+    * ``API_CHANGES.md`` — a generation-time diff narrative against the last
+      release; it legitimately differs from a re-diff against a moved baseline.
+    * ``m3trik/docs/API_SHADOWS.md`` — cross-package by construction, so it can
+      only be validated when every ecosystem package was walked in one run (see
+      :meth:`covers_ecosystem`). A per-package CI checkout has no siblings.
+
+    :meth:`normalize` additionally drops the two cosmetics that are not public
+    API: the ``_Generated: <date>_`` stamp (a new day is not a change) and the
+    ``#L<line>`` fragment of source deep-links (a class that moved down three
+    lines is the same class). Everything that IS surface — module set and
+    order, names, bases, signatures, kinds, summaries — still fails the gate.
+    Normalization applies to the COMPARISON only; the written artifacts keep
+    real dates and real line numbers.
+    """
+
+    GATED_FILES = ("API_INDEX.md", "API_REGISTRY.md")
+
+    _DATE_LINE_PREFIX = "_Generated:"
+    _SRC_LINE_FRAGMENT = re.compile(r"#L\d+")
+
+    @classmethod
+    def normalize(cls, text: str | None) -> str | None:
+        """Strip the non-surface cosmetics (see the class docstring)."""
+        if text is None:
+            return None
+        kept = "\n".join(
+            ln
+            for ln in text.splitlines()
+            if not ln.startswith(cls._DATE_LINE_PREFIX)
+        )
+        return cls._SRC_LINE_FRAGMENT.sub("#L", kept)
+
+    @classmethod
+    def digest(cls, text: str | None) -> str | None:
+        """SHA-256 of the normalized text; ``None`` for a missing artifact."""
+        normalized = cls.normalize(text)
+        if normalized is None:
+            return None
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def is_stale(cls, existing: str | None, generated: str) -> bool:
+        """True when the committed text no longer matches a fresh generation."""
+        return cls.digest(existing) != cls.digest(generated)
+
+    @staticmethod
+    def covers_ecosystem(walked: Iterable[str]) -> bool:
+        """True when a run walked every package the shadow report spans."""
+        return set(walked) >= set(ECOSYSTEM_PACKAGES)
 
 
 def regenerate(
@@ -839,48 +906,54 @@ def regenerate(
 ) -> int:
     packages: list[PackageData] = []
     stale: list[str] = []
+    unwalkable: list[str] = []
 
     for name in package_names:
         pkg_dir = repo_root / name
         if not pkg_dir.is_dir():
             print(f"warning: skipping {name} — directory not found", file=sys.stderr)
+            unwalkable.append(name)
             continue
         try:
             data = walk_package(pkg_dir, repo_root)
         except FileNotFoundError as exc:
             print(f"warning: skipping {name} — {exc}", file=sys.stderr)
+            unwalkable.append(name)
             continue
         packages.append(data)
 
-        registry_md = emit_registry_markdown(data)
-        prior, baseline_label = _baseline_registry_json(pkg_dir)
-        changes_md = emit_changes_markdown(data, prior, baseline_label)
-        registry_json = json.dumps(_to_jsonable(data), indent=2, ensure_ascii=False)
-
         targets = {
             pkg_dir / "API_INDEX.md": emit_symbol_index(data),
-            pkg_dir / "API_REGISTRY.md": registry_md,
-            pkg_dir / "API_REGISTRY.json": registry_json + "\n",
-            pkg_dir / "API_CHANGES.md": changes_md,
+            pkg_dir / "API_REGISTRY.md": emit_registry_markdown(data),
         }
+        if not check_only:
+            # The sidecar and the changes narrative are written, never gated
+            # (see StalenessGate). Building the narrative shells out to git for
+            # the release baseline, so skipping it keeps ``--check`` fast and
+            # independent of a shallow CI checkout's missing origin/main.
+            prior, baseline_label = _baseline_registry_json(pkg_dir)
+            registry_json = json.dumps(
+                _to_jsonable(data), indent=2, ensure_ascii=False
+            )
+            targets[pkg_dir / "API_REGISTRY.json"] = registry_json + "\n"
+            targets[pkg_dir / "API_CHANGES.md"] = emit_changes_markdown(
+                data, prior, baseline_label
+            )
 
         for path, content in targets.items():
             existing = path.read_text(encoding="utf-8") if path.exists() else None
+            if check_only:
+                # GATED_FILES is the authority, not this loop's membership: a
+                # later artifact added to `targets` stays ungated until it is
+                # listed there deliberately.
+                if path.name in StalenessGate.GATED_FILES and StalenessGate.is_stale(
+                    existing, content
+                ):
+                    stale.append(path.relative_to(repo_root).as_posix())
+                continue
             if existing != content:
-                if check_only:
-                    # API_CHANGES.md is a generation-time diff narrative: it
-                    # legitimately differs from a re-diff against the
-                    # now-updated baseline, so it is NOT a staleness signal.
-                    # Gate only the source-derived artifacts (INDEX/REGISTRY),
-                    # ignoring the cosmetic generation date so an untouched
-                    # registry isn't "stale" merely because the day rolled over.
-                    if path.name != "API_CHANGES.md" and _strip_generated(
-                        existing
-                    ) != _strip_generated(content):
-                        stale.append(path.relative_to(repo_root).as_posix())
-                else:
-                    path.write_text(content, encoding="utf-8")
-            elif not check_only:
+                path.write_text(content, encoding="utf-8")
+            else:
                 # Content already current — still refresh the mtime.
                 # generate_parity_audit.py's freshness guard compares the
                 # JSON sidecar's mtime against package source, so a
@@ -894,39 +967,70 @@ def regenerate(
     # reconstructed from their committed JSON sidecars. Previously this only ran
     # when every package was walked in one invocation, so the documented manual
     # single-package refresh silently left the shadow report stale.
+    #
+    # Under --check it is gated ONLY when this run walked the whole ecosystem: a
+    # per-package CI checkout has no sibling packages on disk, so the report it
+    # would compute spans one package and could never match the committed
+    # cross-package one. Skipping keeps the per-package gate deterministic.
+    shadow_in_scope = not check_only or StalenessGate.covers_ecosystem(
+        p.name for p in packages
+    )
+
     shadow_inputs: dict[str, PackageData] = {p.name: p for p in packages}
-    for name in ECOSYSTEM_PACKAGES:
-        if name in shadow_inputs:
-            continue
-        sidecar = repo_root / name / "API_REGISTRY.json"
-        if sidecar.exists():
-            try:
-                shadow_inputs[name] = _package_data_from_json(
-                    json.loads(sidecar.read_text(encoding="utf-8"))
-                )
-            except (json.JSONDecodeError, KeyError, TypeError):
-                pass
-    if shadow_inputs:
+    if shadow_in_scope:
+        for name in ECOSYSTEM_PACKAGES:
+            if name in shadow_inputs:
+                continue
+            sidecar = repo_root / name / "API_REGISTRY.json"
+            if sidecar.exists():
+                try:
+                    shadow_inputs[name] = _package_data_from_json(
+                        json.loads(sidecar.read_text(encoding="utf-8"))
+                    )
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    pass
+    if shadow_inputs and shadow_in_scope:
         # Derived from repo_root so a test repo_root never writes into the
         # real monorepo's docs.
         docs_root = repo_root / "m3trik" / "docs"
-        docs_root.mkdir(parents=True, exist_ok=True)
+        if not check_only:
+            docs_root.mkdir(parents=True, exist_ok=True)
         shadow_path = docs_root / "API_SHADOWS.md"
         shadow_md = emit_shadow_report(
             [shadow_inputs[n] for n in sorted(shadow_inputs)]
         )
         existing = shadow_path.read_text(encoding="utf-8") if shadow_path.exists() else None
-        if existing != shadow_md:
-            if check_only:
-                if _strip_generated(existing) != _strip_generated(shadow_md):
-                    stale.append(shadow_path.relative_to(repo_root).as_posix())
-            else:
-                shadow_path.write_text(shadow_md, encoding="utf-8")
+        if check_only:
+            if StalenessGate.is_stale(existing, shadow_md):
+                stale.append(shadow_path.relative_to(repo_root).as_posix())
+        elif existing != shadow_md:
+            shadow_path.write_text(shadow_md, encoding="utf-8")
+
+    # A gate that passes because it walked NOTHING is worse than no gate: a typo
+    # in the workflow's package name, a wrong `path:` on the checkout, or a
+    # renamed source root would all read green. So a SCOPED check (the CI form,
+    # which names its package) must walk everything it was asked for. The
+    # full-ecosystem sweep stays tolerant: refresh-api-registry.yml clones the
+    # siblings best-effort and warns on a failed clone, and a monorepo checkout
+    # may legitimately lack a package.
+    scoped_run = set(package_names) != set(ECOSYSTEM_PACKAGES)
+    if check_only and unwalkable and (scoped_run or not packages):
+        print(
+            "Nothing to check for: " + ", ".join(unwalkable)
+            + " (wrong package name, or checked out at the wrong path?)",
+            file=sys.stderr,
+        )
+        return 1
 
     if check_only and stale:
-        print("Stale (would be rewritten):", file=sys.stderr)
+        print("Stale - regenerate with:", file=sys.stderr)
+        print(
+            "  python m3trik/scripts/generate_api_registry.py "
+            + " ".join(p.name for p in packages),
+            file=sys.stderr,
+        )
         for path in stale:
-            print(f"  {path}", file=sys.stderr)
+            print(f"  stale: {path}", file=sys.stderr)
         return 1
 
     if not check_only:

@@ -1,8 +1,11 @@
-"""Tests for generate_api_registry.py — focused on the logic added in the
-context-budget pass: shadow-report parity bucketing and JSON reconstruction of
-non-walked packages (so a partial run still produces a complete shadow report)."""
+"""Tests for generate_api_registry.py — the shadow-report parity bucketing and
+JSON reconstruction added in the context-budget pass, and the ``--check``
+staleness gate each ecosystem package's CI now runs per package
+(``StalenessGate`` + the end-to-end fixture-tree cases at the bottom)."""
 
 import ast
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -10,6 +13,7 @@ import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -317,6 +321,249 @@ class TestChangesBaseline(unittest.TestCase):
             second = (root / "pkga" / "API_CHANGES.md").read_text(encoding="utf-8")
             self.assertIn("No public API changes", second)
             self.assertIn("origin/main unresolvable", second)
+
+
+class TestStalenessGate(unittest.TestCase):
+    """The ``--check`` comparison itself.
+
+    The gate is a CONTENT HASH of the two hand-read docs, never an mtime (a
+    fresh CI checkout has no meaningful mtimes) and never the JSON sidecar
+    (which records a line for every member, so one inserted import rewrites
+    hundreds of numbers while the public surface is untouched)."""
+
+    def test_generation_date_is_not_staleness(self):
+        old = "# pkg\n\n_Generated: 2026-01-01_\n\n- `class Widget`\n"
+        new = "# pkg\n\n_Generated: 2026-08-17_\n\n- `class Widget`\n"
+        self.assertFalse(g.StalenessGate.is_stale(old, new))
+
+    def test_source_line_numbers_are_not_staleness(self):
+        old = "- [`class Widget(object)`](pkg/pkg/mod.py#L12) — spins.\n"
+        new = "- [`class Widget(object)`](pkg/pkg/mod.py#L340) — spins.\n"
+        self.assertFalse(g.StalenessGate.is_stale(old, new))
+
+    def test_base_change_is_staleness(self):
+        old = "- [`class Widget(object)`](pkg/pkg/mod.py#L12)\n"
+        new = "- [`class Widget(Base)`](pkg/pkg/mod.py#L12)\n"
+        self.assertTrue(g.StalenessGate.is_stale(old, new))
+
+    def test_signature_change_is_staleness(self):
+        self.assertTrue(
+            g.StalenessGate.is_stale(
+                "  - `Widget.spin(self)`\n", "  - `Widget.spin(self, n=1)`\n"
+            )
+        )
+
+    def test_missing_artifact_is_staleness(self):
+        self.assertTrue(g.StalenessGate.is_stale(None, "- `class Widget`\n"))
+
+    def test_digest_is_a_hash(self):
+        digest = g.StalenessGate.digest("- `class Widget`\n")
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        self.assertIsNone(g.StalenessGate.digest(None))
+
+    def test_covers_ecosystem(self):
+        self.assertTrue(g.StalenessGate.covers_ecosystem(g.ECOSYSTEM_PACKAGES))
+        self.assertFalse(g.StalenessGate.covers_ecosystem(["pythontk"]))
+
+
+class TestCheckGateOnFixtureTree(unittest.TestCase):
+    """``--check`` end to end: a clean package tree passes, a genuinely stale
+    one fails, and the churn classes that made the gate un-wireable (JSON
+    line-number drift, a cross-package shadow report a per-package CI checkout
+    cannot see) do not.
+
+    Fixtures live in the system temp via ``TemporaryDirectory`` — the
+    convention every m3trik test module already follows, and deliberately NOT
+    the cloud-synced repo drive: these cases write an artifact and immediately
+    hash it back, which is exactly the read-after-write that
+    ``check_context_budget.check_registry_fresh`` had to add a retry for.
+    """
+
+    SOURCE = (
+        '"""Mod."""\n'
+        "\n"
+        "\n"
+        "class Widget:\n"
+        '    """A widget."""\n'
+        "\n"
+        "    def spin(self):\n"
+        '        """Spin it."""\n'
+    )
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name)
+
+    def _make_pkg(self, name: str = "pythontk") -> Path:
+        pkg = self.root / name
+        (pkg / name).mkdir(parents=True)
+        (pkg / name / "mod.py").write_text(self.SOURCE, encoding="utf-8")
+        return pkg
+
+    def _check(self, names: list[str]) -> tuple[int, str]:
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            rc = g.regenerate(names, repo_root=self.root, check_only=True)
+        return rc, err.getvalue()
+
+    def _generate(self, names: list[str]) -> None:
+        with contextlib.redirect_stdout(io.StringIO()):
+            g.regenerate(names, repo_root=self.root)
+
+    def test_clean_tree_passes(self):
+        self._make_pkg()
+        self._generate(["pythontk"])
+        rc, _ = self._check(["pythontk"])
+        self.assertEqual(0, rc)
+
+    def test_added_public_class_is_stale(self):
+        pkg = self._make_pkg()
+        self._generate(["pythontk"])
+        with (pkg / "pythontk" / "mod.py").open("a", encoding="utf-8") as fh:
+            fh.write('\n\nclass Gadget:\n    """Undocumented in the registry."""\n')
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(1, rc)
+        self.assertIn("API_INDEX.md", err)
+        self.assertIn("API_REGISTRY.md", err)
+
+    def test_removed_method_is_stale(self):
+        pkg = self._make_pkg()
+        self._generate(["pythontk"])
+        (pkg / "pythontk" / "mod.py").write_text(
+            '"""Mod."""\n\n\nclass Widget:\n    """A widget."""\n',
+            encoding="utf-8",
+        )
+        rc, _ = self._check(["pythontk"])
+        self.assertEqual(1, rc)
+
+    def test_line_shift_alone_is_not_stale(self):
+        """The regression this gate could not be wired without: an edit that
+        moves every symbol down without touching the public surface."""
+        pkg = self._make_pkg()
+        self._generate(["pythontk"])
+        mod = pkg / "pythontk" / "mod.py"
+        # Inserted AFTER the module docstring: nothing about the public surface
+        # changes, every symbol below just moves down.
+        mod.write_text(
+            self.SOURCE.replace(
+                '"""Mod."""\n',
+                '"""Mod."""\n\n# a new comment block\nimport os  # noqa: F401\n',
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+        # Guard against a vacuous test: the committed artifacts really ARE
+        # byte-different now (the #L deep links moved), so a plain equality
+        # check would call this stale.
+        fresh = g.emit_registry_markdown(g.walk_package(pkg, self.root))
+        committed = (pkg / "API_REGISTRY.md").read_text(encoding="utf-8")
+        self.assertNotEqual(fresh, committed)
+
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(0, rc, err)
+
+    def test_line_shifted_json_sidecar_alone_is_not_stale(self):
+        pkg = self._make_pkg()
+        self._generate(["pythontk"])
+        sidecar = pkg / "API_REGISTRY.json"
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        for mod in data["modules"]:
+            for cls in mod["classes"]:
+                cls["line"] += 7
+                for member in cls["members"]:
+                    member["line"] += 7
+        sidecar.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(0, rc, err)
+
+    def test_missing_index_is_stale(self):
+        pkg = self._make_pkg()
+        self._generate(["pythontk"])
+        (pkg / "API_INDEX.md").unlink()
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(1, rc)
+        self.assertIn("API_INDEX.md", err)
+
+    def test_changes_narrative_is_not_gated(self):
+        pkg = self._make_pkg()
+        self._generate(["pythontk"])
+        (pkg / "API_CHANGES.md").write_text("clobbered\n", encoding="utf-8")
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(0, rc, err)
+
+    def test_check_writes_nothing(self):
+        pkg = self._make_pkg()
+        self._generate(["pythontk"])
+        (pkg / "pythontk" / "mod.py").write_text(
+            '"""Mod."""\n\n\nclass Other:\n    """Different surface."""\n',
+            encoding="utf-8",
+        )
+        before = {
+            p.name: p.read_bytes() for p in pkg.glob("API_*") if p.is_file()
+        }
+        rc, _ = self._check(["pythontk"])
+        self.assertEqual(1, rc)
+        after = {p.name: p.read_bytes() for p in pkg.glob("API_*") if p.is_file()}
+        self.assertEqual(before, after, "--check must not write")
+
+    def test_check_does_not_shell_out_to_git(self):
+        """The CI step runs in a shallow checkout with no origin/main, so the
+        gate must not depend on the release-baseline lookup at all."""
+        self._make_pkg()
+        self._generate(["pythontk"])
+        with mock.patch.object(
+            g, "_baseline_registry_json", side_effect=AssertionError("git touched")
+        ):
+            rc, err = self._check(["pythontk"])
+        self.assertEqual(0, rc, err)
+
+    def test_single_package_check_ignores_the_shadow_report(self):
+        """A per-package CI checkout holds one package plus m3trik, so the
+        cross-package report it could compute is meaningless there."""
+        self._make_pkg("pythontk")
+        self._make_pkg("uitk")
+        self._generate(["pythontk", "uitk"])
+        shadow = self.root / "m3trik" / "docs" / "API_SHADOWS.md"
+        self.assertTrue(shadow.exists())
+        shadow.write_text("# clobbered\n", encoding="utf-8")
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(0, rc, err)
+
+    def test_scoped_check_of_an_absent_package_fails(self):
+        """The CI step names its package; if the checkout put it somewhere
+        else (or the name is a typo) the gate must not read green."""
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(1, rc)
+        self.assertIn("Nothing to check", err)
+
+    def test_scoped_check_of_a_package_without_a_source_root_fails(self):
+        (self.root / "pythontk").mkdir()
+        rc, err = self._check(["pythontk"])
+        self.assertEqual(1, rc)
+        self.assertIn("Nothing to check", err)
+
+    def test_full_sweep_tolerates_a_missing_sibling(self):
+        """refresh-api-registry.yml clones the siblings best-effort, so the
+        unscoped sweep must warn rather than fail on one absent package."""
+        present = [n for n in g.ECOSYSTEM_PACKAGES if n != "unitytk"]
+        for name in present:
+            self._make_pkg(name)
+        self._generate(list(g.ECOSYSTEM_PACKAGES))
+        rc, err = self._check(list(g.ECOSYSTEM_PACKAGES))
+        self.assertEqual(0, rc, err)
+        self.assertIn("unitytk", err)
+
+    def test_full_ecosystem_check_still_gates_the_shadow_report(self):
+        for name in g.ECOSYSTEM_PACKAGES:
+            self._make_pkg(name)
+        self._generate(list(g.ECOSYSTEM_PACKAGES))
+        shadow = self.root / "m3trik" / "docs" / "API_SHADOWS.md"
+        shadow.write_text("# clobbered\n", encoding="utf-8")
+        rc, err = self._check(list(g.ECOSYSTEM_PACKAGES))
+        self.assertEqual(1, rc)
+        self.assertIn("API_SHADOWS.md", err)
 
 
 if __name__ == "__main__":

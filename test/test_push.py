@@ -5,6 +5,7 @@ Tests push.ps1 functionality and package structure
 without actually publishing to PyPI.
 """
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -88,13 +89,14 @@ class TestPushScriptRegressions(unittest.TestCase):
         except FileNotFoundError:
             return False
 
-    def _run(self, args, cwd: Path, timeout=120):
+    def _run(self, args, cwd: Path, timeout=120, env=None):
         return subprocess.run(
             args,
             capture_output=True,
             text=True,
             cwd=str(cwd),
             timeout=timeout,
+            env=env,
         )
 
     def _git(self, repo: Path, *args):
@@ -913,6 +915,412 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             self.assertNotIn("m3trik/scripts differs from origin/main", out2)
             self.assertIn("No review receipt", out2)
+
+
+    # ------------------------------------------------------------------
+    # Release-gate / PR-gate helpers
+    # ------------------------------------------------------------------
+
+    def _push_cmd(self, root: Path, *extra):
+        """The `powershell -File push.ps1 -Root <root>` prefix every run shares."""
+        return [
+            "powershell",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(M3TRIK_DIR / "push.ps1"),
+            "-Root",
+            str(root),
+            *extra,
+        ]
+
+    def _retarget_origin_to_github(self, repo: Path, origin: Path, slug: str):
+        """Report a github.com origin URL while transports stay local.
+
+        push.ps1 derives the `gh` repo slug from `remote.origin.url`, so PR mode
+        is unreachable from a file-path origin. `url.<local>.insteadOf` rewrites
+        the URL at transport time only: the script reads a real slug, while
+        fetch/push still hit the temp bare repo and the test stays offline.
+        """
+        url = f"https://github.com/{slug}.git"
+        self._git(repo, "config", f"url.{origin.as_posix()}.insteadOf", url)
+        self._git(repo, "remote", "set-url", "origin", url)
+
+    # A `gh` stand-in. Dispatches on the subcommand and, for `pr view`, on
+    # whether the --json field list asks for mergedAt (the merge-wait probe) or
+    # the gate fields. Responses come from sibling files so each test can pick a
+    # scenario without rewriting the shim. .cmd + CRLF: cmd.exe rejects LF-only
+    # batch files, and PATHEXT resolution makes `gh` find it from PowerShell.
+    _GH_SHIM_LINES = [
+        "@echo off",
+        "setlocal",
+        'set "ARGS=%*"',
+        'if "%1"=="auth" exit /b 0',
+        'if "%2"=="list" goto :prlist',
+        'if "%2"=="create" goto :prcreate',
+        'if "%2"=="merge" exit /b 0',
+        'if "%2"=="view" goto :prview',
+        "exit /b 0",
+        "",
+        ":prlist",
+        'type "%~dp0pr_list.json"',
+        "exit /b 0",
+        "",
+        ":prcreate",
+        'type "%~dp0pr_create.txt"',
+        "exit /b 0",
+        "",
+        ":prview",
+        'echo %ARGS% | findstr /C:"mergedAt" >nul',
+        "if errorlevel 1 goto :prgates",
+        'type "%~dp0pr_merged.json"',
+        "exit /b 0",
+        "",
+        ":prgates",
+        'type "%~dp0pr_gates.json"',
+        "exit /b 0",
+        "",
+    ]
+
+    def _install_fake_gh(self, root: Path, gates: str, slug: str = "m3trik/pythontk"):
+        """Put a scripted `gh` first on PATH and return the env to run with."""
+        bin_dir = root / "_bin"
+        bin_dir.mkdir(exist_ok=True)
+        (bin_dir / "gh.cmd").write_bytes(
+            ("\r\n".join(self._GH_SHIM_LINES)).encode("ascii")
+        )
+        (bin_dir / "pr_list.json").write_text("[]", encoding="ascii")
+        (bin_dir / "pr_create.txt").write_text(
+            f"https://github.com/{slug}/pull/7", encoding="ascii"
+        )
+        (bin_dir / "pr_gates.json").write_text(gates, encoding="ascii")
+        (bin_dir / "pr_merged.json").write_text(
+            '{"state":"MERGED","mergedAt":"2026-08-17T00:00:00Z"}', encoding="ascii"
+        )
+        env = os.environ.copy()
+        env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+        return env
+
+    def _pr_release_repo(self, root: Path):
+        """A pythontk repo with a real dev delta and a github.com origin."""
+        repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+        self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+        self._git(repo, "checkout", "dev")
+        (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-m", "feature")
+        self._git(repo, "push", "origin", "dev")
+        return repo, origin
+
+    def _pr_release_cmd(self, root: Path):
+        return self._push_cmd(
+            root,
+            "-Packages",
+            "pythontk",
+            "-Strict",
+            "-Merge",
+            "-SkipReview",
+            "-SkipBuild",
+            "-SkipWorkflowWait",
+            "-SkipPypiCheck",
+            "-UsePR",
+            "-PRGateTimeoutSeconds",
+            "0",
+        )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_tests_receipt_is_a_hard_release_gate(self):
+        """A "review" receipt alone must NOT release: "tests" is enforced too.
+
+        mayatk and blendertk ship no pull_request-triggered tests workflow, so
+        the local "tests" receipt is the only evidence that anything ever ran
+        their suite against the tree being published. Recording it must clear
+        the gate, or the receipt is decorative.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "dev")
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature")
+            self._git(repo, "push", "origin", "dev")
+
+            base = self._push_cmd(root, "-Packages", "pythontk")
+            release = base + [
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+                "-SkipPypiCheck",
+            ]
+
+            reviewed = self._run(base + ["-RecordReceipt", "review"], cwd=root)
+            self.assertEqual(reviewed.returncode, 0, reviewed.stdout + reviewed.stderr)
+
+            blocked = self._run(release, cwd=root, timeout=120)
+            out = blocked.stdout + blocked.stderr
+            self.assertNotEqual(blocked.returncode, 0, out)
+            self.assertIn("No tests receipt for the current tree", out)
+            # The review half was satisfied, so only the tests half may complain.
+            self.assertNotIn("No review receipt for the current tree", out)
+
+            tested = self._run(base + ["-RecordReceipt", "tests"], cwd=root)
+            self.assertEqual(tested.returncode, 0, tested.stdout + tested.stderr)
+
+            passed = self._run(release, cwd=root, timeout=180)
+            out2 = passed.stdout + passed.stderr
+            self.assertEqual(passed.returncode, 0, out2)
+            self.assertIn("Tests receipt valid", out2)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_skip_tests_receipt_bypasses_loudly(self):
+        """-SkipTestsReceipt is the escape hatch, and it must be unmissable.
+
+        A silent bypass switch is worse than no gate: the operator loses the one
+        signal that the tree is untested. The run proceeds, but only after
+        announcing what is being given up.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "dev")
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature")
+            self._git(repo, "push", "origin", "dev")
+
+            base = self._push_cmd(root, "-Packages", "pythontk")
+            recorded = self._run(base + ["-RecordReceipt", "review"], cwd=root)
+            self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+
+            bypassed = self._run(
+                base
+                + [
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                    "-SkipTestsReceipt",
+                ],
+                cwd=root,
+                timeout=180,
+            )
+            out = bypassed.stdout + bypassed.stderr
+            self.assertEqual(bypassed.returncode, 0, out)
+            self.assertIn("TESTS RECEIPT GATE BYPASSED", out)
+            self.assertIn("Releasing UNTESTED trees", out)
+            self.assertNotIn("No tests receipt for the current tree", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_dev_bump_commit_is_not_marked_skip_ci(self):
+        """The auto-bump commit heads the branch the release PR is opened from.
+
+        GitHub skips every workflow for a "[skip ci]" head commit, so tagging it
+        meant tests.yml never ran on any release PR and -UsePR merged code no
+        check had ever seen.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "dev")
+            # Uncommitted: Sync-DevWithOrigin absorbs it, which is what puts the
+            # branch ahead of origin/dev and triggers the auto-bump.
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self._run(
+                self._push_cmd(
+                    root,
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipReview",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ),
+                cwd=root,
+                timeout=180,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+
+            subjects = self._git(origin, "log", "--pretty=%s", "dev").stdout
+            self.assertIn("Bump version to 0.1.1", subjects, out)
+            self.assertNotIn("Bump version to 0.1.1 [skip ci]", subjects, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pin_sync_commit_has_no_skip_ci(self):
+        """The pin-sync bump must NOT carry "[skip ci]".
+
+        For a package whose dependencies cascaded, this commit IS the version
+        bump, so it heads the release PR. GitHub skips every workflow for a
+        [skip ci] head, so the tag stripped the required check off the PR the
+        gate exists to hold -- and once required status checks went live
+        (2026-08-17) that PR could never merge at all. Nothing on dev triggers
+        on push, so the tag never suppressed anything where it was made.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
+            _, uitk_origin = self._init_dummy_repo(
+                root, "uitk", "1.0.51", ["qtpy", "pythontk==0.0.1"]
+            )
+
+            result = self._run(
+                self._push_cmd(
+                    root,
+                    "-Packages",
+                    "uitk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipReview",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ),
+                cwd=root,
+                timeout=180,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Synced dependencies & bumped version", out)
+
+            subjects = self._git(uitk_origin, "log", "--pretty=%s", "dev").stdout
+            self.assertIn(
+                "Update dependencies & bump version to 1.0.52", subjects, out
+            )
+            self.assertNotIn(
+                "[skip ci]",
+                subjects,
+                "a [skip ci] head strips the required check off the release PR",
+            )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_mode_fails_when_pr_has_no_check_runs(self):
+        """Auto-merge on a PR with zero checks is a direct merge in disguise.
+
+        GitHub lands it the instant auto-merge is armed, so -UsePR reported that
+        it respected a test gate that never existed. It must refuse instead.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root, '{"mergeStateStatus":"CLEAN","statusCheckRollup":[]}'
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=180, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("ZERO check runs", out)
+            self.assertIn("skip ci", out)  # names the cause
+            self.assertNotIn("PR #7 merged", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_mode_fails_when_merge_state_is_blocked(self):
+        """BLOCKED means auto-merge can never fire (missing required review).
+
+        The old code armed auto-merge and then waited out
+        -PRMergeTimeoutSeconds (30 minutes) before reporting a generic timeout.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":[{"name":"test","conclusion":"SUCCESS"}]}',
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=180, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("mergeStateStatus=BLOCKED", out)
+            self.assertNotIn("PR #7 merged", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_mode_proceeds_when_pr_is_actually_gated(self):
+        """The counterweight: a genuinely gated PR must still release.
+
+        Without this, the two refusals above could be satisfied by a gate that
+        rejects everything.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"CLEAN",'
+                '"statusCheckRollup":[{"name":"test","conclusion":"SUCCESS"}]}',
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("gated by 1 check run", out)
+            self.assertIn("PR #7 merged", out)
+
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_mode_waits_out_blocked_while_checks_still_run(self):
+        """BLOCKED while a check is still running is what auto-merge is FOR.
+
+        GitHub reports BLOCKED for a PR whose required check has not finished
+        yet. Treating that as fatal would break every release the moment a
+        required status check is configured, so only a BLOCKED PR whose checks
+        have all settled (missing approval / failed check) may refuse.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":[{"name":"test","status":"IN_PROGRESS",'
+                '"conclusion":null}]}',
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("still running", out)
+            self.assertIn("PR #7 merged", out)
+
+    def test_zero_poll_interval_is_refused_at_bind_time(self):
+        """A 0 poll interval must be rejected, never accepted into a spin loop.
+
+        `$elapsed += $PRGatePollSeconds` is the ONLY clock in Test-PRReleaseGate's
+        check-run wait, so `-PRGatePollSeconds 0` re-probed `gh pr view` forever
+        instead of ever reaching the "ZERO check runs" refusal. Wait-ForWorkflow
+        advances on -WorkflowPollSeconds the same way. Both must fail at parameter
+        binding, before the script touches a single repo.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for flag in ("-PRGatePollSeconds", "-WorkflowPollSeconds"):
+                with self.subTest(flag=flag):
+                    r = self._run(
+                        self._push_cmd(
+                            root, flag, "0", "-Packages", "pythontk", "-DryRun"
+                        ),
+                        cwd=root,
+                        timeout=120,
+                    )
+                    out = r.stdout + r.stderr
+                    self.assertNotEqual(r.returncode, 0, out)
+                    self.assertIn(flag.lstrip("-"), out)
+                    self.assertNotIn("[DRY RUN MODE]", out)
 
 
 class TestPackageStructure(unittest.TestCase):

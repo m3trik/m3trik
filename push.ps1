@@ -11,8 +11,11 @@ Core safety rules (Strict+Merge)
 - Stops on the first failure (build, merge conflict, workflow timeout, unsafe repo state).
 - Refuses to operate if a repo has an in-progress merge/rebase/cherry-pick.
 - Refuses to proceed if conflict markers exist in pyproject.toml (local OR remote origin/main|origin/dev).
-- Refuses to release a real code delta without a recorded review receipt for the current
-  tree (review gate; receipts in .claude/receipts.json — see m3trik/CLAUDE.md "Release preflight").
+- Refuses to release a real code delta without recorded "review" AND "tests" receipts
+  for the current tree (release gate; receipts in .claude/receipts.json — see
+  m3trik/CLAUDE.md "Release preflight"). The tests receipt is enforced, not advisory:
+  mayatk and blendertk ship no pull_request-triggered tests workflow, so it is the only
+  evidence their suite ever ran against the tree being published.
 - Keeps internal pyproject.toml pins in sync with the local versions being released, and
   waits for a just-published upstream version to become visible on PyPI before merging
   a downstream package that pins it.
@@ -37,12 +40,23 @@ Key flags
 -Strict               Adds build validation + strict safety checks for core packages.
 -Merge                Promotes dev -> main after pushing dev.
 -UsePR                Uses GitHub PRs (via gh) to merge dev -> main (recommended).
+                      Verifies the PR is ACTUALLY gated before waiting on it: a PR with
+                      zero check runs, or a mergeStateStatus of BLOCKED, fails loudly
+                      instead of silently waiting out -PRMergeTimeoutSeconds.
+-PRGateTimeoutSeconds / -PRGatePollSeconds
+                      How long to let GitHub attach check runs to a fresh release PR
+                      before the -UsePR gate concludes nothing is watching it, and
+                      how often to re-probe while waiting.
 -SkipBuild            Skip python build/twine validation.
 -SkipWorkflowWait     Skip waiting for the publish workflow on main.
 -SkipPypiCheck        Skip all PyPI availability gates (downstream pin pre-check +
                       post-publish visibility wait). Meant for offline use only —
                       indexing lag is already handled by bounded retries.
--SkipReview           Bypass the Strict+Merge review gate (emergencies only).
+-SkipReview           Bypass the whole Strict+Merge release gate -- review AND tests
+                      receipts, plus the m3trik-first guard (emergencies only).
+-SkipTestsReceipt     Bypass ONLY the "tests" half of the release gate, after printing
+                      a loud banner naming what is being given up. The review receipt
+                      is still required.
 -RecordReceipt        Record named verification receipt(s) (e.g. review,tests) for
                       the current tree of -Packages, then exit. See "Release
                       preflight" in m3trik/CLAUDE.md.
@@ -71,11 +85,22 @@ param(
     [switch]$SkipWorkflowWait,
     [switch]$SkipPypiCheck,
     [switch]$SkipReview,
+    [switch]$SkipTestsReceipt,
     [string[]]$RecordReceipt,
     [switch]$ShowReceipts,
     [int]$ReceiptMaxAgeDays = 7,
     [switch]$UsePR,
     [int]$PRMergeTimeoutSeconds = 1800,
+    # How long to let GitHub attach check runs to a freshly opened release PR before
+    # the -UsePR gate calls it ungated. Checks normally appear within seconds; 120s
+    # absorbs a slow Actions queue without hiding a real "nothing is watching this PR"
+    # condition (which is the whole point of the gate).
+    [int]$PRGateTimeoutSeconds = 120,
+    # A poll interval is the wait loop's ONLY clock (`$elapsed += $PRGatePollSeconds`),
+    # so 0 spins forever on `gh pr view` instead of ever reaching the "ZERO check runs"
+    # refusal. Reject it at bind time rather than clamping silently.
+    [ValidateRange(1, 600)]
+    [int]$PRGatePollSeconds = 10,
     # 2400s (40 min), not 900s: the publish workflow reliably runs ~17 min for
     # uitk (build + verify-install + twine upload), which OVERRAN the old 900s
     # default and made the script abort a still-in-progress-but-successful
@@ -83,6 +108,9 @@ param(
     # The manual-dispatch fallback + `twine upload --skip-existing` make an
     # over-generous wait safe; a genuinely hung run just costs a longer wait.
     [int]$WorkflowTimeoutSeconds = 2400,
+    # Same clock-of-record rule as -PRGatePollSeconds above: Wait-ForWorkflow advances
+    # its elapsed budget by this value alone.
+    [ValidateRange(1, 600)]
     [int]$WorkflowPollSeconds = 15,
     [int]$PypiVisibilityTimeoutSeconds = 300,
     [string]$WorkflowFile = "publish.yml",
@@ -118,8 +146,9 @@ $REQUIRED_PINS = @{
 # One writer for .claude/receipts.json: a receipt records that a named check ("review",
 # "tests", ...) passed for a package at an EXACT tree state. The tree hash covers HEAD plus
 # the working-tree delta (tracked diff + untracked names/size/mtime), so any edit
-# self-invalidates. The Strict+Merge review gate consumes "review"; sessions consult
-# -ShowReceipts to skip re-running a suite already green for an identical tree.
+# self-invalidates. The Strict+Merge release gate consumes BOTH "review" and "tests"
+# (-SkipTestsReceipt waives only the latter, loudly); sessions consult -ShowReceipts to
+# skip re-running a suite already green for an identical tree.
 # Protocol: m3trik/CLAUDE.md "Release preflight".
 # ------------------------------------------------------------------------------------------------
 $RECEIPTS_PATH = Join-Path $ROOT ".claude\receipts.json"
@@ -497,7 +526,17 @@ function Sync-PyProjectDepsToLocalVersions {
     Push-Location $RepoPath
     try {
         git add .
-        git commit -m "Update dependencies & bump version to $newVer [skip ci]" | Out-Null
+        # Deliberately NOT tagged [skip ci]. For a package whose deps cascaded,
+        # THIS commit is the version bump, so it heads the release PR - and
+        # GitHub skips every workflow for a [skip ci] head, which strips the
+        # required check ("test" / "static-analysis") off the very PR the gate
+        # exists to hold. With required status checks live (2026-08-17) that is
+        # not merely ungated, it is a PR that can never merge. Nothing on dev
+        # triggers on push anyway - every push-triggered workflow in all five
+        # repos is branches:[main] - so the tag suppressed nothing here; its
+        # only other effect was on the MERGED head, where publish.yml now
+        # auto-queues instead of needing Wait-ForWorkflow's manual dispatch.
+        git commit -m "Update dependencies & bump version to $newVer" | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Failed to commit pyproject.toml updates"
             return $false
@@ -743,9 +782,15 @@ function Wait-ForWorkflow {
     }
 
     # publish.yml's push trigger is path-filtered (paths: [<pkg>/**,
-    # pyproject.toml]), and the final commit push.ps1 merges to main is the
-    # "Update dependencies & bump version to X [skip ci]" pin-sync bump. GitHub
-    # skips the workflow for a [skip ci] head, so NO run auto-queues on that push.
+    # pyproject.toml]), so a merged head that touches neither queues no run.
+    # As of 2026-08-17 NO commit push.ps1 makes carries [skip ci] (both the dev
+    # auto-bump and the cascade pin-sync bump dropped it, because either can head
+    # the release PR and a [skip ci] head strips the required check off it), and
+    # both merge paths interpose a merge commit whose own message is clean
+    # (Merge-ToMain forces --no-ff; `gh pr merge --merge` always creates one).
+    # So a run should now auto-queue on every release. This fallback stays for the
+    # cases it cannot: a hand-made [skip ci] head, a paths-filter miss, or GitHub
+    # simply not queueing. It costs nothing when a run already did.
     # Rather than burn the whole $maxWait budget polling for a run that will never
     # appear (the old code did, then left only a 180s window for a late dispatch --
     # far too short for a real publish run, so the cascade aborted after one
@@ -774,7 +819,7 @@ function Wait-ForWorkflow {
             # already in-progress (pending -- the push auto-triggered it), wait
             # it out rather than queue a redundant second run.
             if ($verdict -eq "norun" -and -not $dispatched -and $elapsed -ge $dispatchAfter) {
-                Write-Host "    No auto-triggered run after ${elapsed}s (merged head is a [skip ci] bump); dispatching publish.yml manually..." -ForegroundColor Yellow
+                Write-Host "    No auto-triggered run after ${elapsed}s (paths filter missed, or a hand-made [skip ci] head); dispatching publish.yml manually..." -ForegroundColor Yellow
                 gh workflow run $WorkflowFile --repo $repoSlug --ref main 2>&1 | Out-Null
                 $dispatched = $true
             }
@@ -867,11 +912,135 @@ function Ensure-ReleasePR {
     return $null
 }
 
+function Get-PRGateState {
+    # One `gh pr view` probe reduced to the two facts the -UsePR gate needs: how many
+    # check runs GitHub has attached to the PR head, and the computed mergeStateStatus.
+    # Returns $null when the probe itself fails (so callers can retry rather than treat
+    # a transient gh error as "ungated").
+    param(
+        [string]$RepoSlug,
+        [int]$PrNumber
+    )
+
+    $json = gh pr view $PrNumber --repo $RepoSlug --json statusCheckRollup,mergeStateStatus 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $json) { return $null }
+    try { $v = $json | ConvertFrom-Json } catch { return $null }
+    if (-not $v) { return $null }
+
+    # A missing/null rollup is zero checks, not one: @($null).Count is 1.
+    $rollup = @()
+    if ($null -ne $v.statusCheckRollup) { $rollup = @($v.statusCheckRollup) }
+
+    # statusCheckRollup mixes two node shapes: CheckRun (status/conclusion) and
+    # StatusContext (state). A node is SETTLED once it has a conclusion, or a state
+    # that is no longer PENDING/EXPECTED. Anything else is still running - which is
+    # the one reading of BLOCKED that auto-merge is designed to sit through.
+    $pending = 0
+    foreach ($c in $rollup) {
+        $conclusion = ""
+        $stateVal = ""
+        if ($c.PSObject.Properties['conclusion']) { $conclusion = [string]$c.conclusion }
+        if ($c.PSObject.Properties['state']) { $stateVal = [string]$c.state }
+        $settled = $conclusion -or ($stateVal -and $stateVal -ne "PENDING" -and $stateVal -ne "EXPECTED")
+        if (-not $settled) { $pending++ }
+    }
+
+    return [PSCustomObject]@{
+        CheckCount       = $rollup.Count
+        PendingCount     = $pending
+        MergeStateStatus = [string]$v.mergeStateStatus
+    }
+}
+
+function Test-PRReleaseGate {
+    # -UsePR only buys anything if the PR is ACTUALLY gated. Two states made it a
+    # no-op that used to pass silently:
+    #   * ZERO check runs - nothing is testing the merge, so GitHub lands the PR the
+    #     instant auto-merge is armed. -UsePR then differs from a direct merge only in
+    #     the reassuring log line. Real cause: the PR head commit carries [skip ci]
+    #     (GitHub skips every workflow for such a head). As of 2026-08-17 every
+    #     ecosystem repo HAS a pull_request-triggered required check - "test" on
+    #     pythontk/uitk/tentacle, "static-analysis" on mayatk/blendertk - so zero
+    #     check runs now means the head was skipped, not that the repo lacks a
+    #     workflow. (static-analysis is a parse/pyflakes gate, NOT a test suite:
+    #     the tests receipt remains mayatk's and blendertk's only suite evidence.)
+    #   * mergeStateStatus BLOCKED - branch protection is holding the PR (missing
+    #     required approving review, failing required check). Auto-merge never fires,
+    #     and the old code just waited out -PRMergeTimeoutSeconds (30 min) before
+    #     reporting a generic timeout with no cause and no remedy.
+    # Both now fail immediately, naming the cause.
+    param(
+        [string]$RepoSlug,
+        [int]$PrNumber
+    )
+
+    $elapsed = 0
+    $state = Get-PRGateState $RepoSlug $PrNumber
+    while (($null -eq $state -or $state.CheckCount -eq 0) -and $elapsed -lt $PRGateTimeoutSeconds) {
+        Start-Sleep -Seconds $PRGatePollSeconds
+        $elapsed += $PRGatePollSeconds
+        Write-Host "    Waiting for check runs on PR #$PrNumber... ($elapsed/$PRGateTimeoutSeconds seconds)" -ForegroundColor Gray
+        $state = Get-PRGateState $RepoSlug $PrNumber
+    }
+
+    if ($null -eq $state) {
+        Write-Err "Cannot read the gate state of PR #$PrNumber (gh pr view failed)"
+        Write-Err "Refusing to wait on a PR whose checks cannot be verified."
+        return $false
+    }
+
+    if ($state.CheckCount -eq 0) {
+        Write-Err "PR #$PrNumber reports ZERO check runs after ${elapsed}s - -UsePR is not gating this release."
+        Write-Host @"
+  Auto-merge with no checks lands the PR immediately, so -UsePR would be exactly a
+  direct merge while reporting that it honored a test gate. Known causes:
+    * The PR head commit is tagged "[skip ci]" - GitHub skips every workflow,
+      tests.yml included, for such a head.
+    * The repo's required check was renamed, or its workflow no longer triggers on
+      pull_request (expected: "test" on pythontk/uitk/tentacle, "static-analysis"
+      on mayatk/blendertk).
+  Give the repo a real gate, or re-run WITHOUT -UsePR to merge deliberately ungated.
+"@ -ForegroundColor Yellow
+        return $false
+    }
+
+    if ($state.MergeStateStatus -eq "BLOCKED" -and $state.PendingCount -eq 0) {
+        # Every check has settled, so nothing left to run can clear the block:
+        # a required approving review is missing, or a required check failed.
+        # Auto-merge would stay armed forever.
+        Write-Err "PR #$PrNumber mergeStateStatus=BLOCKED - auto-merge can never fire."
+        Write-Host @"
+  Branch protection is holding this PR and every check has already settled:
+  typically a missing required approving review, or a required status check that
+  failed. Auto-merge would stay armed and the release would sit here until
+  -PRMergeTimeoutSeconds expires.
+  Approve/unblock the PR (or fix the failing check), then re-run this same command.
+"@ -ForegroundColor Yellow
+        return $false
+    }
+
+    if ($state.MergeStateStatus -eq "BLOCKED") {
+        # BLOCKED with checks still running is the normal, transient state that
+        # auto-merge exists for - failing here would break every release the moment
+        # a required status check is configured. Wait-ForPRMerged owns this case.
+        Write-Skip "PR #$PrNumber is BLOCKED with $($state.PendingCount) check(s) still running (auto-merge will land it)"
+        return $true
+    }
+
+    Write-Success "PR #$PrNumber is gated by $($state.CheckCount) check run(s) (mergeStateStatus=$($state.MergeStateStatus))"
+    return $true
+}
+
 function Enable-AutoMergePR {
     param(
         [string]$RepoSlug,
         [int]$PrNumber
     )
+
+    # Gate FIRST, arm second. On a PR with no required checks GitHub merges the
+    # instant --auto is set, so a post-hoc verification would be refusing a merge
+    # that had already happened.
+    if (-not (Test-PRReleaseGate $RepoSlug $PrNumber)) { return $false }
 
     $out = gh pr merge $PrNumber --repo $RepoSlug --merge --auto 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -950,7 +1119,7 @@ function Merge-ToMainViaPR {
     }
     Write-Success "PR ready (#$pr)"
 
-    Write-Step "Enabling auto-merge (merge commit) for PR #$pr..."
+    Write-Step "Verifying PR #$pr is gated, then enabling auto-merge (merge commit)..."
     $autoOk = Enable-AutoMergePR $repoSlug $pr
     if (-not $autoOk) {
         return $false
@@ -1246,16 +1415,23 @@ if ($Merge -and $Strict -and -not $SkipReview) {
 }
 
 # ------------------------------------------------------------------------------------------------
-# Review gate (Strict+Merge releases only). A package with a real code delta may not release
-# unless its CURRENT tree has a recorded "review" receipt. Runs as a pre-pass BEFORE any repo
-# mutation so (a) a failure has zero side effects and (b) the cascade's own mechanical commits
-# (pin-sync, version bump) can't void a receipt mid-run. No-delta and housekeeping-only
-# packages are exempt — "push everything" never demands review of untouched repos. The
-# failure text carries the full protocol so any session (or human) can complete preflight
+# Release gate (Strict+Merge releases only). A package with a real code delta may not release
+# unless its CURRENT tree has BOTH a "review" and a "tests" receipt. Runs as a pre-pass BEFORE
+# any repo mutation so (a) a failure has zero side effects and (b) the cascade's own mechanical
+# commits (pin-sync, version bump) can't void a receipt mid-run. No-delta and housekeeping-only
+# packages are exempt — "push everything" never demands review of untouched repos.
+#
+# The "tests" half is a HARD gate, not advisory: mayatk and blendertk ship no
+# pull_request-triggered tests workflow (only bump-dev / publish / static-analysis), so the
+# local receipt is the ONLY evidence that this exact tree's suite ever ran. -SkipTestsReceipt
+# waives that half alone and says so loudly; -SkipReview waives the whole pre-pass.
+# The failure text carries the full protocol so any session (or human) can complete preflight
 # without being re-instructed.
 # ------------------------------------------------------------------------------------------------
 if ($Merge -and $Strict -and -not $SkipReview) {
     $reviewMissing = @()
+    $testsMissing = @()
+    $testsBypassed = @()
     foreach ($repo in $reposToProcess) {
         $gateName = $repo.Name
         if ($STRICT_PACKAGES -notcontains $gateName) { continue }
@@ -1285,21 +1461,51 @@ if ($Merge -and $Strict -and -not $SkipReview) {
         } else {
             $reviewMissing += "$gateName@$gateHash"
         }
+        if ($SkipTestsReceipt) {
+            $testsBypassed += "$gateName@$gateHash"
+        } elseif (Test-Receipt -PackageName $gateName -RepoPath $gatePath -Check "tests" -TreeHash $gateHash) {
+            Write-Success "Tests receipt valid: $gateName@$gateHash"
+        } else {
+            $testsMissing += "$gateName@$gateHash"
+        }
     }
-    if ($reviewMissing.Count -gt 0) {
-        $missingNames = ($reviewMissing | ForEach-Object { ($_ -split '@')[0] }) -join ','
-        Write-Header "Review gate"
-        Write-Err "No review receipt for the current tree of: $($reviewMissing -join ', ')"
+    if ($testsBypassed.Count -gt 0) {
+        # A silent bypass switch is worse than no gate at all: it removes the one
+        # signal that the tree is untested while leaving the reassuring log intact.
+        Write-Header "TESTS RECEIPT GATE BYPASSED (-SkipTestsReceipt)"
+        Write-Err "Releasing UNTESTED trees: $($testsBypassed -join ', ')"
+        Write-Host @"
+  Why this is loud: mayatk and blendertk have NO pull_request-triggered tests
+  workflow, and their publish.yml gate is static analysis only -- so the local
+  "tests" receipt is the ONLY evidence a suite ever ran against this tree.
+  Bypassing it means nothing, anywhere, has tested what is about to reach PyPI.
+  Prefer recording a real receipt:
+    .\m3trik\push.ps1 -RecordReceipt tests -Packages <pkgs>
+"@ -ForegroundColor Yellow
+    }
+    if ($reviewMissing.Count -gt 0 -or $testsMissing.Count -gt 0) {
+        $missingNames = (@($reviewMissing + $testsMissing) |
+            ForEach-Object { ($_ -split '@')[0] } |
+            Select-Object -Unique) -join ','
+        Write-Header "Release gate"
+        if ($reviewMissing.Count -gt 0) {
+            Write-Err "No review receipt for the current tree of: $($reviewMissing -join ', ')"
+        }
+        if ($testsMissing.Count -gt 0) {
+            Write-Err "No tests receipt for the current tree of: $($testsMissing -join ', ')"
+        }
         Write-Host @"
   Release preflight (see m3trik/CLAUDE.md), for each package listed:
     1. Review its release diff (git diff origin/main...dev + working tree):
        correctness -> DRY -> simplification -> efficiency. Implement fixes;
        out-of-scope findings -> .claude/BACKLOG.md.
-    2. Run its test suite, unless -ShowReceipts reports a valid "tests"
-       receipt for the unchanged tree.
+    2. Run its test suite. The "tests" receipt is a HARD gate: mayatk and
+       blendertk have no CI test workflow, so it is the only gate they get.
+       -ShowReceipts tells you whether one is already valid for this tree.
     3. Record, then re-run this same push command:
        .\m3trik\push.ps1 -RecordReceipt review,tests -Packages $missingNames
-  Emergency bypass: -SkipReview (also required to DryRun past this gate).
+  Bypasses: -SkipTestsReceipt (tests half only, loud), -SkipReview (whole
+  pre-pass; also required to DryRun past it).
 "@ -ForegroundColor Yellow
         exit 1
     }
@@ -1416,7 +1622,14 @@ foreach ($repo in $reposToProcess) {
                          Push-Location $repoPath
                          try {
                             git add .
-                            git commit -m "Bump version to $newVer [skip ci]" | Out-Null
+                            # Deliberately NOT tagged [skip ci]: this commit heads the
+                            # dev branch the release PR is opened from, and GitHub skips
+                            # every workflow (tests.yml included) for a [skip ci] head --
+                            # which is exactly how -UsePR came to merge release PRs that
+                            # had never run a single check. Nothing auto-triggers on a
+                            # dev push anyway (publish.yml is branches:[main], bump-dev
+                            # is repository_dispatch only), so the tag bought nothing.
+                            git commit -m "Bump version to $newVer" | Out-Null
                          }
                          finally { Pop-Location }
                      }

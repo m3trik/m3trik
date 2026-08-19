@@ -25,7 +25,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = 'o:\Cloud\Code\_scripts',
+    # Default derived from this script's own location (<root>/m3trik/scripts/) rather than
+    # hardcoded: this repo is PUBLIC and must not ship a maintainer's drive layout.
+    [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
     [string]$LogPath  = "$env:LOCALAPPDATA\claude-runtime-surface.log"
 )
 

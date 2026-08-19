@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-08-18_
+_Generated: 2026-08-19_
 
 ## Genuine cross-layer collisions (24)
 
@@ -40,9 +40,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
-- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
-- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L66)
-- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L66)
+- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L79)
+- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L79)
+- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L79)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk
 
@@ -133,13 +133,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2108)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2130)
 
 ### `main` — blendertk, extapps, mayatk
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L30)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L197)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L590)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L748)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L428)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L148)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L193)
@@ -158,7 +158,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L227)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L99)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L423)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L138)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L159)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L644)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)
@@ -166,7 +166,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `register` — extapps, tentacle
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L2113)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L2135)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 

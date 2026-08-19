@@ -33,10 +33,11 @@ is what enforces it.
 - Registries fresh vs source (`generate_api_registry.py --check`).
 - Root dispatch table covers **every** `ECOSYSTEM_PACKAGES` member.
 - Every relative markdown link in a `CLAUDE.md` resolves (no broken nav).
+- Every registry-set package's `CLAUDE.md` **Nav `Deps:`** line names each ecosystem package its `pyproject.toml` depends on (the hand-maintained line must not lag the declared dependency).
 
 ## Soft budgets (WARN — advisory, flag for cleanup)
 
-- `CLAUDE.md` > 6,144 bytes — trim; move runbook/recipe content into `<subdir>/docs/`.
+- Sub-repo `CLAUDE.md` > 6,144 bytes — trim; move runbook/recipe content into `<subdir>/docs/`. The **root** `CLAUDE.md` gets 8,192: it carries the ecosystem-wide one-line rules for every sub-repo and holds no runbook content (the long form is [`CODE_STANDARD.md`](CODE_STANDARD.md)); every sub file loaded beside it stays under the 6,144 line, so the always-on pair stays lean.
 - Topic file > 20,480 bytes — compress to durable lessons or split (one fact per file).
 
 ## The rules behind the numbers
@@ -68,7 +69,7 @@ is what enforces it.
 python m3trik/scripts/check_context_budget.py
 
 # Repo-side only (what CI runs; no local memory dir)
-python m3trik/scripts/check_context_budget.py --no-memory
+python m3trik/scripts/check_context_budget.py --no-memory --no-runtime
 
 # Refresh registries + indexes, then re-check
 python m3trik/scripts/generate_api_registry.py
@@ -80,7 +81,10 @@ python m3trik/scripts/check_context_budget.py
 - **Repo-side (automated):** the guard runs in
   [`refresh-api-registry.yml`](../.github/workflows/refresh-api-registry.yml) on
   every registry refresh — monthly cron + after each PyPI publish. A hard budget
-  breach fails that job.
+  breach fails that job, but the step runs **last, after the registry pushes**:
+  that job clones all seven packages as siblings, so it must never let a doc
+  breach in a repo it neither owns nor can fix block the registry propagation it
+  exists to perform (stale registries then fail tentacle's parity-audit gate).
 - **Memory-side (local):** the auto-memory dir is local, so it can't be checked in
   the cloud. The **`ClaudeContextBudget`** Windows Scheduled Task runs the guard
   weekly (Mon ~09:07) via

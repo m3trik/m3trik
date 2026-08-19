@@ -2,7 +2,7 @@
 
 How markdown is organized, wired, and kept from drifting across every repo in `_scripts/`. Machine-enforced by `m3trik/scripts/check_docs.py`; policy lives here so the sweep's rules have a written rationale.
 
-**Nav**: [← m3trik](../CLAUDE.md) · [Context budget](CONTEXT_BUDGET.md) · [uitk DOCMAP tier](../../uitk/docs/MAINTAINING.md)
+**Nav**: [← m3trik](../CLAUDE.md) · [Code standard](CODE_STANDARD.md) · [Context budget](CONTEXT_BUDGET.md) · [uitk DOCMAP tier](../../uitk/docs/MAINTAINING.md)
 
 ## Two tiers
 

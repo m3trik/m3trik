@@ -82,16 +82,6 @@ jobs:
       - name: Run generator
         run: python m3trik/scripts/generate_api_registry.py
 
-      - name: Check context budget (repo-side)
-        # Gate the agent-facing context surface: CLAUDE.md sizes + registry
-        # freshness. Memory-index checks are skipped (the auto-memory dir is
-        # local, not in CI); the dispatch check self-skips without the monorepo
-        # root CLAUDE.md. --no-runtime keeps this job import-free (the whole point
-        # of the AST registry): runtime-vs-static drift needs importable/DCC
-        # runtimes and is checked locally by Check-RuntimeSurface.ps1, not here.
-        # Fails the job on a hard budget breach.
-        run: python m3trik/scripts/check_context_budget.py --no-memory --no-runtime
-
       - name: Commit and push per-package registries
         env:
           TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
@@ -156,3 +146,23 @@ jobs:
           else
             echo "m3trik: no changes"
           fi
+
+      # LAST on purpose, after both push steps. The guard walks the seven sibling
+      # clones at their `dev` tips, so it also judges hand-written docs in repos this
+      # job neither owns nor can fix (CLAUDE.md sizes, `**Deps**:` lines) --
+      # and m3trik/scripts must reach `main` BEFORE the packages land their side of a
+      # change (the m3trik-first rule), so a newly added cross-repo check is red by
+      # construction for the length of a cascade. Ahead of the pushes, one package's
+      # stale nav line would block the registry refresh for all seven -- and stale
+      # registries then fail tentacle's parity-audit gate. Behind them the breach
+      # still reds the job, so the signal is intact, but the propagation this job
+      # exists to perform has already landed.
+      - name: Check context budget (repo-side)
+        # Gate the agent-facing context surface: CLAUDE.md sizes + registry freshness.
+        # Memory-index checks are skipped (the auto-memory dir is local, not in CI);
+        # the dispatch and CLAUDE-links checks self-skip without the monorepo root
+        # CLAUDE.md. --no-runtime keeps this job import-free (the whole point of the
+        # AST registry): runtime-vs-static drift needs importable/DCC runtimes and is
+        # checked locally by Check-RuntimeSurface.ps1, not here.
+        # Fails the job on a hard budget breach.
+        run: python m3trik/scripts/check_context_budget.py --no-memory --no-runtime

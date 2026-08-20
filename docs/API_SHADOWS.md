@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-_Generated: 2026-08-19_
+_Generated: 2026-08-20_
 
 ## Genuine cross-layer collisions (24)
 
@@ -133,7 +133,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2108)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2130)
 
 ### `main` — blendertk, extapps, mayatk
 
@@ -166,7 +166,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `register` — extapps, tentacle
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L2113)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L2135)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 

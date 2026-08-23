@@ -22,7 +22,7 @@
 
 `-Strict -Merge` refuses to release a package whose **artifact** delta (dirty tree, unpushed dev, or `origin/main..dev` touching anything that ships) lacks **both** a `review` and a `tests` receipt for the **current** tree. Receipts live in `.claude/receipts.json`, keyed `pkg@treehash` where the hash is a git tree object of the **source** tree — generated sidecars (`API_*`, `docs/PARITY_*`) are excluded, so a registry refresh never voids one, while any source edit self-invalidates; max age 7 days; push.ps1 is the sole writer and re-keys receipts across its own `Release` commit. Must-reach-main / rides-along deltas and untouched packages are exempt.
 
-`tests` is a **hard** gate, not advisory: `mayatk` and `blendertk` ship no `pull_request`-triggered tests workflow (only `publish`/`static-analysis`), so the local receipt is the only evidence their suite ever ran against the tree being published.
+`tests` is a **hard** gate: the `pull_request` suite `mayatk`/`blendertk` now run is the no-DCC subset (mocks / Qt-only) and gates no publish, so the local receipt is still the only evidence the FULL suite ran against the published tree.
 
 **On gate failure, do the preflight unprompted:**
 1. Review the release diff (`git diff origin/main...dev` + working tree): correctness → DRY → simplification → efficiency. Implement fixes; out-of-scope findings → `.claude/BACKLOG.md`.

@@ -1012,6 +1012,181 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertNotIn("No review receipt for the current tree", out2)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def _stub_parity_scripts(self, root, sweep_rc=0):
+        """Stub the two parity generators where Prepare looks for them.
+
+        Each records that it ran (so a package WITHOUT docs/PARITY_AUDIT.md can
+        be shown not to invoke them) and writes its artifact into the tentacle
+        fixture, as the real tentacle-specific generators do.
+        """
+        scripts = root / "m3trik" / "scripts"
+        scripts.mkdir(parents=True, exist_ok=True)
+        (scripts / "compare_panel_surface.py").write_text(
+            "import sys, pathlib\n"
+            "root = pathlib.Path(__file__).resolve().parents[2]\n"
+            "(root / '_sweep_ran').write_text(' '.join(sys.argv[1:]))\n"
+            "docs = root / 'tentacle' / 'docs'\n"
+            "docs.mkdir(parents=True, exist_ok=True)\n"
+            "(docs / 'PARITY_SURFACE.md').write_text('swept\\n')\n"
+            f"sys.exit({sweep_rc})\n",
+            encoding="utf-8",
+        )
+        (scripts / "generate_parity_audit.py").write_text(
+            "import pathlib\n"
+            "root = pathlib.Path(__file__).resolve().parents[2]\n"
+            "(root / '_audit_ran').write_text('yes')\n"
+            "docs = root / 'tentacle' / 'docs'\n"
+            "docs.mkdir(parents=True, exist_ok=True)\n"
+            "(docs / 'PARITY_AUDIT.md').write_text('audited\\n')\n",
+            encoding="utf-8",
+        )
+        return scripts
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_parity_artifacts_ride_in_the_release_commit(self):
+        """A release regenerates the parity pair, as it does the API registry.
+
+        tentacle's `parity` job is not a REQUIRED check, so a stale artifact
+        merges -- and then skips the publish, because publish.yml gates on the
+        whole reusable tests.yml (`needs: test`). Measured 2026-08-23 on
+        tentacletk 0.13.76: merged-but-unpublished, cascade aborted behind it.
+        Regenerating inside the Release commit makes the check green by
+        construction, which is the only way the two gates can agree.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "tentacle", "0.1.0", [])
+            self._stub_parity_scripts(root)
+            self._git(repo, "checkout", "dev")
+            docs = repo / "docs"
+            docs.mkdir(exist_ok=True)
+            (docs / "PARITY_AUDIT.md").write_text("stale\n", encoding="utf-8")
+            (docs / "PARITY_SURFACE.md").write_text("stale\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "parity artifacts")
+            (repo / "tentacle" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self._run(
+                self._release_cmd(root, "tentacle"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Committed 'Release 0.1.1'", out)
+            # Both generators ran, and BOTH refreshed artifacts are on main --
+            # not left dirty for the next run to sweep up.
+            self.assertTrue((root / "_sweep_ran").is_file(), out)
+            self.assertIn("--all --write", (root / "_sweep_ran").read_text())
+            self.assertTrue((root / "_audit_ran").is_file(), out)
+            self.assertEqual(
+                self._git(origin, "show", "main:docs/PARITY_AUDIT.md").stdout.strip(),
+                "audited",
+                out,
+            )
+            self.assertEqual(
+                self._git(origin, "show", "main:docs/PARITY_SURFACE.md").stdout.strip(),
+                "swept",
+                out,
+            )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_untriaged_parity_sweep_fails_before_anything_is_pushed(self):
+        """The sweep is a hard gate, and it fails while a failure is still free.
+
+        compare_panel_surface.py exits 1 on untriaged deltas. Catching that in
+        Prepare costs seconds; the same failure reaching CI costs a merged PR
+        whose publish never runs.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "tentacle", "0.1.0", [])
+            self._stub_parity_scripts(root, sweep_rc=1)
+            self._git(repo, "checkout", "dev")
+            docs = repo / "docs"
+            docs.mkdir(exist_ok=True)
+            (docs / "PARITY_AUDIT.md").write_text("stale\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "parity audit")
+            (repo / "tentacle" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self._run(
+                self._release_cmd(root, "tentacle"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("Parity sweep FAILS", out)
+            self.assertIn("parity_map.py", out)
+            # Nothing reached the remote: no Release commit, no tag.
+            subjects = self._git(origin, "log", "--pretty=%s", "main").stdout
+            self.assertNotIn("Release 0.1.1", subjects)
+            self.assertNotIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
+            # ...and the audit generator never ran behind the failed sweep.
+            self.assertFalse((root / "_audit_ran").exists(), out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_dirty_engine_tree_refuses_the_parity_regen(self):
+        """The parity pair derives from mayatk + blendertk SOURCE.
+
+        Regenerating over another session's uncommitted engine work would bake
+        it into what this release publishes -- the same trap that makes a
+        registry refresh during a concurrent edit unsafe. Refuse, and name the
+        tree, rather than produce a plausible-looking artifact.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "tentacle", "0.1.0", [])
+            self._stub_parity_scripts(root)
+            engine = root / "mayatk"
+            engine.mkdir(parents=True, exist_ok=True)
+            self._git(engine, "init")
+            self._git(engine, "config", "user.email", "ci@example.com")
+            self._git(engine, "config", "user.name", "CI")
+            (engine / "keep.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(engine, "add", "-A")
+            self._git(engine, "commit", "-m", "init")
+            (engine / "wip.py").write_text("half a feature\n", encoding="utf-8")
+
+            self._git(repo, "checkout", "dev")
+            docs = repo / "docs"
+            docs.mkdir(exist_ok=True)
+            (docs / "PARITY_AUDIT.md").write_text("stale\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "parity audit")
+            (repo / "tentacle" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self._run(
+                self._release_cmd(root, "tentacle"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("mayatk", out)
+            self.assertIn("dirty", out)
+            self.assertFalse((root / "_sweep_ran").exists(), out)
+            self.assertNotIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_package_without_the_parity_artifact_never_runs_the_generators(self):
+        """Keyed off the artifact, not a hardcoded package name.
+
+        Only tentacle carries docs/PARITY_AUDIT.md; every other package must
+        release without paying for -- or being blocked by -- a sweep that says
+        nothing about it.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", [])
+            self._stub_parity_scripts(root, sweep_rc=1)  # would fail if invoked
+            self._git(repo, "checkout", "dev")
+            (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Committed 'Release 0.1.1'", out)
+            self.assertFalse((root / "_sweep_ran").exists(), out)
+            self.assertFalse((root / "_audit_ran").exists(), out)
+
     def test_m3trik_first_guard_blocks_release_on_scripts_drift(self):
         """A Strict+Merge release must refuse to run while m3trik/scripts
         differs from origin/main. The publish-triggered refresh-api-registry

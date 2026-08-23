@@ -1616,7 +1616,11 @@ function Invoke-PreparePhase {
         foreach ($dep in $pins.Keys) {
             Write-Step "[DryRun] Would pin $dep>=$($pins[$dep].To) (was >=$($pins[$dep].From))"
         }
-        Write-Step "[DryRun] Would regenerate the API registry and commit 'Release $version'"
+        if (Test-Path (Join-Path $RepoPath "docs\PARITY_AUDIT.md")) {
+            Write-Step "[DryRun] Would regenerate the API registry + parity artifacts and commit 'Release $version'"
+        } else {
+            Write-Step "[DryRun] Would regenerate the API registry and commit 'Release $version'"
+        }
         # Downstream DryRun classification must see this package as published at
         # its would-be version, exactly as a real run refreshes the map in Finalize.
         if ($Versions) { $Versions[$PackageName] = $version }
@@ -1649,6 +1653,58 @@ function Invoke-PreparePhase {
                 return $null
             }
         }
+        # Same contract as the registry above, for the parity pair. tentacle's
+        # `parity` job regenerates docs/PARITY_SURFACE.md and runs
+        # generate_parity_audit.py --check, and publish.yml gates on the WHOLE
+        # reusable tests.yml (needs: test -> uses: ./.github/workflows/tests.yml).
+        # So a stale artifact MERGES -- parity is not a required check -- and then
+        # SKIPS the publish, leaving the release merged-but-unpublished with the
+        # cascade aborted behind it (measured 2026-08-23, tentacletk 0.13.76:
+        # recovery needed a merge WITHOUT -Strict, because Finalize runs at package
+        # entry and would otherwise re-dispatch the doomed publish first).
+        # Keyed off the artifact rather than the package name: only tentacle has one.
+        if (Test-Path (Join-Path $RepoPath "docs\PARITY_AUDIT.md")) {
+            # Both artifacts are DERIVED from mayatk + blendertk source, so a dirty
+            # engine tree would bake another session's WIP into what this release
+            # publishes. In a cascade both are already released and clean; this
+            # guards the standalone -Packages tentacle run.
+            $dirtyEngines = @()
+            foreach ($eng in @('mayatk', 'blendertk')) {
+                $engPath = Join-Path $ROOT $eng
+                if (Test-Path (Join-Path $engPath ".git")) {
+                    if (git -C $engPath status --porcelain 2>$null) { $dirtyEngines += $eng }
+                }
+            }
+            if ($dirtyEngines.Count -gt 0) {
+                Write-Err "Parity artifacts derive from $($dirtyEngines -join ' + ') source, and that tree is dirty."
+                Write-Err "Regenerating now would bake uncommitted engine work into this release. Settle it first."
+                return $null
+            }
+            $m3trikScripts = Join-Path (Join-Path $ROOT "m3trik") "scripts"
+            # The sweep is a HARD gate: it exits 1 on untriaged deltas or a
+            # customwidgets lint. Failing here costs seconds; the same failure
+            # found in CI costs a merged PR whose publish never runs.
+            $sweep = Join-Path $m3trikScripts "compare_panel_surface.py"
+            if (Test-Path $sweep) {
+                $sweepOut = python $sweep --all --write 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Err "Parity sweep FAILS for $PackageName (untriaged deltas, or a customwidgets lint)."
+                    Write-Err "Fix the gap or ledger it in docs/parity_map.py, then re-run."
+                    if ($sweepOut) { ($sweepOut | Select-Object -Last 5) | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray } }
+                    return $null
+                }
+            }
+            $audit = Join-Path $m3trikScripts "generate_parity_audit.py"
+            if (Test-Path $audit) {
+                $auditOut = python $audit 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Err "Parity audit regeneration failed for $PackageName"
+                    if ($auditOut) { ($auditOut | Select-Object -Last 5) | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray } }
+                    return $null
+                }
+            }
+        }
+
         if (git status --porcelain) { $changed = $true }
 
         if ($changed) {

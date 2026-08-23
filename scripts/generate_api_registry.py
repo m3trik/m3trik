@@ -853,15 +853,22 @@ class StalenessGate:
       only be validated when every ecosystem package was walked in one run (see
       :meth:`covers_ecosystem`). A per-package CI checkout has no siblings.
 
-    :meth:`normalize` additionally drops two cosmetics that are not public API:
-    a legacy ``_Generated: <date>_`` stamp (the generator no longer writes one,
-    but registries committed before 2026-08-23 still carry it — normalizing it
-    away is what lets the NEW generator gate an OLD artifact as current rather
-    than redding every package's CI until it is regenerated) and the
-    ``#L<line>`` fragment of source deep-links (a class that moved down three
-    lines is the same class). Everything that IS surface — module set and
-    order, names, bases, signatures, kinds, summaries — still fails the gate.
-    Normalization applies to the COMPARISON only; the written artifacts keep
+    :meth:`normalize` additionally drops three cosmetics that are not public API:
+
+    * a legacy ``_Generated: <date>_`` stamp — the generator no longer writes
+      one, but registries committed before 2026-08-23 still carry it;
+    * BLANK LINES — the old generator wrote that stamp BETWEEN two blanks, so
+      filtering the stamp line alone left a committed file one line longer than
+      anything written now (measured in a clean worktree: pythontk's
+      ``API_INDEX.md`` normalized to 549 lines against a generated 548). Both
+      filters are needed together, or every package's "API registry up to date"
+      check goes red at once with no source change behind it;
+    * the ``#L<line>`` fragment of source deep-links (a class that moved down
+      three lines is the same class).
+
+    Everything that IS surface — module set and order, names, bases,
+    signatures, kinds, summaries — still fails the gate. Normalization applies
+    to the COMPARISON only; the written artifacts keep their blank lines and
     real line numbers.
     """
 

@@ -2254,7 +2254,7 @@ foreach ($repo in $reposToProcess) {
         "prepare-failed" { Write-Err "$pkg - Release preparation failed" }
         "build-failed" { Write-Err "$pkg - Build failed" }
         "push-failed" { Write-Err "$pkg - Push failed" }
-        "merge-dead" { Write-Err "$pkg - PR cannot merge (red check or conflict; see above)" }
+        "merge-dead" { Write-Err "$pkg - PR cannot merge (conflict, a red REQUIRED check, or a missing review; see above)" }
         "merge-failed" { Write-Err "$pkg - Merge failed" }
         "merge-conflict" { Write-Err "$pkg - Merge conflicts" }
         "workflow-failed" { Write-Err "$pkg - Workflow failed/timed out" }

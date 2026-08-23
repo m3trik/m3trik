@@ -1620,9 +1620,8 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("PR #7 merged", out)
             # Named, so it is never silent...
             self.assertIn("Qt-only suites (no Blender)", out)
-            # ...but not fatal.
+            # ...but not fatal: no path may report it as unmergeable.
             self.assertNotIn("cannot merge", out)
-            self.assertNotIn("PR cannot merge", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_all_green_blocked_window_is_not_dead(self):
@@ -1657,7 +1656,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
             self.assertIn("PR #7 merged", out)
-            self.assertNotIn("is dead", out)
+            self.assertNotIn("cannot merge", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_finalize_resumes_a_merged_but_untagged_release(self):

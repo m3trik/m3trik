@@ -906,6 +906,70 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, out)
             self.assertIn("Origin remote is not a GitHub URL; cannot use PR mode", out)
 
+    def test_tree_hash_is_stable_across_host_console_encodings(self):
+        """Get-TreeHash must not depend on the host's console encoding.
+
+        PowerShell DECODES a native command's stdout with
+        ``[Console]::OutputEncoding``, so before the 2026-08-20 pin the same tree
+        hashed differently per host: a receipt recorded from an interactive
+        console failed the gate under ``Start-Process -WindowStyle Hidden``.
+        Measured on the real pythontk tree at the time: the pre-fix code produced
+        three DIFFERENT hashes under UTF-8 / Windows-1252 / CP437.
+
+        The non-ASCII has to reach ``git diff HEAD`` to exercise the decode, so
+        the file is committed as ASCII and then rewritten with em-dashes. stdout
+        is captured (redirected) here, which is the other half of the reported
+        repro.
+        """
+        if not self._have_git():
+            self.skipTest("git not available")
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+
+            notes = repo / "CHANGELOG.md"
+            notes.write_text("# Changelog\n\n- plain ascii line\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "changelog")
+            # Uncommitted non-ASCII: em-dashes and an arrow, exactly what the real
+            # CHANGELOG.md carries and what decoded differently per host.
+            notes.write_text(
+                "# Changelog — notes\n\n- a — b → c\n- café\n",
+                encoding="utf-8",
+            )
+
+            script = M3TRIK_DIR / "push.ps1"
+            hashes = {}
+            enc = "[Console]::OutputEncoding="
+            for label, setup in (
+                ("utf8", enc + "[Text.UTF8Encoding]::new($false)"),
+                ("ansi", enc + "[Text.Encoding]::GetEncoding(1252)"),
+                ("cp437", enc + "[Text.Encoding]::GetEncoding(437)"),
+            ):
+                result = self._run(
+                    [
+                        "powershell",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-NoProfile",
+                        "-Command",
+                        f"{setup}; & '{script}' -ShowReceipts "
+                        f"-Packages pythontk -Root '{root}'",
+                    ],
+                    cwd=root,
+                    timeout=120,
+                )
+                out = result.stdout + result.stderr
+                found = re.search(r"pythontk@([0-9a-f]{12})", out)
+                self.assertIsNotNone(found, f"no tree hash under {label}: {out}")
+                hashes[label] = found.group(1)
+
+            self.assertEqual(
+                len(set(hashes.values())),
+                1,
+                f"tree hash varies with console encoding: {hashes}",
+            )
 
     def test_review_gate_blocks_unreviewed_delta_then_receipt_releases_it(self):
         """The Strict+Merge review gate refuses a real code delta with no
@@ -1398,7 +1462,76 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertEqual(result.returncode, 0, out)
             self.assertIn("gated by 1 check run", out)
             self.assertIn("PR #7 merged", out)
+            # Counterweight to test_pr_mode_surfaces_a_failing_non_required_check:
+            # an all-green rollup must not trip the failing-check report.
+            self.assertNotIn("reporting FAILURE", out)
 
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_mode_surfaces_a_failing_non_required_check(self):
+        """A red NON-required check must be named, not silently shipped past.
+
+        The gate counts check runs and reads mergeStateStatus; it never looked
+        at a check's conclusion. A workflow that reports FAILURE but is not a
+        required check leaves mergeStateStatus CLEAN, so auto-merge fires and
+        the release prints green over a red PR. Measured 2026-08-20: "Validate
+        Publish Chain" jobs validate-tentacle and summary were FAILURE on
+        pythontk PRs #48 and #49; both released.
+
+        The release must still PROCEED - blocking on a non-required check is
+        branch protection's call, not push.ps1's - but the operator has to be
+        told which checks are red.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"CLEAN",'
+                '"statusCheckRollup":['
+                '{"name":"test","conclusion":"SUCCESS"},'
+                '{"name":"validate-tentacle","conclusion":"FAILURE"},'
+                '{"name":"summary","conclusion":"FAILURE"}]}',
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            # Still releases: a non-required red check is not push.ps1's to block.
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("PR #7 merged", out)
+            # ...but it is push.ps1's to REPORT, by name.
+            self.assertIn("validate-tentacle", out)
+            self.assertIn("summary", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_mode_names_a_failing_check_while_others_still_run(self):
+        """The BLOCKED-but-still-running path returns $true too, so it must report.
+
+        The first cut of this report sat on the plain-success path only. A PR that
+        is BLOCKED with a required check still running takes a different branch,
+        proceeds all the same, and would have carried a red non-required check past
+        unmentioned - which is the exact gap this reporting exists to close.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":['
+                '{"name":"test","status":"IN_PROGRESS","conclusion":null},'
+                '{"name":"validate-tentacle","conclusion":"FAILURE"}]}',
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("still running", out)
+            self.assertIn("reporting FAILURE", out)
+            self.assertIn("validate-tentacle", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_pr_mode_waits_out_blocked_while_checks_still_run(self):

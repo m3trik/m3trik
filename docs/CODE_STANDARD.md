@@ -23,7 +23,7 @@ ignore = ["E402"]                 # house pattern: try-guarded DCC imports prece
 
 - `E402` is off because the DCC layers deliberately guard `import maya.cmds` in a `try:` block at the top of the module (§4) and import `pythontk` after it.
 - `**/templates/**` is exempt from undefined-name checks because those files are *not* importable modules: they are handed to a host interpreter (Toolbag, Blender, Maya) after token substitution. This mirrors what `mayatk/test/test_static_analysis.py` already excludes.
-- **Interim rule until the CI gate is wired**: run `ruff check` on the files you touch and fix what you introduced; `ruff format` new files, and existing files only when you are already rewriting most of them — never a drive-by reformat (it buries the real change and invites merge conflicts with concurrent work). The one-time whole-tree reformat and the CI gate are a tree-idle pass per repo, tracked in `.claude/BACKLOG.md`.
+- **Interim rule until the CI gate is wired**: run `ruff check` on the files you touch and fix what you introduced; `ruff format` new files, and existing files only when you are already rewriting most of them — never a drive-by reformat (it buries the real change and invites merge conflicts with concurrent work). The one-time whole-tree reformat and the CI gate are a tree-idle pass per repo, tracked in [`.claude/FUTURE.md`](../../.claude/FUTURE.md) — not `BACKLOG.md`, whose bar drops S3 hygiene work, which is why the entry cycled into the archive twice before landing there.
 
 ## 2. Docstrings and type hints
 

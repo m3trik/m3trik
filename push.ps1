@@ -114,7 +114,11 @@ param(
     [int]$WorkflowPollSeconds = 15,
     [int]$PypiVisibilityTimeoutSeconds = 300,
     [string]$WorkflowFile = "publish.yml",
-    [string]$Root = "O:\Cloud\Code\_scripts",
+    # Derived, never hardcoded: this repo is PUBLIC and owns the hygiene rule, and a
+    # clone at any other path would otherwise default -Root at a drive that does not
+    # exist there. push.ps1 sits at <root>/m3trik/, so the root is ONE level up (the
+    # scripts/ helpers that got this same fix are two).
+    [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
     [string]$CommitMessage = "Update"
 )
 
@@ -156,6 +160,18 @@ $RECEIPTS_PATH = Join-Path $ROOT ".claude\receipts.json"
 function Get-TreeHash {
     param([string]$RepoPath)
     Push-Location $RepoPath
+    # PowerShell DECODES a native command's stdout using [Console]::OutputEncoding, so
+    # the same tree hashed differently per host: a receipt recorded from an interactive
+    # console failed the gate when push.ps1 ran under `Start-Process -WindowStyle Hidden`,
+    # because non-ASCII in the diff (em-dashes and arrows are routine in CHANGELOG.md)
+    # decoded to different characters. git emits UTF-8, so pin UTF-8 for the reads and
+    # put the host's setting back. A host that refuses the set (redirected stdout) is no
+    # worse off than before, hence the swallowed catch rather than a throw.
+    $prevOutputEncoding = $null
+    try {
+        $prevOutputEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+    } catch { $prevOutputEncoding = $null }
     try {
         $head = (git rev-parse HEAD 2>$null)
         $status = @(git status --porcelain 2>$null) -join "`n"
@@ -171,7 +187,12 @@ function Get-TreeHash {
         finally { $md5.Dispose() }
         return $hex.Substring(0, 12)
     }
-    finally { Pop-Location }
+    finally {
+        if ($prevOutputEncoding) {
+            try { [Console]::OutputEncoding = $prevOutputEncoding } catch {}
+        }
+        Pop-Location
+    }
 }
 
 function Get-RecentlyModifiedFiles {
@@ -998,6 +1019,7 @@ function Get-PRGateState {
     # that is no longer PENDING/EXPECTED. Anything else is still running - which is
     # the one reading of BLOCKED that auto-merge is designed to sit through.
     $pending = 0
+    $failed = @()
     foreach ($c in $rollup) {
         $conclusion = ""
         $stateVal = ""
@@ -1005,11 +1027,23 @@ function Get-PRGateState {
         if ($c.PSObject.Properties['state']) { $stateVal = [string]$c.state }
         $settled = $conclusion -or ($stateVal -and $stateVal -ne "PENDING" -and $stateVal -ne "EXPECTED")
         if (-not $settled) { $pending++ }
+        # A settled check that did not succeed. NEUTRAL and SKIPPED count as
+        # success for merge purposes; anything else is red. GitHub blocks the
+        # merge itself when such a check is REQUIRED (mergeStateStatus BLOCKED),
+        # so what lands here is specifically the red checks that do NOT block -
+        # the ones that used to ship unmentioned.
+        elseif ($conclusion -and $conclusion -notin @('SUCCESS', 'NEUTRAL', 'SKIPPED')) {
+            $failed += [string]$c.name
+        }
+        elseif (-not $conclusion -and ($stateVal -eq 'FAILURE' -or $stateVal -eq 'ERROR')) {
+            $failed += [string]$c.context
+        }
     }
 
     return [PSCustomObject]@{
         CheckCount       = $rollup.Count
         PendingCount     = $pending
+        FailedChecks     = @($failed)
         MergeStateStatus = [string]$v.mergeStateStatus
     }
 }
@@ -1064,6 +1098,22 @@ function Test-PRReleaseGate {
   Give the repo a real gate, or re-run WITHOUT -UsePR to merge deliberately ungated.
 "@ -ForegroundColor Yellow
         return $false
+    }
+
+    if ($state.FailedChecks.Count -gt 0) {
+        # Emitted BEFORE the BLOCKED branches so every outcome names them: the
+        # transient 'BLOCKED, checks still running' path also returns $true, and a
+        # red non-required check riding along there would otherwise ship unmentioned
+        # - which is exactly how 'Validate Publish Chain' stayed FAILURE across
+        # pythontk #48 and #49 without anyone noticing. Reporting, not blocking:
+        # whether a red check may hold a merge is branch protection's call, and
+        # GitHub already enforces that for REQUIRED checks by way of BLOCKED.
+        Write-Host "  !! PR #$PrNumber has $($state.FailedChecks.Count) check(s) reporting FAILURE:" -ForegroundColor Yellow
+        foreach ($checkName in $state.FailedChecks) {
+            Write-Host "       x $checkName" -ForegroundColor Red
+        }
+        Write-Host "     GitHub holds the merge only for REQUIRED checks; any others here ship as-is." -ForegroundColor Yellow
+        Write-Host "     Inspect: gh pr view $PrNumber --repo $RepoSlug --json statusCheckRollup" -ForegroundColor Yellow
     }
 
     if ($state.MergeStateStatus -eq "BLOCKED" -and $state.PendingCount -eq 0) {

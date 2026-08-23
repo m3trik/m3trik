@@ -3,6 +3,19 @@ name: Refresh API Registry
 # Triggered by each ecosystem repo's publish.yml after a successful PyPI upload
 # (via repository_dispatch event_type "refresh_api_registry"). Also runs monthly
 # as a backstop for any missed dispatches, and supports manual workflow_dispatch.
+#
+# SCOPE (since 2026-08-23): this job writes ONE file, m3trik/docs/API_SHADOWS.md
+# -- the cross-package shadow report, which needs every sibling's source on one
+# runner and so cannot be produced inside any single package's CI. The
+# per-package registries (API_INDEX/REGISTRY/CHANGES + the JSON sidecar) are
+# NOT written here any more: push.ps1's Prepare phase regenerates them inside
+# each package's `Release X.Y.Z` commit, and every package PR carries an
+# `API registry up to date` check that gates them. Writing them from here as
+# well was pure redundancy with real costs -- it was the only source of commits
+# to the packages' `dev` branches that no human made, it raced the release
+# cascade (fetch+rebase+push into a branch push.ps1 was about to rebase onto),
+# it put `[skip ci]` heads on `dev` that left release PRs with zero check runs,
+# and it invalidated release receipts for trees whose SOURCE had not changed.
 on:
   repository_dispatch:
     types: [refresh_api_registry]
@@ -22,8 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # ``contents: write`` lets the default GITHUB_TOKEN push the m3trik
-    # shadow report. Cross-repo pushes to the ecosystem packages still
-    # need REPO_DISPATCH_TOKEN (set as a repo secret).
+    # shadow report. REPO_DISPATCH_TOKEN is needed only to READ the private
+    # sibling (unitytk) when cloning; nothing is pushed cross-repo any more.
     permissions:
       contents: write
     steps:
@@ -33,7 +46,7 @@ jobs:
         run: |
           if [ -z "$TOKEN" ]; then
             echo "::error::REPO_DISPATCH_TOKEN is not set on this repository."
-            echo "::error::Add it under Settings → Secrets → Actions with cross-repo push scope to pythontk/uitk/mayatk/blendertk/tentacle/unitytk/extapps."
+            echo "::error::Add it under Settings → Secrets → Actions with read scope on pythontk/uitk/mayatk/blendertk/tentacle/unitytk/extapps."
             exit 1
           fi
 
@@ -82,59 +95,6 @@ jobs:
       - name: Run generator
         run: python m3trik/scripts/generate_api_registry.py
 
-      - name: Commit and push per-package registries
-        env:
-          TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
-          DISPATCH_PACKAGE: ${{ github.event.client_payload.package }}
-        run: |
-          set -e
-          # actions/checkout installs a global http.extraheader for
-          # github.com that points at m3trik's GITHUB_TOKEN — it overrides
-          # the per-clone oauth2:TOKEN credential when pushing, so
-          # cross-repo pushes fail. Push via an explicit token-bearing URL
-          # to bypass the global header.
-          # push.ps1 cascade and other workflows can land commits on dev
-          # between our clone and our push. Fetch+rebase before each push,
-          # and retry once on rejection (the second push covers another
-          # racer landing during our rebase window). A second rejection is
-          # rare enough that the next scheduled refresh will pick it up.
-          for repo in pythontk uitk mayatk blendertk tentacle unitytk extapps; do
-            if [ ! -d "${repo}" ]; then
-              echo "${repo}: skipped (not cloned)"
-              continue
-            fi
-            cd "${repo}"
-            # Push back to whatever branch we actually cloned — `dev` for the
-            # chain packages, the default branch for a main-only standalone
-            # (see the clone step). Hardcoding `dev` here would push extapps'
-            # registry to a branch it doesn't have.
-            branch="$(git rev-parse --abbrev-ref HEAD)"
-            if git status --porcelain API_INDEX.md API_REGISTRY.md API_REGISTRY.json API_CHANGES.md | grep -q .; then
-              git add API_INDEX.md API_REGISTRY.md API_REGISTRY.json API_CHANGES.md
-              git commit -m "chore: refresh API registry [skip ci]"
-              push_url="https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git"
-              for attempt in 1 2; do
-                git -c http."https://github.com/".extraheader= \
-                    fetch "${push_url}" "${branch}"
-                git rebase FETCH_HEAD || {
-                  echo "::warning::${repo}: rebase produced conflicts on attempt ${attempt} — aborting"
-                  git rebase --abort
-                  break
-                }
-                if git -c http."https://github.com/".extraheader= \
-                       push "${push_url}" "HEAD:${branch}"; then
-                  echo "${repo}: pushed (attempt ${attempt})"
-                  break
-                elif [ "${attempt}" = "2" ]; then
-                  echo "::warning::${repo}: push rejected twice — next refresh will retry"
-                fi
-              done
-            else
-              echo "${repo}: no changes"
-            fi
-            cd ..
-          done
-
       - name: Commit and push m3trik shadow report
         run: |
           cd m3trik
@@ -147,16 +107,15 @@ jobs:
             echo "m3trik: no changes"
           fi
 
-      # LAST on purpose, after both push steps. The guard walks the seven sibling
+      # LAST on purpose, after the push step. The guard walks the seven sibling
       # clones at their `dev` tips, so it also judges hand-written docs in repos this
       # job neither owns nor can fix (CLAUDE.md sizes, `**Deps**:` lines) --
       # and m3trik/scripts must reach `main` BEFORE the packages land their side of a
       # change (the m3trik-first rule), so a newly added cross-repo check is red by
-      # construction for the length of a cascade. Ahead of the pushes, one package's
-      # stale nav line would block the registry refresh for all seven -- and stale
-      # registries then fail tentacle's parity-audit gate. Behind them the breach
-      # still reds the job, so the signal is intact, but the propagation this job
-      # exists to perform has already landed.
+      # construction for the length of a cascade. Ahead of the push, one package's
+      # stale nav line would block the shadow refresh. Behind it the breach still
+      # reds the job, so the signal is intact, but the propagation this job exists
+      # to perform has already landed.
       - name: Check context budget (repo-side)
         # Gate the agent-facing context surface: CLAUDE.md sizes + registry freshness.
         # Memory-index checks are skipped (the auto-memory dir is local, not in CI);

@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 import unittest
 
@@ -162,6 +163,12 @@ class TestPushScriptRegressions(unittest.TestCase):
         self._git(repo, "add", "-A")
         self._git(repo, "commit", "-m", "init")
         self._git(repo, "branch", "-M", "main")
+        # The initial version is a PUBLISHED release, as every real package's
+        # main is: tagged v<version>. Under -SkipPypiCheck the highest v* tag on
+        # origin is the only source of "what is published", so the release
+        # version steps from it (0.1.0 -> 0.1.1) exactly as a live run steps
+        # from the PyPI index.
+        self._git(repo, "tag", "-a", f"v{version}", "-m", f"{name} v{version}")
         self._git(repo, "checkout", "-b", "dev")
 
         # Create bare origin remote
@@ -173,6 +180,7 @@ class TestPushScriptRegressions(unittest.TestCase):
         self._git(repo, "remote", "add", "origin", str(origin))
         self._git(repo, "push", "-u", "origin", "main")
         self._git(repo, "push", "-u", "origin", "dev")
+        self._git(repo, "push", "origin", f"v{version}")
 
         return repo, origin
 
@@ -321,72 +329,59 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertNotIn("Processing uitk", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_strict_merge_skips_dev_bump_only_ahead(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+    def test_hand_bumped_version_on_dev_is_honored(self):
+        """A __version__ ABOVE the published one is a deliberate minor/major bump.
 
-            # Simulate an automated dev-bump: only __init__.py changes on dev.
-            # Real strict packages declare `version = {attr = "<pkg>.__version__"}`
-            # (dynamic) in pyproject.toml, so a pure version bump never touches
-            # that file — only rewriting __init__.py matches what
-            # Test-OnlyDevBumpChanges actually allows.
-            self._git(repo, "checkout", "dev")
-            (repo / "pythontk" / "__init__.py").write_text(
-                '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
-                encoding="utf-8",
-            )
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "dev bump")
-            self._git(repo, "push", "origin", "dev")
-
-            script = M3TRIK_DIR / "push.ps1"
-            result = self._run(
-                [
-                    "powershell",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(script),
-                    "-Root",
-                    str(root),
-                    "-Packages",
-                    "pythontk",
-                    "-Strict",
-                    "-Merge",
-                    "-SkipReview",
-                    "-SkipBuild",
-                    "-SkipWorkflowWait",
-                ],
-                cwd=root,
-                timeout=120,
-            )
-            out = result.stdout + result.stderr
-            self.assertEqual(result.returncode, 0, out)
-            self.assertIn("Dev is ahead only due to dev bump (skipping merge)", out)
-
-    @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_merges_local_changes_when_origin_dev_is_bump_only(self):
-        """Real local changes must release even when origin/dev is bump-only ahead.
-
-        Steady state after any release: origin/dev = origin/main + the bump-dev
-        bot's version commit. A run that then absorbs real local work commits it
-        LOCALLY first (push happens later, in step 3) — so the bump-only guard
-        must diff local dev, not origin/dev, or it classifies the run as
-        "nothing to release" and silently drops the merge while still reporting
-        success.
+        With the bump-dev bot retired, nothing but a human edits the version on
+        dev — so a version-only delta is an artifact change, and the release
+        carries that version instead of stepping the patch from the tag.
         """
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
 
-            # Simulate the bump-dev bot: version-only commit on origin/dev.
+            self._git(repo, "checkout", "dev")
             (repo / "pythontk" / "__init__.py").write_text(
-                '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
+                '__package__ = "pythontk"\n__version__ = "0.2.0"\n',
                 encoding="utf-8",
             )
             self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "Bump version to 0.1.1 [skip ci]")
+            self._git(repo, "commit", "-m", "minor bump: new public API")
+            self._git(repo, "push", "origin", "dev")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Delta: artifact", out)
+            # The operator's own commit already IS the release state (version
+            # set, no floors to ratchet), so no extra Release commit is made.
+            self.assertIn("dev already carries Release 0.2.0", out)
+            main_init = self._git(
+                origin, "show", "main:pythontk/__init__.py"
+            ).stdout
+            self.assertIn('__version__ = "0.2.0"', main_init, out)
+            tags = self._git(origin, "tag", "--list").stdout
+            self.assertIn("v0.2.0", tags, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_merges_local_changes_when_origin_dev_is_sidecars_only(self):
+        """Real local work must release even when origin/dev is ahead by sidecars.
+
+        A run absorbs uncommitted local work as a LOCAL commit first (the push
+        happens later), so the delta classifier must read local dev, not
+        origin/dev — or it files the run under "rides along" and silently drops
+        the release while still reporting success.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+
+            # A registry refresh on origin/dev (rides-along class).
+            (repo / "API_INDEX.md").write_text("# generated\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "chore: refresh API registry")
             self._git(repo, "push", "origin", "dev")
 
             # Real, not-yet-committed local work.
@@ -394,169 +389,140 @@ class TestPushScriptRegressions(unittest.TestCase):
                 "VALUE = 1\n", encoding="utf-8"
             )
 
-            script = M3TRIK_DIR / "push.ps1"
             result = self._run(
-                [
-                    "powershell",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(script),
-                    "-Root",
-                    str(root),
-                    "-Packages",
-                    "pythontk",
-                    "-Strict",
-                    "-Merge",
-                    "-SkipReview",
-                    "-SkipBuild",
-                    "-SkipWorkflowWait",
-                    "-SkipPypiCheck",
-                ],
-                cwd=root,
-                timeout=120,
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
             )
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
-            self.assertNotIn("skipping merge", out)
+            self.assertIn("Delta: artifact", out)
             self.assertIn("Merged and pushed to main", out)
-
-            # The local change must actually be on the released main branch.
             tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
             self.assertIn("pythontk/feature.py", tree, out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_strict_merge_skips_bump_plus_registry_churn(self):
-        """Bot-generated registry commits must not defeat the phantom-publish guard.
+    def test_rides_along_delta_skips_merge(self):
+        """Sidecars + CHANGELOG ahead of main: nothing to release, nothing to merge.
 
-        refresh-api-registry.yml pushes API_INDEX.md/API_REGISTRY.md/
-        API_REGISTRY.json/API_CHANGES.md commits onto dev after every publish.
-        None of those files ship in the wheel, so a dev that is ahead only by
-        the bump commit + registry churn has nothing to release — merging it
-        anyway phantom-publishes a new version with identical wheel content.
+        None of those files ship in the wheel, and a registry/CHANGELOG-only
+        PR would cost a full CI cycle to land content the next release carries
+        anyway. No version is consumed and main is untouched.
         """
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
 
-            # bump-dev bot commit
-            (repo / "pythontk" / "__init__.py").write_text(
-                '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
-                encoding="utf-8",
-            )
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "Bump version to 0.1.1 [skip ci]")
-
-            # api-registry-bot commit (repo-root artifacts, not wheel content)
             for name in (
                 "API_INDEX.md",
                 "API_REGISTRY.md",
                 "API_REGISTRY.json",
                 "API_CHANGES.md",
+                "CHANGELOG.md",
             ):
                 (repo / name).write_text("# generated\n", encoding="utf-8")
             self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "chore: refresh API registry [skip ci]")
+            self._git(repo, "commit", "-m", "chore: refresh API registry")
             self._git(repo, "push", "origin", "dev")
 
-            script = M3TRIK_DIR / "push.ps1"
             result = self._run(
-                [
-                    "powershell",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(script),
-                    "-Root",
-                    str(root),
-                    "-Packages",
-                    "pythontk",
-                    "-Strict",
-                    "-Merge",
-                    "-SkipReview",
-                    "-SkipBuild",
-                    "-SkipWorkflowWait",
-                    "-SkipPypiCheck",
-                ],
-                cwd=root,
-                timeout=120,
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
             )
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
-            self.assertIn("Dev is ahead only due to dev bump (skipping merge)", out)
-
-            # Nothing may have been merged to main.
+            self.assertIn("Delta: rides-along", out)
+            self.assertIn("rides along with the next release", out)
             tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
             self.assertNotIn("API_INDEX.md", tree, out)
+            self.assertNotIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_no_double_bump_after_dep_sync_commit(self):
-        """A retry after a failed run must not bump the version a second time.
+    def test_release_is_one_commit_one_version(self):
+        """One release = one `Release X.Y.Z` commit = one version, stepped from the tag.
 
-        The dependency-cascade path commits "Update dependencies & bump version
-        to X [skip ci]". If a run fails after that commit (e.g. build failure),
-        the retry sees dev ahead of origin/dev and must recognize that the last
-        commit already carries a bump — otherwise every retry burns a patch
-        version.
+        Three bumpers used to act on every release and PyPI showed it
+        (pythontk 0.9.26 -> 0.9.28 -> 0.9.30). Here: local 0.1.0 == tag 0.1.0,
+        so the release is 0.1.1, exactly one Release commit carries it, and a
+        re-run afterwards consumes nothing.
         """
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
-
-            # Simulate a prior failed run's pin-sync commit: local-only,
-            # touching __init__.py + pyproject.toml.
-            (repo / "pythontk" / "__init__.py").write_text(
-                '__package__ = "pythontk"\n__version__ = "0.1.1"\n',
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "dev")
+            (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            # A stub API-registry generator at the path Prepare invokes, so the
+            # regen-inside-the-Release-commit path is exercised, not just the
+            # version/pin half. It records its argv into the sidecar.
+            gen = root / "m3trik" / "scripts" / "generate_api_registry.py"
+            gen.parent.mkdir(parents=True)
+            gen.write_text(
+                "import sys, pathlib\n"
+                "root = pathlib.Path(__file__).resolve().parents[2]  # as the real one\n"
+                "(root / sys.argv[1] / 'API_INDEX.md').write_text('argv: ' + ' '.join(sys.argv[1:]) + '\\n')\n",
                 encoding="utf-8",
             )
-            pyproject = repo / "pyproject.toml"
-            pyproject.write_text(
-                pyproject.read_text(encoding="utf-8") + "# pin sync\n",
-                encoding="utf-8",
-            )
-            self._git(repo, "add", "-A")
-            self._git(
-                repo,
-                "commit",
-                "-m",
-                "Update dependencies & bump version to 0.1.1 [skip ci]",
-            )
 
-            script = M3TRIK_DIR / "push.ps1"
             result = self._run(
-                [
-                    "powershell",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(script),
-                    "-Root",
-                    str(root),
-                    "-Packages",
-                    "pythontk",
-                    "-Strict",
-                    "-Merge",
-                    "-SkipReview",
-                    "-SkipBuild",
-                    "-SkipWorkflowWait",
-                    "-SkipPypiCheck",
-                ],
-                cwd=root,
-                timeout=120,
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
             )
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
-            self.assertNotIn("[Auto-Bump]", out)
-            content = (repo / "pythontk" / "__init__.py").read_text(encoding="utf-8")
-            self.assertIn('__version__ = "0.1.1"', content, out)
+            self.assertIn("Committed 'Release 0.1.1'", out)
+
+            subjects = self._git(origin, "log", "--pretty=%s", "main").stdout.splitlines()
+            releases = [s for s in subjects if s.startswith("Release ")]
+            self.assertEqual(releases, ["Release 0.1.1"], out)
+            # The registry was regenerated for THIS package only, without the
+            # cross-package shadow report, and rode in the Release commit.
+            index = self._git(origin, "show", "main:API_INDEX.md").stdout
+            self.assertIn("argv: pythontk --no-shadows", index, out)
+            self.assertFalse(
+                [s for s in subjects if "Bump version" in s or "bump version" in s],
+                f"a legacy bump commit slipped in:\n{subjects}",
+            )
+            main_init = self._git(origin, "show", "main:pythontk/__init__.py").stdout
+            self.assertIn('__version__ = "0.1.1"', main_init, out)
+            self.assertIn("v0.1.1", self._git(origin, "tag", "--list").stdout, out)
+
+            # Re-run: dev == main, nothing to do, no version consumed.
+            again = self._run(self._release_cmd(root, "pythontk"), cwd=root, timeout=180)
+            out2 = again.stdout + again.stderr
+            self.assertEqual(again.returncode, 0, out2)
+            self.assertIn("No changes to push and fully merged", out2)
+            self.assertNotIn("Release 0.1.2", out2)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_release_version_steps_from_published_not_from_the_file(self):
+        """The release version comes from what is PUBLISHED (the tag here).
+
+        local == published -> step the patch; local BELOW published (a stale
+        checkout) -> step from published, never re-release the stale number.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            # Published moved on without this checkout: tag v0.1.3 on origin.
+            self._git(repo, "tag", "-a", "v0.1.3", "-m", "pythontk v0.1.3")
+            self._git(repo, "push", "origin", "v0.1.3")
+            self._git(repo, "checkout", "dev")
+            (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Committed 'Release 0.1.4'", out)
+            self.assertNotIn("Release 0.1.1", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_syncs_internal_pyproject_pins(self):
+        """Internal floors ratchet to the PUBLISHED upstream and cascade downstream.
+
+        pythontk is published at 0.7.51 (tag). Releasing uitk pins it there,
+        releases uitk as 1.0.52, and the cascade extras (mayatk, blendertk,
+        tentacle) pin uitk>=1.0.52 — all from tags, no network.
+        """
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            # Versions are real published releases whose successors also exist
-            # on PyPI — the strict pipeline clamps/checks against the live
-            # index, so invented versions would false-fail the PyPI pin check.
             self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
             self._init_dummy_repo(
                 root, "uitk", "1.0.51", ["qtpy", "pythontk==0.0.1"]
@@ -580,39 +546,51 @@ class TestPushScriptRegressions(unittest.TestCase):
                 ],
             )
 
-            script = M3TRIK_DIR / "push.ps1"
             result = self._run(
-                [
-                    "powershell",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(script),
-                    "-Root",
-                    str(root),
-                    "-Packages",
-                    "uitk",
-                    "-Strict",
-                    "-Merge",
-                    "-SkipReview",
-                    "-SkipBuild",
-                    "-SkipWorkflowWait",
-                ],
-                cwd=root,
-                timeout=120,
+                self._release_cmd(root, "uitk"), cwd=root, timeout=300
             )
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
-            self.assertIn("Synced dependencies & bumped version", out)
+            self.assertIn("Pinned pythontk>=0.7.51", out)
+            self.assertIn("Committed 'Release 1.0.52'", out)
 
             toml = (root / "uitk" / "pyproject.toml").read_text(encoding="utf-8")
             self.assertIn('"pythontk>=0.7.51"', toml)
-
-            # The cascade must also have synced the parallel blendertk branch.
-            btk_toml = (root / "blendertk" / "pyproject.toml").read_text(
-                encoding="utf-8"
-            )
+            # The cascade synced the parallel blendertk branch to uitk's NEW version.
+            btk_toml = (root / "blendertk" / "pyproject.toml").read_text(encoding="utf-8")
             self.assertIn('"pythontk>=0.7.51"', btk_toml)
+            self.assertIn('"uitk>=1.0.52"', btk_toml)
+            # A pin-only delta is an artifact delta: blendertk got its own release.
+            self.assertIn("Committed 'Release 0.5.1'", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_release_commit_is_not_marked_skip_ci(self):
+        """The Release commit heads the branch the release PR is opened from.
+
+        GitHub skips every workflow for a "[skip ci]" head commit, so tagging it
+        would mean tests.yml never runs on any release PR and -UsePR merges code
+        no check has ever seen.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
+            _, uitk_origin = self._init_dummy_repo(
+                root, "uitk", "1.0.51", ["qtpy", "pythontk==0.0.1"]
+            )
+
+            result = self._run(
+                self._release_cmd(root, "uitk"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+
+            subjects = self._git(uitk_origin, "log", "--pretty=%s", "dev").stdout
+            self.assertIn("Release 1.0.52", subjects, out)
+            self.assertNotIn(
+                "[skip ci]",
+                subjects,
+                "a [skip ci] head strips the required check off the release PR",
+            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_refuses_to_release_while_behind_origin_dev(self):
@@ -678,8 +656,8 @@ class TestPushScriptRegressions(unittest.TestCase):
     def test_pin_sync_never_lowers_a_declared_floor(self):
         """A floor ABOVE the version being pinned must survive the sync.
 
-        ``Get-LocalStrictVersions`` clamps every version down to what PyPI
-        actually publishes, so a run that does NOT include the upstream would
+        The version map is what is PUBLISHED (here: the v* tags), so a run
+        that does NOT include the upstream would
         otherwise rewrite a deliberately raised floor back to the old release --
         reintroducing exactly the break the raise existed to prevent. Measured
         2026-08-19 on mayatk's ``pythontk>=0.9.25``, which is needed because
@@ -710,6 +688,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                     "-SkipReview",
                     "-SkipBuild",
                     "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
                 ],
                 cwd=root,
                 timeout=120,
@@ -1128,6 +1107,25 @@ class TestPushScriptRegressions(unittest.TestCase):
             *extra,
         ]
 
+    def _release_cmd(self, root: Path, package: str, *extra):
+        """A Strict+Merge direct-merge release with every network gate off.
+
+        Versions resolve from the fixture's v* tags (-SkipPypiCheck), so the
+        run is deterministic and offline.
+        """
+        return self._push_cmd(
+            root,
+            "-Packages",
+            package,
+            "-Strict",
+            "-Merge",
+            "-SkipReview",
+            "-SkipBuild",
+            "-SkipWorkflowWait",
+            "-SkipPypiCheck",
+            *extra,
+        )
+
     def _retarget_origin_to_github(self, repo: Path, origin: Path, slug: str):
         """Report a github.com origin URL while transports stay local.
 
@@ -1140,16 +1138,29 @@ class TestPushScriptRegressions(unittest.TestCase):
         self._git(repo, "config", f"url.{origin.as_posix()}.insteadOf", url)
         self._git(repo, "remote", "set-url", "origin", url)
 
-    # A `gh` stand-in. Dispatches on the subcommand and, for `pr view`, on
-    # whether the --json field list asks for mergedAt (the merge-wait probe) or
-    # the gate fields. Responses come from sibling files so each test can pick a
-    # scenario without rewriting the shim. .cmd + CRLF: cmd.exe rejects LF-only
-    # batch files, and PATHEXT resolution makes `gh` find it from PowerShell.
+    # A `gh` stand-in. Dispatches on the subcommand and, for `pr view`, on which
+    # --json fields are asked for: mergedAt (the merge-wait probe),
+    # autoMergeRequest (the arm-once probe) or the gate fields. Responses come
+    # from sibling files so each test can pick a scenario without rewriting the
+    # shim; a NUMBERED file (`pr_gates.2.json`) answers the Nth call of that
+    # probe, so a test can script "pending for two polls, then red". Every call
+    # is appended to gh_calls.log. `release create` copies the --notes-file at
+    # call time, because push.ps1 deletes the temp file in `finally`.
+    # .cmd + CRLF: cmd.exe rejects LF-only batch files, and PATHEXT resolution
+    # makes `gh` find it from PowerShell.
     _GH_SHIM_LINES = [
         "@echo off",
         "setlocal",
+        # Captured ONCE, in the main body: inside a `call :label` subroutine %0 is the
+        # LABEL, so %HERE% there resolves against the CWD -- and push.ps1 changes CWD
+        # between gh calls (Push-Location into each repo).
+        'set "HERE=%~dp0"',
         'set "ARGS=%*"',
+        '>>"%HERE%gh_calls.log" echo %ARGS%',
         'if "%1"=="auth" exit /b 0',
+        'if "%1"=="release" goto :release',
+        'if "%1"=="run" goto :runlist',
+        'if "%1"=="workflow" exit /b 0',
         'if "%2"=="list" goto :prlist',
         'if "%2"=="create" goto :prcreate',
         'if "%2"=="merge" exit /b 0',
@@ -1157,21 +1168,65 @@ class TestPushScriptRegressions(unittest.TestCase):
         "exit /b 0",
         "",
         ":prlist",
-        'type "%~dp0pr_list.json"',
+        'type "%HERE%pr_list.json"',
         "exit /b 0",
         "",
         ":prcreate",
-        'type "%~dp0pr_create.txt"',
+        'if exist "%HERE%pr_create_fails" exit /b 1',
+        'type "%HERE%pr_create.txt"',
         "exit /b 0",
         "",
         ":prview",
         'echo %ARGS% | findstr /C:"mergedAt" >nul',
-        "if errorlevel 1 goto :prgates",
-        'type "%~dp0pr_merged.json"',
+        "if not errorlevel 1 goto :prmerged",
+        'echo %ARGS% | findstr /C:"autoMergeRequest" >nul',
+        "if not errorlevel 1 goto :prarmed",
+        "goto :prgates",
+        "",
+        ":prmerged",
+        "call :nth merged_calls",
+        'if exist "%HERE%pr_merged.%N%.json" (type "%HERE%pr_merged.%N%.json") else (type "%HERE%pr_merged.json")',
         "exit /b 0",
         "",
         ":prgates",
-        'type "%~dp0pr_gates.json"',
+        "call :nth gates_calls",
+        'if exist "%HERE%pr_gates.%N%.json" (type "%HERE%pr_gates.%N%.json") else (type "%HERE%pr_gates.json")',
+        "exit /b 0",
+        "",
+        ":prarmed",
+        'if exist "%HERE%pr_armed.json" (type "%HERE%pr_armed.json") else (echo {"autoMergeRequest":null})',
+        "exit /b 0",
+        "",
+        ":release",
+        'if "%2"=="view" (',
+        '  if exist "%HERE%release_exists" exit /b 0',
+        "  exit /b 1",
+        ")",
+        'if "%2"=="create" (',
+        "  call :copynotes %*",
+        '  >"%HERE%release_exists" echo 1',
+        "  exit /b 0",
+        ")",
+        "exit /b 0",
+        "",
+        ":runlist",
+        'if exist "%HERE%runs.json" (type "%HERE%runs.json") else (echo [])',
+        "exit /b 0",
+        "",
+        ":copynotes",
+        'if "%~1"=="" exit /b 0',
+        'if "%~1"=="--notes-file" (',
+        '  copy /y "%~2" "%HERE%release_notes.txt" >nul',
+        "  exit /b 0",
+        ")",
+        "shift",
+        "goto :copynotes",
+        "",
+        ":nth",
+        "set N=0",
+        'if exist "%HERE%%1" set /p N=<"%HERE%%1"',
+        "set /a N+=1",
+        '>"%HERE%%1" echo %N%',
         "exit /b 0",
         "",
     ]
@@ -1195,6 +1250,10 @@ class TestPushScriptRegressions(unittest.TestCase):
         env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
         return env
 
+    def _gh_calls(self, root: Path) -> str:
+        log = root / "_bin" / "gh_calls.log"
+        return log.read_text(encoding="ascii", errors="replace") if log.exists() else ""
+
     def _pr_release_repo(self, root: Path):
         """A pythontk repo with a real dev delta and a github.com origin."""
         repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
@@ -1206,7 +1265,7 @@ class TestPushScriptRegressions(unittest.TestCase):
         self._git(repo, "push", "origin", "dev")
         return repo, origin
 
-    def _pr_release_cmd(self, root: Path):
+    def _pr_release_cmd(self, root: Path, *extra):
         return self._push_cmd(
             root,
             "-Packages",
@@ -1220,6 +1279,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             "-UsePR",
             "-PRGateTimeoutSeconds",
             "0",
+            *extra,
         )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
@@ -1306,91 +1366,6 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("TESTS RECEIPT GATE BYPASSED", out)
             self.assertIn("Releasing UNTESTED trees", out)
             self.assertNotIn("No tests receipt for the current tree", out)
-
-    @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_dev_bump_commit_is_not_marked_skip_ci(self):
-        """The auto-bump commit heads the branch the release PR is opened from.
-
-        GitHub skips every workflow for a "[skip ci]" head commit, so tagging it
-        meant tests.yml never ran on any release PR and -UsePR merged code no
-        check had ever seen.
-        """
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
-            self._git(repo, "checkout", "dev")
-            # Uncommitted: Sync-DevWithOrigin absorbs it, which is what puts the
-            # branch ahead of origin/dev and triggers the auto-bump.
-            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
-
-            result = self._run(
-                self._push_cmd(
-                    root,
-                    "-Packages",
-                    "pythontk",
-                    "-Strict",
-                    "-Merge",
-                    "-SkipReview",
-                    "-SkipBuild",
-                    "-SkipWorkflowWait",
-                    "-SkipPypiCheck",
-                ),
-                cwd=root,
-                timeout=180,
-            )
-            out = result.stdout + result.stderr
-            self.assertEqual(result.returncode, 0, out)
-
-            subjects = self._git(origin, "log", "--pretty=%s", "dev").stdout
-            self.assertIn("Bump version to 0.1.1", subjects, out)
-            self.assertNotIn("Bump version to 0.1.1 [skip ci]", subjects, out)
-
-    @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_pin_sync_commit_has_no_skip_ci(self):
-        """The pin-sync bump must NOT carry "[skip ci]".
-
-        For a package whose dependencies cascaded, this commit IS the version
-        bump, so it heads the release PR. GitHub skips every workflow for a
-        [skip ci] head, so the tag stripped the required check off the PR the
-        gate exists to hold -- and once required status checks went live
-        (2026-08-17) that PR could never merge at all. Nothing on dev triggers
-        on push, so the tag never suppressed anything where it was made.
-        """
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
-            _, uitk_origin = self._init_dummy_repo(
-                root, "uitk", "1.0.51", ["qtpy", "pythontk==0.0.1"]
-            )
-
-            result = self._run(
-                self._push_cmd(
-                    root,
-                    "-Packages",
-                    "uitk",
-                    "-Strict",
-                    "-Merge",
-                    "-SkipReview",
-                    "-SkipBuild",
-                    "-SkipWorkflowWait",
-                    "-SkipPypiCheck",
-                ),
-                cwd=root,
-                timeout=180,
-            )
-            out = result.stdout + result.stderr
-            self.assertEqual(result.returncode, 0, out)
-            self.assertIn("Synced dependencies & bumped version", out)
-
-            subjects = self._git(uitk_origin, "log", "--pretty=%s", "dev").stdout
-            self.assertIn(
-                "Update dependencies & bump version to 1.0.52", subjects, out
-            )
-            self.assertNotIn(
-                "[skip ci]",
-                subjects,
-                "a [skip ci] head strips the required check off the release PR",
-            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_pr_mode_fails_when_pr_has_no_check_runs(self):
@@ -1559,6 +1534,433 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertEqual(result.returncode, 0, out)
             self.assertIn("still running", out)
             self.assertIn("PR #7 merged", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_dead_pr_fails_in_one_poll_and_names_the_check(self):
+        """A settled red check is reported in ONE poll, not waited out.
+
+        Measured 2026-08-23: uitk's required `test` failed at minute 17 and the
+        old merge-wait loop (which read only state/mergedAt) sat on the dead PR
+        for 13 more minutes to the 1800 s ceiling, then aborted three packages.
+        Arm-time gate sees checks still running (passes); the first merge-wait
+        poll sees them settled with `test` red -> merge-dead, by name, fast.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":[{"name":"test","status":"IN_PROGRESS","conclusion":null},'
+                '{"name":"api-registry","conclusion":"SUCCESS"}]}',
+            )
+            b = root / "_bin"
+            (b / "pr_merged.json").write_text('{"state":"OPEN","mergedAt":null}', encoding="ascii")
+            # Gate probe #1 is the arm-time check (still running); from #2 on the
+            # rollup is settled and red.
+            (b / "pr_gates.2.json").write_text(
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":[{"name":"test","conclusion":"FAILURE"},'
+                '{"name":"api-registry","conclusion":"SUCCESS"}]}',
+                encoding="ascii",
+            )
+            (b / "pr_gates.3.json").write_bytes((b / "pr_gates.2.json").read_bytes())
+
+            started = time.monotonic()
+            result = self._run(
+                self._pr_release_cmd(root, "-PRMergeTimeoutSeconds", "1800"),
+                cwd=root,
+                timeout=300,
+                env=env,
+            )
+            elapsed = time.monotonic() - started
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("cannot merge: branch protection is holding it", out)
+            self.assertIn("x test", out)
+            self.assertIn("PR cannot merge", out)  # summary line
+            self.assertLess(elapsed, 120, f"took {elapsed:.0f}s -- the dead PR was waited out\n{out}")
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_red_non_required_check_is_named_but_does_not_abort(self):
+        """A red check that branch protection does not require must NOT abort
+        the release - GitHub merges over it and so must the wait loop.
+
+        Measured on the live repos: pythontk #48 and #49 both MERGED carrying
+        settled FAILUREs on `summary` and `validate-tentacle`, because neither
+        is a required context. Treating any red check as fatal would have
+        aborted both cascades, and would contradict the arm-time gate, which
+        deliberately reports these without blocking. mayatk/blendertk make it
+        concrete: their required check is `static-analysis`, and both now carry
+        extra non-required Qt/mock suites on every PR.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            # CLEAN (nothing is holding the merge) with one red non-required check.
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"CLEAN",'
+                '"statusCheckRollup":[{"name":"static-analysis","conclusion":"SUCCESS"},'
+                '{"name":"Qt-only suites (no Blender)","conclusion":"FAILURE"}]}',
+            )
+            b = root / "_bin"
+            # OPEN for the first two merge probes, then merged - the auto-merge
+            # GitHub performs over a non-required failure.
+            for n in (1, 2):
+                (b / f"pr_merged.{n}.json").write_text(
+                    '{"state":"OPEN","mergedAt":null}', encoding="ascii"
+                )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=300, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("PR #7 merged", out)
+            # Named, so it is never silent...
+            self.assertIn("Qt-only suites (no Blender)", out)
+            # ...but not fatal.
+            self.assertNotIn("cannot merge", out)
+            self.assertNotIn("PR cannot merge", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_all_green_blocked_window_is_not_dead(self):
+        """BLOCKED with every check green is a transient GitHub state, not death.
+
+        The window between the last check going green and mergeStateStatus
+        being recomputed is crossed on every successful release. Three polls of
+        it, then MERGED, must succeed.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":[{"name":"test","conclusion":"SUCCESS"}]}',
+            )
+            b = root / "_bin"
+            # Arm-time gate: BLOCKED + 0 pending would be refused, so probe #1
+            # shows the check still running; later probes are all-green BLOCKED.
+            (b / "pr_gates.1.json").write_text(
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":[{"name":"test","status":"IN_PROGRESS","conclusion":null}]}',
+                encoding="ascii",
+            )
+            for n in (1, 2, 3):
+                (b / f"pr_merged.{n}.json").write_text('{"state":"OPEN","mergedAt":null}', encoding="ascii")
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=300, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("PR #7 merged", out)
+            self.assertNotIn("is dead", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_finalize_resumes_a_merged_but_untagged_release(self):
+        """A release that merged in an aborted run is completed on the next run.
+
+        origin/main already carries `Release 0.1.1` with no v0.1.1 tag (the
+        2026-08-23 uitk state). The old script saw "local version unpublished ->
+        no changes" and left it; now Finalize tags + cuts the Release at entry.
+        Second half: tag present, Release absent -> the Release is created.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+            # Simulate the aborted run: Release 0.1.1 merged to main, untagged.
+            self._git(repo, "checkout", "dev")
+            (repo / "pythontk" / "__init__.py").write_text(
+                '__package__ = "pythontk"\n__version__ = "0.1.1"\n', encoding="utf-8"
+            )
+            (repo / "CHANGELOG.md").write_text("# log\n\n- 0.1.1: the fix\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "Release 0.1.1")
+            self._git(repo, "checkout", "main")
+            self._git(repo, "merge", "--no-ff", "dev", "-m", "Merge dev")
+            self._git(repo, "push", "origin", "main")
+            self._git(repo, "checkout", "dev")
+            self._git(repo, "push", "origin", "dev")
+            env = self._install_fake_gh(root, "{}")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Tagged v0.1.1", out)
+            self.assertIn("GitHub Release v0.1.1 created", out)
+            self.assertIn("Finalized a previously merged release", out)
+            self.assertIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
+            notes = (root / "_bin" / "release_notes.txt").read_text(encoding="utf-8")
+            self.assertIn("- 0.1.1: the fix", notes)
+
+            # Idempotent: nothing left to do.
+            again = self._run(self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env)
+            out2 = again.stdout + again.stderr
+            self.assertEqual(again.returncode, 0, out2)
+            self.assertNotIn("Tagged", out2)
+            self.assertIn("No changes to push and fully merged", out2)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_finalize_creates_a_missing_release_when_the_tag_exists(self):
+        """`tag exists` must not hide `Release missing` (the tag is pushed first)."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+            # main at 0.1.1, tagged (the tag push succeeded) but no Release (the
+            # `gh release create` that follows it failed).
+            (repo / "pythontk" / "__init__.py").write_text(
+                '__package__ = "pythontk"\n__version__ = "0.1.1"\n', encoding="utf-8"
+            )
+            (repo / "CHANGELOG.md").write_text("# log\n\n- 0.1.1: the fix\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "Release 0.1.1")
+            self._git(repo, "checkout", "main")
+            self._git(repo, "merge", "--ff-only", "dev")
+            self._git(repo, "tag", "-a", "v0.1.1", "-m", "v0.1.1")
+            self._git(repo, "push", "origin", "main", "v0.1.1")
+            self._git(repo, "checkout", "dev")
+            self._git(repo, "push", "origin", "dev")
+            env = self._install_fake_gh(root, "{}")  # release view -> absent
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertNotIn("Tagged", out)  # v0.1.1 already existed
+            self.assertIn("GitHub Release v0.1.1 created", out)
+            notes = (root / "_bin" / "release_notes.txt").read_text(encoding="utf-8")
+            self.assertIn("- 0.1.1: the fix", notes)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_release_notes_are_changelog_lines_since_previous_tag(self):
+        """The Release body is exactly the CHANGELOG lines added after the
+        previous v* tag -- computed from tags, so it works after the merge too
+        (the old origin/main..dev delta was empty the moment the PR landed)."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+            self._git(repo, "checkout", "dev")
+            (repo / "CHANGELOG.md").write_text("# log\n\n- old entry\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "old notes")
+            self._git(repo, "checkout", "main")
+            self._git(repo, "merge", "--ff-only", "dev")
+            self._git(repo, "push", "origin", "main")
+            # Re-point the published tag at the state that HAS the old entry, so
+            # "since the previous tag" excludes it.
+            self._git(repo, "tag", "-f", "-a", "v0.1.0", "-m", "v0.1.0")
+            self._git(repo, "push", "-f", "origin", "v0.1.0")
+            self._git(repo, "checkout", "dev")
+            (repo / "CHANGELOG.md").write_text(
+                "# log\n\n- NEW: the fix\n- NEW: the other fix\n- old entry\n", encoding="utf-8"
+            )
+            (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature + notes")
+            self._git(repo, "push", "origin", "dev")
+            env = self._install_fake_gh(root, "{}")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("GitHub Release v0.1.1 created", out)
+            notes = (root / "_bin" / "release_notes.txt").read_text(encoding="utf-8")
+            self.assertEqual(
+                [ln for ln in notes.splitlines() if ln.strip()],
+                ["- NEW: the fix", "- NEW: the other fix"],
+                out,
+            )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_receipt_survives_a_sidecar_only_commit(self):
+        """The receipt hash covers the SOURCE tree: generated sidecars are
+        excluded, so a registry refresh (the bot's, or Prepare's) cannot void a
+        receipt for code that has not moved -- while a source edit still does."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "dev")
+            base = self._push_cmd(root, "-Packages", "pythontk")
+
+            recorded = self._run(base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120)
+            self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+
+            def shown():
+                r = self._run(base + ["-ShowReceipts"], cwd=root, timeout=120)
+                return r.stdout + r.stderr
+
+            self.assertIn("review=VALID", shown())
+
+            (repo / "API_INDEX.md").write_text("# regenerated\n", encoding="utf-8")
+            (repo / "API_CHANGES.md").write_text("# regenerated\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "chore: refresh API registry")
+            self.assertIn("review=VALID", shown(), "a sidecar-only commit voided the receipt")
+
+            (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self.assertIn("no receipts for current tree", shown(), "a source edit did NOT void the receipt")
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_workflow_change_merges_but_does_not_release(self):
+        """A `.github/**`-only delta MUST reach main (workflows only take effect
+        there) but ships nothing: no version, no tag, summary `merged`."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "dev")
+            wf = repo / ".github" / "workflows"
+            wf.mkdir(parents=True)
+            (wf / "tests.yml").write_text("name: Tests\non: [pull_request]\n", encoding="utf-8")
+            # test/ and docs/ (other than the wheel's readme) never ship either.
+            (repo / "test").mkdir()
+            (repo / "test" / "test_x.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
+            (repo / "docs").mkdir()
+            (repo / "docs" / "GUIDE.md").write_text("# guide\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "ci: add tests workflow, a test, a doc")
+            self._git(repo, "push", "origin", "dev")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Delta: must-reach-main", out)
+            self.assertIn("Merged to main (no version", out)
+            tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
+            self.assertIn(".github/workflows/tests.yml", tree, out)
+            main_init = self._git(origin, "show", "main:pythontk/__init__.py").stdout
+            self.assertIn('__version__ = "0.1.0"', main_init, out)
+            self.assertNotIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_prepare_rekeys_receipts_after_its_own_commit(self):
+        """The Release commit changes the source hash (version line, pins) --
+        push.ps1 carries the receipts across its own mechanical edit, so a
+        re-run after an abort passes the gate without re-recording."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+            self._git(repo, "checkout", "dev")
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature")
+            self._git(repo, "push", "origin", "dev")
+            base = self._push_cmd(root, "-Packages", "pythontk")
+            recorded = self._run(base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120)
+            self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+
+            # Abort AFTER the Release commit: PR creation fails.
+            env = self._install_fake_gh(root, "{}")
+            (root / "_bin" / "pr_create_fails").write_text("1", encoding="ascii")
+            gated = self._push_cmd(
+                root, "-Packages", "pythontk", "-Strict", "-Merge", "-SkipBuild",
+                "-SkipWorkflowWait", "-SkipPypiCheck", "-UsePR", "-PRGateTimeoutSeconds", "0",
+            )
+            first = self._run(gated, cwd=root, timeout=240, env=env)
+            out = first.stdout + first.stderr
+            self.assertNotEqual(first.returncode, 0, out)
+            self.assertIn("Committed 'Release 0.1.1'", out)
+            self.assertIn("Failed to create PR", out)
+
+            # Re-run: the tree now carries push.ps1's own Release commit. The gate
+            # must accept it without a fresh -RecordReceipt.
+            (root / "_bin" / "pr_create_fails").unlink()
+            second = self._run(gated, cwd=root, timeout=240, env=env)
+            out2 = second.stdout + second.stderr
+            self.assertNotIn("No review receipt for the current tree", out2)
+            self.assertIn("Review receipt valid", out2)
+            self.assertIn("dev already carries Release 0.1.1", out2)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_skip_review_never_manufactures_a_receipt(self):
+        """Re-keying carries EXISTING receipts only. A -SkipReview run that
+        commits a Release and aborts must leave no receipt behind - otherwise a
+        later strict run would trust a review nobody did."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+            self._git(repo, "checkout", "dev")
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature")
+            self._git(repo, "push", "origin", "dev")
+
+            env = self._install_fake_gh(root, "{}")
+            (root / "_bin" / "pr_create_fails").write_text("1", encoding="ascii")
+            first = self._run(self._pr_release_cmd(root), cwd=root, timeout=240, env=env)
+            out = first.stdout + first.stderr
+            self.assertNotEqual(first.returncode, 0, out)
+            self.assertIn("Committed 'Release 0.1.1'", out)
+
+            shown = self._run(
+                self._push_cmd(root, "-Packages", "pythontk", "-ShowReceipts"), cwd=root, timeout=120
+            )
+            self.assertIn("no receipts for current tree", shown.stdout + shown.stderr)
+
+            # And the strict re-run is gated: a human commit ("feature") is in the
+            # range, so this is NOT a mechanical delta.
+            (root / "_bin" / "pr_create_fails").unlink()
+            strict = self._pr_release_cmd(root)
+            strict.remove("-SkipReview")
+            second = self._run(strict, cwd=root, timeout=240, env=env)
+            out2 = second.stdout + second.stderr
+            self.assertNotEqual(second.returncode, 0, out2)
+            self.assertIn("No review receipt for the current tree", out2)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_mechanical_release_commit_is_exempt_from_the_gate(self):
+        """A cascade-extra package (no code of its own, only a floor ratchet) is
+        exempt from the gate before Prepare; after an abort it is ahead of main
+        by ONLY push.ps1's `Release X.Y.Z` commit, and must stay exempt - without
+        any receipt being invented for it."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
+            uitk, uitk_origin = self._init_dummy_repo(
+                root, "uitk", "1.0.51", ["qtpy", "pythontk==0.0.1"]
+            )
+            self._retarget_origin_to_github(uitk, uitk_origin, "m3trik/uitk")
+
+            # Strict, NO -SkipReview: uitk's delta is a pin ratchet only -> exempt.
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"CLEAN",'
+                '"statusCheckRollup":[{"name":"test","conclusion":"SUCCESS"}]}',
+                slug="m3trik/uitk",
+            )
+            (root / "_bin" / "pr_create_fails").write_text("1", encoding="ascii")
+            cmd = self._push_cmd(
+                root, "-Packages", "uitk", "-Strict", "-Merge", "-SkipBuild",
+                "-SkipWorkflowWait", "-SkipPypiCheck", "-UsePR", "-PRGateTimeoutSeconds", "0",
+            )
+            first = self._run(cmd, cwd=root, timeout=240, env=env)
+            out = first.stdout + first.stderr
+            # Clean and not ahead of origin: the gate has nothing to judge yet.
+            self.assertNotIn("No review receipt", out)
+            self.assertIn("Committed 'Release 1.0.52'", out)
+            self.assertIn("Failed to create PR", out)
+
+            # Re-run: dev is ahead of main by exactly that one Release commit.
+            (root / "_bin" / "pr_create_fails").unlink()
+            second = self._run(cmd, cwd=root, timeout=240, env=env)
+            out2 = second.stdout + second.stderr
+            self.assertIn("ahead only by push.ps1's own Release commit (exempt)", out2)
+            self.assertNotIn("No review receipt", out2)
+            self.assertIn("PR #7 merged", out2)
 
     def test_zero_poll_interval_is_refused_at_bind_time(self):
         """A 0 poll interval must be rejected, never accepted into a spin loop.
@@ -1767,21 +2169,17 @@ class TestGitHubWorkflows(unittest.TestCase):
                 f"{pkg} workflow missing REPO_DISPATCH_TOKEN",
             )
 
-    def test_workflows_bump_version(self):
-        """Workflows should trigger dev bump after publish"""
+    def test_workflows_do_not_bump_dev_after_publish(self):
+        """No publish.yml dispatches `bump_dev`, and no bump-dev.yml exists.
+
+        The post-publish placeholder bump was retired 2026-08-23: push.ps1 now
+        steps the release version from what is PUBLISHED, so a placeholder on
+        dev was dead weight -- and the reason every release burned 2-3 version
+        numbers. Invariant after a release: dev == main.
+        """
         for pkg in PACKAGES:
-            workflow = ROOT / pkg / ".github" / "workflows" / "publish.yml"
-            content = workflow.read_text(encoding="utf-8")
-
-            # Check for either "Bump version" (old) or "Trigger dev bump" (new)
-            has_bump = "Bump version" in content or "Trigger dev bump" in content
-            self.assertTrue(has_bump, f"{pkg} workflow missing version bump/trigger")
-
-            # Check for skip ci if it's a direct commit, or just ensure the mechanism exists
-            # The new mechanism uses repository_dispatch which doesn't need [skip ci] in the workflow file itself
-            # but the commit message in the script usually has it.
-            # Let's just check for the trigger for now.
-
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+            workflows = ROOT / pkg / ".github" / "workflows"
+            content = (workflows / "publish.yml").read_text(encoding="utf-8")
+            self.assertNotIn("bump_dev", content, f"{pkg} publish.yml still dispatches bump_dev")
+            self.assertNotIn("Trigger dev bump", content, pkg)
+            self.assertFalse((workflows / "bump-dev.yml").exists(), f"{pkg} still ships bump-dev.yml")

@@ -307,22 +307,28 @@ class TestPowerShellMemoryDirParity(unittest.TestCase):
 
 
 class TestRefreshWorkflowStepOrder(unittest.TestCase):
-    """The context-budget gate must run AFTER refresh-api-registry.yml's pushes.
+    """The context-budget gate must run AFTER refresh-api-registry.yml's push.
 
     That job clones all seven ecosystem repos as siblings, so the guard judges
     hand-written docs (CLAUDE.md sizes, `**Deps**:` lines) in repos the
     job neither owns nor can fix — and `m3trik/scripts` reaches `main` before the
     packages land their half of any change, so a newly added cross-repo check is
-    red by construction for the length of a cascade. In front of the push steps
-    that red blocks the registry refresh for all seven packages, which then fails
-    tentacle's parity-audit gate on the stale registries.
+    red by construction for the length of a cascade. In front of the push step
+    that red blocks the shadow-report refresh this job exists to perform.
+
+    Since 2026-08-23 the job pushes ONE file (the shadow report): per-package
+    registries are written by push.ps1's Prepare phase inside each release
+    commit, so the per-package push loop -- the only source of bot commits on
+    the packages' dev branches -- is gone and must stay gone.
     """
 
     WORKFLOW = M3TRIK_DIR / ".github" / "workflows" / "refresh-api-registry.yml"
-    PUSH_STEPS = (
-        "Commit and push per-package registries",
-        "Commit and push m3trik shadow report",
-    )
+    PUSH_STEPS = ("Commit and push m3trik shadow report",)
+
+    def test_bot_no_longer_writes_into_package_repos(self):
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("Commit and push per-package registries", text)
+        self.assertNotIn("chore: refresh API registry", text)
 
     def test_budget_gate_runs_after_every_push_step(self):
         text = self.WORKFLOW.read_text(encoding="utf-8")

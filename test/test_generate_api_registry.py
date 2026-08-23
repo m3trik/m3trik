@@ -30,7 +30,7 @@ def _mod(relpath: str, classes: list) -> "g.ModuleEntry":
 
 
 def _pkg(name: str, modules: list) -> "g.PackageData":
-    return g.PackageData(name=name, source_root=f"{name}/{name}", generated_at="2026-06-21", modules=modules)
+    return g.PackageData(name=name, source_root=f"{name}/{name}", modules=modules)
 
 
 class TestShadowBucketing(unittest.TestCase):
@@ -278,7 +278,6 @@ class TestChangesBaseline(unittest.TestCase):
         baseline = {
             "name": pkg.name,
             "source_root": f"{pkg.name}/{pkg.name}",
-            "generated_at": "2026-01-01",
             "modules": [],
         }
         (pkg / "API_REGISTRY.json").write_text(
@@ -335,6 +334,24 @@ class TestStalenessGate(unittest.TestCase):
         old = "# pkg\n\n_Generated: 2026-01-01_\n\n- `class Widget`\n"
         new = "# pkg\n\n_Generated: 2026-08-17_\n\n- `class Widget`\n"
         self.assertFalse(g.StalenessGate.is_stale(old, new))
+
+    def test_a_registry_from_the_dated_generator_is_not_stale(self):
+        """A registry written BEFORE the date was removed must still gate clean.
+
+        The pre-2026-08-23 generator emitted the stamp between two blank
+        lines. Filtering only the date LINE left such a file one blank line
+        longer than anything the current generator writes, so every
+        committed registry in the ecosystem read STALE the moment the stamp
+        was dropped -- `API registry up to date` would have gone red on all
+        seven packages' PRs at once, with no source change behind it.
+        Caught against a real committed registry in a clean worktree.
+        """
+        dated = "# pkg\n\n_Generated: 2026-01-01_\n\n## Index\n\n- `class Widget`\n"
+        undated = "# pkg\n\n## Index\n\n- `class Widget`\n"
+        self.assertFalse(g.StalenessGate.is_stale(dated, undated))
+        # ...and a real surface change is still caught through the same filter.
+        moved = "# pkg\n\n## Index\n\n- `class Gadget`\n"
+        self.assertTrue(g.StalenessGate.is_stale(dated, moved))
 
     def test_source_line_numbers_are_not_staleness(self):
         old = "- [`class Widget(object)`](pkg/pkg/mod.py#L12) — spins.\n"
@@ -416,6 +433,42 @@ class TestCheckGateOnFixtureTree(unittest.TestCase):
         self._generate(["pythontk"])
         rc, _ = self._check(["pythontk"])
         self.assertEqual(0, rc)
+
+    def test_regenerating_unchanged_source_is_byte_identical(self):
+        """No clock in the outputs: a second run over the same tree writes
+        nothing new. This is what keeps the registry bot, receipts and
+        `git status` quiet on a day boundary -- before 2026-08-23 the JSON
+        sidecar and API_CHANGES.md carried a generation date, so every first
+        run of a UTC day was a 7-repo 'refresh' commit with no surface change."""
+        pkg = self._make_pkg()
+        # Run 1 bootstraps the baseline ("Initial registry"); run 2 is the
+        # first steady-state output, which is what every real repo (always
+        # holding an origin/main sidecar) produces. Runs 2 and 3 must match.
+        self._generate(["pythontk"])
+        self._generate(["pythontk"])
+        names = (
+            "API_INDEX.md",
+            "API_REGISTRY.md",
+            "API_REGISTRY.json",
+            "API_CHANGES.md",
+        )
+        steady = {n: (pkg / n).read_bytes() for n in names}
+        self._generate(["pythontk"])
+        again = {n: (pkg / n).read_bytes() for n in names}
+        self.assertEqual(steady, again)
+        for n in names:
+            self.assertNotIn(b"Generated", steady[n], n)
+
+    def test_no_shadows_leaves_the_shadow_report_untouched(self):
+        """A per-package release commit must not dirty m3trik's tree."""
+        self._make_pkg()
+        shadow = self.root / "m3trik" / "docs" / "API_SHADOWS.md"
+        with contextlib.redirect_stdout(io.StringIO()):
+            g.regenerate(["pythontk"], repo_root=self.root, shadows=False)
+        self.assertFalse(shadow.exists())
+        with contextlib.redirect_stdout(io.StringIO()):
+            g.regenerate(["pythontk"], repo_root=self.root)
+        self.assertTrue(shadow.exists())
 
     def test_added_public_class_is_stale(self):
         pkg = self._make_pkg()

@@ -25,6 +25,12 @@ Usage:
     python generate_api_registry.py pythontk   # one or more by name
     python generate_api_registry.py --check    # exit 1 if registries stale
     python generate_api_registry.py uitk --check   # one package (the CI gate)
+    python generate_api_registry.py uitk --no-shadows  # a release commit: the
+                                               # package's own files only
+
+Outputs carry no generation date — git history is the clock. Regenerating an
+unchanged source tree is byte-identical, so nothing downstream (the registry
+bot, receipts, `git status`) ever sees churn that is not a surface change.
 
 ``--check`` writes nothing and compares CONTENT HASHES, never mtimes — see
 ``StalenessGate`` for exactly which artifacts are gated and which cosmetics are
@@ -59,7 +65,6 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -141,9 +146,13 @@ class ModuleEntry:
 
 @dataclass
 class PackageData:
+    # Deliberately no generation timestamp: git history is the clock. A date
+    # baked into the output made the JSON sidecar and API_CHANGES.md differ on
+    # the first run of every UTC day with NO change to the public surface, and
+    # every consumer of that diff (the registry bot, `git status`, receipts)
+    # treated it as real churn.
     name: str
     source_root: str  # POSIX relpath from monorepo root
-    generated_at: str
     modules: list[ModuleEntry] = field(default_factory=list)
 
 
@@ -438,7 +447,6 @@ def walk_package(pkg_dir: Path, repo_root: Path = REPO_ROOT) -> PackageData:
     return PackageData(
         name=name,
         source_root=source_root.relative_to(repo_root).as_posix(),
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         modules=modules,
     )
 
@@ -465,8 +473,6 @@ def emit_registry_markdown(pkg: PackageData) -> str:
         "_Auto-generated. Do not edit by hand. Refresh via "
         "`m3trik/scripts/generate_api_registry.py`._"
     )
-    lines.append("")
-    lines.append(f"_Generated: {pkg.generated_at}_")
     lines.append("")
     lines.append("## Index")
     lines.append("")
@@ -519,8 +525,6 @@ def emit_symbol_index(pkg: PackageData) -> str:
         "for a name; for full signatures/docs, slice "
         "[API_REGISTRY.md](API_REGISTRY.md) (never Read it whole)._",
         "",
-        f"_Generated: {pkg.generated_at}_",
-        "",
     ]
     for mod in pkg.modules:
         header = f"### `{mod.relpath}`"
@@ -572,7 +576,6 @@ def _package_data_from_json(d: dict) -> PackageData:
     return PackageData(
         name=d["name"],
         source_root=d.get("source_root", d["name"]),
-        generated_at=d.get("generated_at", ""),
         modules=modules,
     )
 
@@ -676,8 +679,8 @@ def emit_changes_markdown(
     if prior_json is None:
         return (
             f"# {pkg.name} — API Changes\n\n"
-            f"_Initial registry generated {pkg.generated_at}. "
-            "No prior baseline — diff will appear on next regeneration._\n"
+            "_Initial registry. No prior baseline — diff will appear on next "
+            "regeneration._\n"
         )
 
     # Reconstruct a flat map from prior JSON (which mirrors PackageData shape).
@@ -696,9 +699,7 @@ def emit_changes_markdown(
     changed = sorted(k for k in set(new) & set(prior) if new[k] != prior[k])
 
     lines = [f"# {pkg.name} — API Changes", ""]
-    lines.append(
-        f"_Diff vs {baseline_label}. Generated {pkg.generated_at}._"
-    )
+    lines.append(f"_Diff vs {baseline_label}._")
     lines.append("")
     if not (added or removed or changed):
         lines.append(f"No public API changes since {baseline_label}.")
@@ -782,8 +783,6 @@ def emit_shadow_report(packages: list[PackageData]) -> str:
         "re-exposes upstream behavior should be deleted; if it adds value, "
         "name it differently or document why._",
         "",
-        f"_Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}_",
-        "",
     ]
     if not cross_pkg:
         lines.append("No cross-package name collisions detected.")
@@ -854,13 +853,16 @@ class StalenessGate:
       only be validated when every ecosystem package was walked in one run (see
       :meth:`covers_ecosystem`). A per-package CI checkout has no siblings.
 
-    :meth:`normalize` additionally drops the two cosmetics that are not public
-    API: the ``_Generated: <date>_`` stamp (a new day is not a change) and the
+    :meth:`normalize` additionally drops two cosmetics that are not public API:
+    a legacy ``_Generated: <date>_`` stamp (the generator no longer writes one,
+    but registries committed before 2026-08-23 still carry it — normalizing it
+    away is what lets the NEW generator gate an OLD artifact as current rather
+    than redding every package's CI until it is regenerated) and the
     ``#L<line>`` fragment of source deep-links (a class that moved down three
     lines is the same class). Everything that IS surface — module set and
     order, names, bases, signatures, kinds, summaries — still fails the gate.
     Normalization applies to the COMPARISON only; the written artifacts keep
-    real dates and real line numbers.
+    real line numbers.
     """
 
     GATED_FILES = ("API_INDEX.md", "API_REGISTRY.md")
@@ -876,7 +878,14 @@ class StalenessGate:
         kept = "\n".join(
             ln
             for ln in text.splitlines()
-            if not ln.startswith(cls._DATE_LINE_PREFIX)
+            # Blank lines are pure layout, never public API -- and dropping them
+            # is what lets a registry written by the pre-2026-08-23 generator
+            # (which emitted `_Generated: <date>_` between two blanks) compare
+            # equal to one written now. Filtering only the date LINE left the old
+            # file one blank line longer, so every committed registry read stale
+            # the moment the date was removed from the generator: `API registry
+            # up to date` would have gone red on every package PR at once.
+            if ln.strip() and not ln.startswith(cls._DATE_LINE_PREFIX)
         )
         return cls._SRC_LINE_FRAGMENT.sub("#L", kept)
 
@@ -903,7 +912,21 @@ def regenerate(
     package_names: list[str],
     repo_root: Path = REPO_ROOT,
     check_only: bool = False,
+    shadows: bool = True,
 ) -> int:
+    """Walk ``package_names`` and write (or, with ``check_only``, gate) their registries.
+
+    Parameters:
+        package_names: Ecosystem package directory names to walk.
+        repo_root: Monorepo root holding the package dirs and ``m3trik/``.
+        check_only: Compare content hashes and write nothing; exit 1 when stale.
+        shadows: Also refresh ``m3trik/docs/API_SHADOWS.md``. A per-package
+            release commit passes ``False`` — the shadow report is cross-package
+            and lives in m3trik's tree, which a package release must not dirty.
+
+    Returns:
+        Process exit code: 0 clean, 1 stale or unwalkable.
+    """
     packages: list[PackageData] = []
     stale: list[str] = []
     unwalkable: list[str] = []
@@ -972,8 +995,8 @@ def regenerate(
     # per-package CI checkout has no sibling packages on disk, so the report it
     # would compute spans one package and could never match the committed
     # cross-package one. Skipping keeps the per-package gate deterministic.
-    shadow_in_scope = not check_only or StalenessGate.covers_ecosystem(
-        p.name for p in packages
+    shadow_in_scope = shadows and (
+        not check_only or StalenessGate.covers_ecosystem(p.name for p in packages)
     )
 
     shadow_inputs: dict[str, PackageData] = {p.name: p for p in packages}
@@ -1059,10 +1082,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Exit non-zero if any registry is stale; do not write.",
     )
+    parser.add_argument(
+        "--no-shadows",
+        action="store_true",
+        help=(
+            "Skip m3trik/docs/API_SHADOWS.md. For a per-package release commit: "
+            "the shadow report is cross-package and lives in m3trik's tree."
+        ),
+    )
     args = parser.parse_args(argv)
 
     names = list(args.packages) or list(ECOSYSTEM_PACKAGES)
-    return regenerate(names, check_only=args.check)
+    return regenerate(names, check_only=args.check, shadows=not args.no_shadows)
 
 
 if __name__ == "__main__":

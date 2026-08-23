@@ -6,6 +6,31 @@ Purpose
 - Designed for the core package chain: pythontk -> uitk -> {mayatk, blendertk} -> tentacle
   (tentacle publishes as tentacletk on PyPI).
 
+Release phases (Strict+Merge) — every phase is idempotent with an entry predicate, so a
+re-run after ANY abort resumes at the right place instead of re-doing or skipping work.
+
+    Finalize(entry) -> Prepare -> Push -> Merge -> Finalize(exit)
+
+- Finalize   reconciles origin/main with PyPI and the v* tags: a version that is merged
+             but unpublished gets its publish.yml dispatched; one that is published but
+             untagged gets its tag + GitHub Release. Runs FIRST so a previous aborted run
+             is completed before anything new is prepared, and LAST for this run's own
+             release. "No changes" can never hide an unfinished release.
+- Prepare    classifies the dev delta (Test-ReleaseDelta). An ARTIFACT delta (anything
+             that ships, or an upstream floor that must ratchet) becomes ONE commit,
+             `Release X.Y.Z`: the version (Resolve-ReleaseVersion — stepped from what is
+             PUBLISHED, never from the file), the internal floors, and a fresh API
+             registry. One release = one version = one commit; every version number
+             reaches PyPI. A hand-edited __version__ above the published one is honored
+             as a deliberate minor/major bump.
+- Push       dev -> origin/dev when ahead.
+- Merge      dev -> main via PR (-UsePR) or direct. A MUST-REACH-MAIN delta (.github/**,
+             test/**, docs/** except the wheel's readme) merges WITHOUT a version:
+             publish.yml is paths-filtered so nothing publishes. A RIDES-ALONG delta
+             (registry sidecars, CHANGELOG) skips the merge and lands with the next
+             release. A dead PR — a settled red check — fails in one poll, naming the
+             check, instead of waiting out the timeout.
+
 Core safety rules (Strict+Merge)
 - Enforces canonical release order when multiple packages are provided.
 - Stops on the first failure (build, merge conflict, workflow timeout, unsafe repo state).
@@ -15,8 +40,10 @@ Core safety rules (Strict+Merge)
   for the current tree (release gate; receipts in .claude/receipts.json — see
   m3trik/CLAUDE.md "Release preflight"). The tests receipt is enforced, not advisory:
   mayatk and blendertk ship no pull_request-triggered tests workflow, so it is the only
-  evidence their suite ever ran against the tree being published.
-- Keeps internal pyproject.toml pins in sync with the local versions being released, and
+  evidence their suite ever ran against the tree being published. Receipts key on a
+  content hash of the SOURCE tree (generated sidecars excluded), so a registry refresh
+  never voids one; Prepare re-keys them across its own Release commit.
+- Keeps internal pyproject.toml pins in sync with the versions being released, and
   waits for a just-published upstream version to become visible on PyPI before merging
   a downstream package that pins it.
 
@@ -157,40 +184,46 @@ $REQUIRED_PINS = @{
 # ------------------------------------------------------------------------------------------------
 $RECEIPTS_PATH = Join-Path $ROOT ".claude\receipts.json"
 
+# Paths that are DERIVED from source by a generator and gated by CI (`generate_api_registry.py
+# --check`, tentacle's parity job). They are excluded from the receipt hash: if the source is
+# unchanged their content is determined, so regenerating them certifies nothing new -- and
+# including them made every registry refresh void a receipt for a tree whose code had not
+# moved. Git pathspec magic: `:!X` is anchored at the repo root (it does not match `sub/X`).
+$API_SIDECARS = @('API_INDEX.md', 'API_REGISTRY.md', 'API_REGISTRY.json', 'API_CHANGES.md')
+$GENERATED_PATHS = $API_SIDECARS + @('docs/PARITY_AUDIT.md', 'docs/PARITY_SURFACE.md')
+$GENERATED_PATHSPEC = @($GENERATED_PATHS | ForEach-Object { ":!$_" })
+
 function Get-TreeHash {
+    # Content-addressed hash of the SOURCE tree: a real git tree object, built in a
+    # throwaway index from the working tree with the generated sidecars excluded.
+    # One sha, no text hashing -- so unlike the previous md5-of-`git diff` this is
+    # immune to the host's console encoding (git emits the sha as ASCII), hashes
+    # untracked files by CONTENT rather than name+size+mtime, and is unchanged by a
+    # commit that touches only generated files.
     param([string]$RepoPath)
     Push-Location $RepoPath
-    # PowerShell DECODES a native command's stdout using [Console]::OutputEncoding, so
-    # the same tree hashed differently per host: a receipt recorded from an interactive
-    # console failed the gate when push.ps1 ran under `Start-Process -WindowStyle Hidden`,
-    # because non-ASCII in the diff (em-dashes and arrows are routine in CHANGELOG.md)
-    # decoded to different characters. git emits UTF-8, so pin UTF-8 for the reads and
-    # put the host's setting back. A host that refuses the set (redirected stdout) is no
-    # worse off than before, hence the swallowed catch rather than a throw.
-    $prevOutputEncoding = $null
+    $prevIndex = $env:GIT_INDEX_FILE
+    $indexFile = $null
     try {
-        $prevOutputEncoding = [Console]::OutputEncoding
-        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-    } catch { $prevOutputEncoding = $null }
-    try {
-        $head = (git rev-parse HEAD 2>$null)
-        $status = @(git status --porcelain 2>$null) -join "`n"
-        $diff = @(git diff HEAD 2>$null) -join "`n"
-        # Untracked content edits don't show in `git diff`; fold in size+mtime per file.
-        $untracked = @(git ls-files --others --exclude-standard 2>$null | ForEach-Object {
-                $fi = Get-Item -LiteralPath (Join-Path $RepoPath $_) -ErrorAction SilentlyContinue
-                if ($fi) { "$_|$($fi.Length)|$($fi.LastWriteTimeUtc.Ticks)" } else { $_ }
-            }) -join "`n"
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes("$head`n$status`n$diff`n$untracked")
-        $md5 = [System.Security.Cryptography.MD5]::Create()
-        try { $hex = -join ($md5.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) }
-        finally { $md5.Dispose() }
-        return $hex.Substring(0, 12)
+        $gitDir = (git rev-parse --git-dir 2>$null)
+        if (-not $gitDir) { return $null }
+        if (-not [System.IO.Path]::IsPathRooted($gitDir)) {
+            $gitDir = Join-Path (Get-Location).Path $gitDir
+        }
+        $indexFile = Join-Path $gitDir "receipt-index"
+        # The env var is process-wide: every later git call in this session would
+        # silently operate on the throwaway index if it leaked, so it is restored in
+        # `finally` no matter how this function exits.
+        $env:GIT_INDEX_FILE = $indexFile
+        git read-tree --empty 2>$null | Out-Null
+        git add -A -- . $GENERATED_PATHSPEC 2>$null | Out-Null
+        $sha = (git write-tree 2>$null)
+        if (-not $sha) { return $null }
+        return $sha.Trim().Substring(0, 12)
     }
     finally {
-        if ($prevOutputEncoding) {
-            try { [Console]::OutputEncoding = $prevOutputEncoding } catch {}
-        }
+        if ($prevIndex) { $env:GIT_INDEX_FILE = $prevIndex } else { Remove-Item Env:GIT_INDEX_FILE -ErrorAction SilentlyContinue }
+        if ($indexFile) { Remove-Item -LiteralPath $indexFile -Force -ErrorAction SilentlyContinue }
         Pop-Location
     }
 }
@@ -220,7 +253,7 @@ function Get-RecentlyModifiedFiles {
                 $p
             })
         $recent = foreach ($p in $paths) {
-            if ($p -match '^API_(INDEX|REGISTRY|CHANGES)\.(md|json)$') { continue }
+            if ($GENERATED_PATHS -contains $p) { continue }
             $fi = Get-Item -LiteralPath (Join-Path $RepoPath $p) -ErrorAction SilentlyContinue
             if ($fi -and -not $fi.PSIsContainer -and $fi.LastWriteTimeUtc -gt $cutoff) {
                 [pscustomobject]@{
@@ -302,6 +335,49 @@ function Test-Receipt {
     } catch { return $false }
 }
 
+function Copy-ReceiptsToTree {
+    # Re-key a package's EXISTING receipts from one tree hash to another. Used by
+    # Prepare right after its own `Release X.Y.Z` commit: the version line and
+    # the floor pins change the source hash, but the delta is push.ps1's own
+    # mechanical edit on a tree whose review + tests it just verified. Without
+    # this, a re-run after an abort would fail its own gate with "no receipt for
+    # the current tree" - for a tree push.ps1 built. Only receipts that exist are
+    # carried (timestamps included): NOTHING is manufactured, so a -SkipReview run
+    # cannot leave behind a receipt a later strict run would trust. A package the
+    # gate exempted (no delta of its own) gets no receipt here either - its
+    # re-run is covered by Test-MechanicalDelta instead.
+    param([string]$PackageName, [string]$FromHash, [string]$ToHash)
+    if ($FromHash -eq $ToHash) { return }
+    $map = Read-Receipts
+    $fromKey = "$PackageName@$FromHash"
+    if (-not $map.ContainsKey($fromKey)) { return }
+    $map["$PackageName@$ToHash"] = $map[$fromKey]
+    Save-Receipts $map
+}
+
+function Test-MechanicalDelta {
+    # True when everything that puts dev ahead of origin/main is push.ps1's own
+    # work: every commit is a `Release X.Y.Z` and the working tree is clean. That
+    # is the state a cascade-extra package (no code change, only a floor ratchet)
+    # is left in when a run aborts between Prepare and Merge. Such a delta was
+    # exempt from the receipt gate BEFORE Prepare touched it, and nothing a human
+    # wrote has been added since, so it stays exempt - honestly, without a
+    # receipt being invented for it. An absorbed "Update" commit or any other
+    # human commit in the range makes this false, and the gate applies.
+    param([string]$RepoPath)
+    Push-Location $RepoPath
+    try {
+        if (git status --porcelain 2>$null) { return $false }
+        $subjects = @(git log --pretty=%s origin/main..dev 2>$null)
+        if ($subjects.Count -eq 0) { return $false }
+        foreach ($s in $subjects) {
+            if ($s -notmatch '^Release \d+\.\d+\.\d+$') { return $false }
+        }
+        return $true
+    }
+    finally { Pop-Location }
+}
+
 function Get-RepoSlugFromOriginUrl {
     param([string]$OriginUrl)
 
@@ -322,18 +398,19 @@ function Get-PypiProjectName {
     return $PackageName
 }
 
-function Test-PypiHasVersion {
-    param(
-        [string]$ProjectName,
-        [string]$Version
-    )
-
-    # Probe the SIMPLE index (PEP 691 JSON form) — the surface pip actually
-    # resolves against. The JSON API (`/pypi/<name>/json`) updates ahead of it
-    # after an upload, so gating there let the cascade proceed while a
-    # downstream workflow's `pip install <pkg>>=<ver>` still failed with
-    # "No matching distribution found" (measured 2026-08-13: this gate
-    # confirmed uitk==1.3.76 while /simple/uitk/ still listed 1.3.73).
+function Get-PypiVersions {
+    # Every version the SIMPLE index lists for a project, yanked ones included.
+    # This is the surface pip actually resolves against: the JSON API
+    # (`/pypi/<name>/json`) updates ahead of it after an upload, so gating there
+    # let the cascade proceed while a downstream workflow's `pip install
+    # <pkg>>=<ver>` still failed with "No matching distribution found" (measured
+    # 2026-08-13: the old gate confirmed uitk==1.3.76 while /simple/uitk/ still
+    # listed 1.3.73). Yanked releases are deliberately kept: a yanked version's
+    # filename is still TAKEN on PyPI, so stepping the next release from a list
+    # that hid it would land on a number the upload then rejects.
+    # Returns $null (not an empty list) when the index cannot be read, so a
+    # caller can tell "offline" from "no releases".
+    param([string]$ProjectName)
     try {
         # PEP 503 name normalization: lowercase; runs of ., -, _ collapse to -.
         $normalized = $ProjectName.ToLowerInvariant() -replace '[-_.]+', '-'
@@ -344,49 +421,90 @@ function Test-PypiHasVersion {
         # PS 5.1 only auto-parses recognized JSON content types; the vendored
         # +json type may come back as a raw string.
         if ($data -is [string]) { $data = $data | ConvertFrom-Json }
-        if (-not $data) {
-            return $false
-        }
-        if ($data.versions) {
-            return @($data.versions) -contains $Version
-        }
+        if (-not $data) { return $null }
+        if ($data.versions) { return @($data.versions | ForEach-Object { [string]$_ }) }
         # Strict PEP 691 v1.0 indexes may omit the PEP 700 `versions` key and
-        # only list `files`; fall back to matching the version against filenames.
-        # Anchored on the real delimiters so the bound cuts both ways: a version
-        # is preceded by `-` (PEP 427 wheel / PEP 625 sdist both use
-        # `{name}-{version}`) and followed by `-` (wheel) or the archive suffix
-        # (sdist). That rejects "1.3.7" against "...-1.3.76-..." AND still
-        # matches an sdist-only listing — a trailing [^0-9A-Za-z.] class excludes
-        # the dot, so it never matched "pkg-1.3.76.tar.gz" at all.
-        if ($data.files) {
-            $escaped = [regex]::Escape($Version)
-            $pattern = "(?:^|-)$escaped(?:-|\.tar\.gz$|\.zip$)"
-            foreach ($f in @($data.files)) {
-                if ($f.filename -and ($f.filename -match $pattern)) {
-                    return $true
-                }
+        # only list `files`; recover the versions from the filenames. PEP 427
+        # wheels and PEP 625 sdists both use `{name}-{version}` followed by `-`
+        # (wheel) or the archive suffix (sdist).
+        $found = @{}
+        foreach ($f in @($data.files)) {
+            if ($f.filename -and ($f.filename -match '^[^-]+-(?<ver>[0-9][^-]*?)(?:-|\.tar\.gz$|\.zip$)')) {
+                $found[$Matches['ver']] = $true
             }
         }
-        return $false
+        return @($found.Keys)
     }
     catch {
-        # If offline or rate-limited, fail safe in strict merge mode unless explicitly skipped.
-        return $false
+        return $null
     }
 }
 
-function Get-PypiLatestVersion {
-    param([string]$ProjectName)
+function Test-PypiHasVersion {
+    param(
+        [string]$ProjectName,
+        [string]$Version
+    )
+    $versions = Get-PypiVersions $ProjectName
+    # Offline or rate-limited: fail safe in strict merge mode unless explicitly skipped.
+    if ($null -eq $versions) { return $false }
+    return @($versions) -contains $Version
+}
 
-    try {
-        $url = "https://pypi.org/pypi/$ProjectName/json"
-        $data = Invoke-RestMethod -Uri $url -Method Get -ErrorAction Stop
-        if ($data -and $data.info -and $data.info.version) {
-            return [string]$data.info.version
-        }
+function ConvertTo-VersionOrNull {
+    # [version] parsing that swallows the non-semver strings PyPI can list
+    # (pre-releases, post-releases, 2-part versions) instead of throwing.
+    param([string]$Text)
+    if ($Text -match '^\d+\.\d+\.\d+$') {
+        try { return [version]$Text } catch { return $null }
     }
-    catch {}
     return $null
+}
+
+function Get-PypiMaxVersion {
+    # Highest 3-part version on the simple index, yanked included (see
+    # Get-PypiVersions). $null when the index cannot be read or lists nothing.
+    param([string]$ProjectName)
+    $versions = Get-PypiVersions $ProjectName
+    if ($null -eq $versions) { return $null }
+    $max = $null
+    foreach ($v in $versions) {
+        $parsed = ConvertTo-VersionOrNull $v
+        if ($parsed -and (-not $max -or $parsed -gt $max)) { $max = $parsed }
+    }
+    if ($max) { return $max.ToString() }
+    return $null
+}
+
+function Get-ReleaseTags {
+    # Every `vX.Y.Z` tag on ORIGIN, as [version] objects, ascending. Read with
+    # `ls-remote` - a remote query, so no fetch is needed and a stale local tag
+    # never misleads. Annotated tags list twice (`v1.2.3` and `v1.2.3^{}`);
+    # both collapse to one entry.
+    param([string]$RepoPath)
+    Push-Location $RepoPath
+    try {
+        $found = @{}
+        foreach ($line in @(git ls-remote --tags origin 'v*' 2>$null)) {
+            if ($line -match 'refs/tags/v(?<ver>\d+\.\d+\.\d+)(\^\{\})?$') {
+                $parsed = ConvertTo-VersionOrNull $Matches['ver']
+                if ($parsed) { $found[$parsed.ToString()] = $parsed }
+            }
+        }
+        return @($found.Values | Sort-Object)
+    }
+    finally { Pop-Location }
+}
+
+function Get-HighestReleaseTag {
+    # Highest `vX.Y.Z` tag on origin. The second source of truth for "what is
+    # published": a tag is pushed only after PyPI shows the version (Finalize),
+    # so it is never ahead of PyPI, and it closes the window where the index
+    # lags a just-finished publish. Under -SkipPypiCheck it is the ONLY source.
+    param([string]$RepoPath)
+    $tags = Get-ReleaseTags $RepoPath
+    if ($tags.Count -eq 0) { return $null }
+    return $tags[-1].ToString()
 }
 
 function Wait-PypiHasVersion {
@@ -416,277 +534,219 @@ function Wait-PypiHasVersion {
     return $false
 }
 
-function Bump-LocalVersion {
-    param(
-        [string]$PackagePath
-    )
-    $initFile = Join-Path (Join-Path $PackagePath "src") "__init__.py"
-    # Try src/pkg/__init__.py first, then pkg/__init__.py
-    if (-not (Test-Path $initFile)) {
-        $name = Split-Path $PackagePath -Leaf
-        $initFile = Join-Path (Join-Path $PackagePath $name) "__init__.py"
-    }
+# ------------------------------------------------------------------------------------------------
+# Versioning — one release = one version = one commit.
+#
+# The release version is decided ONCE, up front, from what is PUBLISHED — never from the
+# file. Three independent bumpers used to act on each release (the post-publish bump-dev
+# bot, an "auto-bump" that incremented whatever the file said, and a second bump inside
+# the pin sync), so every release burned 2-3 version numbers: PyPI showed pythontk
+# 0.9.26 -> 0.9.28 -> 0.9.30 and uitk 1.3.87 -> 1.3.90 -> 1.3.93 with total regularity,
+# and `pythontk>=0.9.29` was a legal floor that resolved to nothing.
+# ------------------------------------------------------------------------------------------------
 
-    if (-not (Test-Path $initFile)) { 
-        return $null 
+function Get-PublishedVersion {
+    # "What is installable" for one package: the max of the simple index and the
+    # highest v* tag on origin. $null only when BOTH are unavailable.
+    param([string]$PackageName, [string]$RepoPath)
+    $candidates = @()
+    if (-not $SkipPypiCheck) {
+        $fromIndex = Get-PypiMaxVersion (Get-PypiProjectName $PackageName)
+        if ($fromIndex) { $candidates += $fromIndex }
     }
-
-    $content = Get-Content $initFile -Raw
-    # (?m)^ anchors detection to the real assignment line, matching the
-    # replacement below — a docstring that merely mentions __version__ = "…"
-    # earlier in the file must not seed $oldVer.
-    if ($content -match '(?m)^__version__\s*=\s*["''](?<ver>\d+\.\d+\.\d+)["'']') {
-        $oldVer = $Matches['ver']
-        $parts = $oldVer -split "\."
-        $parts[2] = [int]$parts[2] + 1
-        $newVer = "$($parts[0]).$($parts[1]).$($parts[2])"
-        
-        # (?m)^ anchors to the assignment line so a docstring/comment that
-        # happens to mention __version__ is never clobbered.
-        $newContent = $content -replace '(?m)^__version__\s*=\s*.*', "__version__ = `"$newVer`""
-        Set-Content -Path $initFile -Value $newContent -NoNewline
-        Write-Host "    Bumped version: $oldVer -> $newVer" -ForegroundColor Cyan
-        return $newVer
+    $fromTag = Get-HighestReleaseTag $RepoPath
+    if ($fromTag) { $candidates += $fromTag }
+    $max = $null
+    foreach ($c in $candidates) {
+        $parsed = ConvertTo-VersionOrNull $c
+        if ($parsed -and (-not $max -or $parsed -gt $max)) { $max = $parsed }
     }
+    if ($max) { return $max.ToString() }
     return $null
 }
 
-function Get-LocalStrictVersions {
-    # Read each strict package's local __init__.py version, then clamp against
-    # PyPI: if the local version isn't actually published (e.g. bump-dev left a
-    # next-version placeholder), use PyPI's latest instead. This way every
-    # consumer of the version map (cascade pins, PyPI check, etc.) sees the
-    # version that's actually installable.
+function Get-PublishedVersions {
+    # Version map for the strict set: what each package's consumers can install
+    # RIGHT NOW. A package's own entry is refreshed to its released version as
+    # it finalizes in this run, so a downstream pin targets the version that was
+    # actually just published.
     $versions = @{}
     foreach ($pkg in $STRICT_PACKAGES) {
-        $pkgPath = Join-Path (Join-Path $ROOT $pkg) $pkg
-        $ver = Get-PackageVersion $pkgPath
-        if (-not $ver -or $ver -eq "unknown") { continue }
-
-        # -SkipPypiCheck (offline runs): trust local versions as-is — every
-        # other PyPI probe honors the flag, and firing network calls here
-        # contradicted the parameter's documented offline purpose.
-        if (-not $SkipPypiCheck) {
-            $pypiName = Get-PypiProjectName $pkg
-            if (-not (Test-PypiHasVersion $pypiName $ver)) {
-                $latest = Get-PypiLatestVersion $pypiName
-                if ($latest) {
-                    Write-Host "  > $pkg local $ver is unpublished; using PyPI latest $latest" -ForegroundColor DarkGray
-                    $ver = $latest
-                }
-            }
-        }
-        $versions[$pkg] = $ver
+        $repoPath = Join-Path $ROOT $pkg
+        if (-not (Test-Path (Join-Path $repoPath ".git"))) { continue }
+        $published = Get-PublishedVersion $pkg $repoPath
+        if ($published) { $versions[$pkg] = $published }
     }
     return $versions
 }
 
-function Sync-PyProjectDepsToLocalVersions {
-    param(
-        [string]$PackageName,
-        [string]$RepoPath,
-        [hashtable]$LocalVersions
-    )
-
-    $tomlFile = Join-Path $RepoPath "pyproject.toml"
-    if (-not (Test-Path $tomlFile)) {
-        return $true
-    }
-
-    # Only these packages have internal pins today (see $REQUIRED_PINS, top of file).
-    if (-not $REQUIRED_PINS.ContainsKey($PackageName)) {
-        return $true
-    }
-
-    $requiredPins = $REQUIRED_PINS[$PackageName]
-    # Ensure edits land on dev. A DryRun makes no edits, so it must not
-    # switch branches either.
-    if (-not $DryRun) {
-        Push-Location $RepoPath
-        try {
-            git checkout dev --quiet 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Err "Checkout dev failed (toml sync)"
-                return $false
-            }
-        }
-        finally {
-            Pop-Location
-        }
-    }
-
-    $content = Get-Content $tomlFile -Raw
-    $newContent = $content
-    $changed = $false
-
-    foreach ($dep in $requiredPins) {
-        if (-not $LocalVersions.ContainsKey($dep)) {
-            Write-Err "Cannot sync toml: missing local version for '$dep'"
-            return $false
-        }
-        # $LocalVersions is pre-clamped against PyPI in Get-LocalStrictVersions,
-        # so this is the actually-published version to pin against.
-        $ver = $LocalVersions[$dep]
-
-        $pattern = '"' + $dep + '>=([0-9.]+)"'
-        $replacement = '"' + $dep + '>=' + $ver + '"'
-        
-        if ($newContent -match $pattern) {
-             # Check if it's already correct to avoid unnecessary writes
-             $currentMatch = $matches[0]
-             $currentFloor = $matches[1]
-             if ($currentMatch -ne $replacement) {
-                 # NEVER lower a declared floor. $LocalVersions is clamped to
-                 # what is PUBLISHED, so on a run that does not include the
-                 # upstream this would rewrite a deliberately-raised floor back
-                 # down to the old release and silently reintroduce the break
-                 # the raise existed to prevent (measured 2026-08-19:
-                 # `-Packages mayatk` alone walked `pythontk>=0.9.25` back to
-                 # `>=0.9.24`, and mayatk reads a 0.9.25 attribute in a CLASS
-                 # BODY, i.e. AttributeError at import). A floor states what the
-                 # CODE needs; the sync may only ratchet it UP to what it is
-                 # publishing. An unparseable version keeps the historical
-                 # behaviour -- every real version here is 3-part semver, which
-                 # Bump-LocalVersion's own regex enforces.
-                 $isLower = $false
-                 try {
-                     $isLower = ([version]$ver -lt [version]$currentFloor)
-                 } catch {
-                     $isLower = $false
-                 }
-                 if ($isLower) {
-                     Write-Host "    Keeping $dep>=$currentFloor (declared floor is above the $ver being pinned)" -ForegroundColor DarkGray
-                 } else {
-                     $newContent = $newContent -replace $pattern, $replacement
-                     $changed = $true
-                 }
-             }
-        }
-    }
-
-    if ($DryRun) {
-        if ($changed) {
-            Write-Step "[DryRun] Would bump local version of $PackageName (dependency sync)"
-            Write-Step "[DryRun] Would sync pyproject.toml dependencies"
-            # Mirror the auto-bump DryRun mock so downstream pin simulations see the
-            # cascaded version, not the pre-cascade one.
-            if ($LocalVersions.ContainsKey($PackageName)) {
-                $curr = $LocalVersions[$PackageName]
-                try {
-                    $parts = $curr -split "\."
-                    $nextPatch = [int]$parts[-1] + 1
-                    $LocalVersions[$PackageName] = "$($parts[0]).$($parts[1]).$nextPatch"
-                } catch {}
-            }
-        } else {
-            Write-Step "[DryRun] Dependencies already in sync"
-        }
-        return $true
-    }
-
-    if (-not $changed) {
-        return $true
-    }
-
-    # CRITICAL: If dependencies change, the package artifact has changed.
-    # We MUST bump the package version, otherwise PyPI will reject the re-upload 
-    # of the existing version with new metadata.
-    $newVer = Bump-LocalVersion $RepoPath
-    if ($newVer) {
-        Write-Host "    [Dependency Cascading] Bumped $PackageName to $newVer" -ForegroundColor Cyan
-        # Write back so downstream packages pin the cascaded version, not the pre-cascade one.
-        $LocalVersions[$PackageName] = $newVer
-    } else {
-        Write-Err "    Failed to bump version for $PackageName after dependency update"
-        # Abort: writing the new toml + committing without a version bump produces
-        # a "version to  [skip ci]" commit that PyPI will reject (changed metadata,
-        # unchanged version). Let the caller mark this package failed.
-        return $false
-    }
-
-    Set-Content -Path $tomlFile -Value $newContent -NoNewline
-
-    Push-Location $RepoPath
-    try {
-        git add .
-        # Deliberately NOT tagged [skip ci]. For a package whose deps cascaded,
-        # THIS commit is the version bump, so it heads the release PR - and
-        # GitHub skips every workflow for a [skip ci] head, which strips the
-        # required check ("test" / "static-analysis") off the very PR the gate
-        # exists to hold. With required status checks live (2026-08-17) that is
-        # not merely ungated, it is a PR that can never merge. Nothing on dev
-        # triggers on push anyway - every push-triggered workflow in all five
-        # repos is branches:[main] - so the tag suppressed nothing here; its
-        # only other effect was on the MERGED head, where publish.yml now
-        # auto-queues instead of needing Wait-ForWorkflow's manual dispatch.
-        git commit -m "Update dependencies & bump version to $newVer" | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "Failed to commit pyproject.toml updates"
-            return $false
-        }
-        Write-Success "Synced dependencies & bumped version"
-        return $true
-    }
-    finally {
-        Pop-Location
-    }
+function Step-PatchVersion {
+    param([string]$Version)
+    $parts = $Version -split '\.'
+    $parts[2] = [int]$parts[2] + 1
+    return "$($parts[0]).$($parts[1]).$($parts[2])"
 }
 
-function Test-OnlyDevBumpChanges {
-    param(
-        [string]$RepoPath,
-        [string]$PackageName
-    )
+function Resolve-ReleaseVersion {
+    # The version this release will carry.
+    #   published = the run's version map entry (Get-PublishedVersions at start,
+    #               refreshed by Finalize as packages release in this run), or
+    #               max(simple index incl. yanked, highest v* tag) when absent
+    #   local     = __version__ on dev
+    #   release   = (local > published AND local not on the index) ? local
+    #             : Step(published)
+    # A hand-edited __version__ ABOVE the published one is a deliberate minor or
+    # major bump and is honored as-is; anything else steps the patch from what is
+    # published. `local > published` alone is not enough: a stale index can make
+    # a just-published version look unpublished, and re-releasing it would merge
+    # code to main that PyPI's copy does not have (publish.yml's exact-membership
+    # probe then silently skips the upload). Returns $null when nothing
+    # authoritative is reachable - the caller refuses rather than guesses.
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+    $published = $null
+    if ($Versions -and $Versions.ContainsKey($PackageName)) { $published = $Versions[$PackageName] }
+    if (-not $published) { $published = Get-PublishedVersion $PackageName $RepoPath }
+    if (-not $published) { return $null }
+    $localText = Get-PackageVersion (Join-Path $RepoPath $PackageName)
+    $local = ConvertTo-VersionOrNull $localText
+    $pub = [version]$published
+    if ($local -and $local -gt $pub) {
+        $onIndex = $false
+        if (-not $SkipPypiCheck) {
+            $onIndex = Test-PypiHasVersion (Get-PypiProjectName $PackageName) $localText
+        }
+        if (-not $onIndex) { return $localText }
+    }
+    return (Step-PatchVersion $published)
+}
 
-    # ONLY deltas that cannot change the shipped artifact count as "nothing to
-    # release":
-    #   - <pkg>/__init__.py — the version-string bump itself. The strict
-    #     packages all declare `version = {attr = "<pkg>.__version__"}`
-    #     (dynamic), so a pure bump touches exactly this file.
-    #   - API_INDEX/API_REGISTRY/API_CHANGES — repo-root artifacts the
-    #     refresh-api-registry bot commits to dev after every publish. They
-    #     never ship in the wheel; without this, the bot's post-release commit
-    #     defeated the guard and every cascade re-run phantom-published.
-    #   - CHANGELOG.md — repo-root release-notes source, not wheel content; a
-    #     notes-only delta rides along with the next real release
-    #     (Get-ChangelogDelta diffs origin/main..dev, so nothing is lost).
-    # Deliberately NOT allowed: pyproject.toml (a dependency-cascade release
-    # changes only the pin + version and MUST still merge/publish so downstream
-    # pins propagate) and docs/README.md (dynamic readme -> wheel metadata).
-    $allowed = @(
-        "$PackageName/__init__.py",
-        "API_INDEX.md",
-        "API_REGISTRY.md",
-        "API_REGISTRY.json",
-        "API_CHANGES.md",
-        "CHANGELOG.md"
-    )
+function Set-PackageVersion {
+    # Write __version__ in <pkg>/<pkg>/__init__.py (or src/__init__.py). Returns
+    # $true when the file changed. Detection and replacement are both anchored
+    # to the real assignment line ($VERSION_LINE, common.ps1).
+    param([string]$PackagePath, [string]$Version)
+    $initFile = Join-Path (Join-Path $PackagePath "src") "__init__.py"
+    if (-not (Test-Path $initFile)) {
+        $name = Split-Path $PackagePath -Leaf
+        $initFile = Join-Path (Join-Path $PackagePath $name) "__init__.py"
+    }
+    if (-not (Test-Path $initFile)) { return $false }
+    $content = Get-Content $initFile -Raw
+    if ($content -notmatch $VERSION_LINE) { return $false }
+    if ($Matches['ver'] -eq $Version) { return $false }
+    $newContent = $content -replace '(?m)^__version__\s*=\s*.*', "__version__ = `"$Version`""
+    Set-Content -Path $initFile -Value $newContent -NoNewline
+    return $true
+}
 
+function Get-InternalPinUpdates {
+    # The floor edits Update-InternalPins would make: @{ dep = @{ From; To } }.
+    # Pure computation — used both to classify the delta (a floor that must
+    # ratchet is an artifact change even when no code moved) and to apply it.
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+    $updates = @{}
+    if (-not $REQUIRED_PINS.ContainsKey($PackageName)) { return $updates }
+    $tomlFile = Join-Path $RepoPath "pyproject.toml"
+    if (-not (Test-Path $tomlFile)) { return $updates }
+    $content = Get-Content $tomlFile -Raw
+    foreach ($dep in $REQUIRED_PINS[$PackageName]) {
+        if (-not $Versions.ContainsKey($dep)) { continue }
+        $ver = $Versions[$dep]
+        $pattern = '"' + $dep + '>=([0-9.]+)"'
+        if ($content -notmatch $pattern) { continue }
+        $currentFloor = $Matches[1]
+        if ($currentFloor -eq $ver) { continue }
+        # NEVER lower a declared floor. The map is what is PUBLISHED, so on a run
+        # that does not include the upstream this would rewrite a deliberately-
+        # raised floor back down to the old release and silently reintroduce the
+        # break the raise existed to prevent (measured 2026-08-19: `-Packages
+        # mayatk` alone walked `pythontk>=0.9.25` back to `>=0.9.24`, and mayatk
+        # reads a 0.9.25 attribute in a CLASS BODY, i.e. AttributeError at
+        # import). A floor states what the CODE needs; the sync may only ratchet
+        # it UP to what it is publishing.
+        $isLower = $false
+        try { $isLower = ([version]$ver -lt [version]$currentFloor) } catch { $isLower = $false }
+        if ($isLower) {
+            Write-Host "    Keeping $dep>=$currentFloor (declared floor is above the $ver being pinned)" -ForegroundColor DarkGray
+            continue
+        }
+        $updates[$dep] = @{ From = $currentFloor; To = $ver }
+    }
+    return $updates
+}
+
+function Update-InternalPins {
+    # Apply Get-InternalPinUpdates to pyproject.toml. Pure edit: no version
+    # bump, no commit — Prepare folds it into the single Release commit.
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+    $updates = Get-InternalPinUpdates $PackageName $RepoPath $Versions
+    if ($updates.Count -eq 0) { return $false }
+    $tomlFile = Join-Path $RepoPath "pyproject.toml"
+    $content = Get-Content $tomlFile -Raw
+    foreach ($dep in $updates.Keys) {
+        $pattern = '"' + $dep + '>=([0-9.]+)"'
+        $replacement = '"' + $dep + '>=' + $updates[$dep].To + '"'
+        $content = $content -replace $pattern, $replacement
+        Write-Host "    Pinned $dep>=$($updates[$dep].To) (was >=$($updates[$dep].From))" -ForegroundColor Cyan
+    }
+    Set-Content -Path $tomlFile -Value $content -NoNewline
+    return $true
+}
+
+# ------------------------------------------------------------------------------------------------
+# Delta classification — what does `origin/main..dev` (plus the working tree) contain?
+#   artifact        anything that ships, or an internal floor that must ratchet -> release
+#   must-reach-main CI/doc files that only take effect on main               -> merge, no version
+#   rides-along     generated sidecars + CHANGELOG                             -> skip; next release
+#   none            nothing                                                    -> skip
+# Paths that NEVER ship in the wheel. `<pkg>/__init__.py` is deliberately NOT here any more:
+# with the bump-dev bot retired, a version edit on dev is a deliberate artifact change.
+# pyproject.toml is an artifact (a pin change MUST publish so downstream floors propagate).
+# `docs/README.md` is an artifact even though it sits under docs/: every cascade pyproject
+# names it as the wheel's `readme`, so editing it changes the published metadata.
+# ------------------------------------------------------------------------------------------------
+$MUST_REACH_MAIN_PATHS = @('.github/', 'test/', 'docs/')
+$ARTIFACT_EXCEPTIONS = @('docs/README.md')
+$RIDES_ALONG_PATHS = $API_SIDECARS + @('CHANGELOG.md')
+
+function Get-DeltaClass {
+    # Classify one repo-relative path.
+    param([string]$Path)
+    if ($ARTIFACT_EXCEPTIONS -contains $Path) { return 'artifact' }
+    foreach ($p in $MUST_REACH_MAIN_PATHS) {
+        if ($p.EndsWith('/')) { if ($Path.StartsWith($p)) { return 'must-reach-main' } }
+        elseif ($Path -eq $p) { return 'must-reach-main' }
+    }
+    if ($RIDES_ALONG_PATHS -contains $Path) { return 'rides-along' }
+    return 'artifact'
+}
+
+function Test-ReleaseDelta {
+    # The strongest class present in origin/main..dev + the working tree, plus a
+    # pending floor ratchet. Diffs ORIGIN/main: local `main` never advances under
+    # PR merges, so diffing it would re-merge an already-released dev forever.
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
     Push-Location $RepoPath
     try {
-        git fetch origin main dev --quiet 2>&1 | Out-Null
-        # Diff LOCAL dev (what Merge-ToMain will actually merge), not
-        # origin/dev: this run's absorbed local work and bump/pin-sync commits
-        # exist only locally at this point — the push happens later, in step 3.
-        # Diffing origin/dev made the guard skip the merge whenever real local
-        # changes rode on top of a bot-bumped origin/dev, silently dropping the
-        # release while reporting success. Local dev is rebased onto origin/dev
-        # by Sync-DevWithOrigin before this runs, so it is always a superset of
-        # origin/dev in Strict+Merge mode.
+        git fetch origin main --quiet 2>&1 | Out-Null
         $files = @(git diff --name-only origin/main..dev 2>$null)
-        if (-not $files -or $files.Count -eq 0) {
-            return $false
-        }
-        foreach ($f in $files) {
-            if ($allowed -notcontains $f) {
-                return $false
-            }
-        }
-        return $true
+        $files += @(git status --porcelain 2>$null | ForEach-Object {
+            $p = $_.Substring(3).Trim('"')
+            if ($p -match ' -> ') { $p = ($p -split ' -> ')[-1] }
+            $p
+        })
     }
-    finally {
-        Pop-Location
+    finally { Pop-Location }
+    $rank = @{ 'none' = 0; 'rides-along' = 1; 'must-reach-main' = 2; 'artifact' = 3 }
+    $best = 'none'
+    foreach ($f in ($files | Where-Object { $_ } | Select-Object -Unique)) {
+        $c = Get-DeltaClass $f
+        if ($rank[$c] -gt $rank[$best]) { $best = $c }
     }
+    if ($best -ne 'artifact' -and $Versions) {
+        if ((Get-InternalPinUpdates $PackageName $RepoPath $Versions).Count -gt 0) { $best = 'artifact' }
+    }
+    return $best
 }
 
 function Test-Build {
@@ -858,8 +918,11 @@ function Wait-ForWorkflow {
         $inProgress = @($matching | Where-Object { $_.status -ne "completed" })
         if ($inProgress.Count -gt 0) { return "pending" }
 
-        $failed = @($matching | Where-Object { $_.conclusion -and $_.conclusion -ne "success" })
-        if ($failed.Count -gt 0) { return $failed[0].conclusion }
+        # The NEWEST completed run for this sha is the verdict. A re-dispatch
+        # after a failed run leaves the failure in the list; judging "any run
+        # failed" would report the retry as red no matter how it went.
+        $newest = @($matching | Sort-Object { [DateTime]$_.createdAt } -Descending)[0]
+        if ($newest.conclusion -and $newest.conclusion -ne "success") { return $newest.conclusion }
 
         return "success"
     }
@@ -885,6 +948,7 @@ function Wait-ForWorkflow {
     $maxWait = $WorkflowTimeoutSeconds
     $elapsed = 0
     $dispatched = $false
+    $dispatchedAt = $null
     $dispatchAfter = 90
 
     while ($elapsed -lt $maxWait) {
@@ -916,6 +980,20 @@ function Wait-ForWorkflow {
             Write-Success "Workflow completed (publish.yml)"
             return $true
         }
+        # A failed run gets ONE re-dispatch. A flaky test job or an index-lag
+        # Verify-Install timeout is the common cause, and the publish job is
+        # idempotent (exact-membership PyPI probe + `--skip-existing`), so a
+        # retry can at worst fail the same way. A second failure stands.
+        if (-not $dispatched) {
+            Write-Host "    Workflow concluded with '$verdict'; re-dispatching publish.yml once..." -ForegroundColor Yellow
+            gh workflow run $WorkflowFile --repo $repoSlug --ref main 2>&1 | Out-Null
+            $dispatched = $true
+            $dispatchedAt = $elapsed
+            continue
+        }
+        # Until the re-dispatched run is queued, the old failure is still the
+        # newest completed run; give GitHub a grace window before believing it.
+        if ($null -ne $dispatchedAt -and ($elapsed - $dispatchedAt) -lt 90) { continue }
         Write-Err "Workflow concluded with '$verdict'"
         return $false
     }
@@ -1093,8 +1171,8 @@ function Test-PRReleaseGate {
     * The PR head commit is tagged "[skip ci]" - GitHub skips every workflow,
       tests.yml included, for such a head.
     * The repo's required check was renamed, or its workflow no longer triggers on
-      pull_request (expected: "test" on pythontk/uitk/tentacle, "static-analysis"
-      on mayatk/blendertk).
+      pull_request. Compare branch protection's required contexts against the job
+      names in the repo's tests.yml / static-analysis.yml.
   Give the repo a real gate, or re-run WITHOUT -UsePR to merge deliberately ungated.
 "@ -ForegroundColor Yellow
         return $false
@@ -1154,6 +1232,20 @@ function Enable-AutoMergePR {
     # that had already happened.
     if (-not (Test-PRReleaseGate $RepoSlug $PrNumber)) { return $false }
 
+    # A re-run after an abort finds the PR already armed (Ensure-ReleasePR reuses
+    # the open PR). Re-issuing `--auto` on an armed PR is not documented to be
+    # idempotent, so probe and skip rather than find out.
+    $armedJson = gh pr view $PrNumber --repo $RepoSlug --json autoMergeRequest 2>$null
+    if ($LASTEXITCODE -eq 0 -and $armedJson) {
+        try {
+            $armed = ($armedJson | ConvertFrom-Json).autoMergeRequest
+            if ($armed) {
+                Write-Skip "Auto-merge already armed on PR #$PrNumber"
+                return $true
+            }
+        } catch {}
+    }
+
     $out = gh pr merge $PrNumber --repo $RepoSlug --merge --auto 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Err "Failed to enable auto-merge for PR #$PrNumber"
@@ -1165,6 +1257,31 @@ function Enable-AutoMergePR {
 }
 
 function Wait-ForPRMerged {
+    # Poll until the PR merges - or until branch protection is provably holding
+    # it, which is reported in one poll instead of waited out. The old loop read
+    # only `state,mergedAt` and sat on a permanently-blocked PR for the full
+    # 1800 s on 2026-08-23 after uitk's required `test` failed at minute 17,
+    # then aborted three unprocessed packages.
+    #
+    # DEAD requires mergeStateStatus BLOCKED. A red check alone is NOT death: a
+    # check that is not REQUIRED leaves the PR mergeable and auto-merge lands it
+    # anyway (measured - pythontk #48 and #49 both merged carrying settled
+    # FAILUREs on `summary` and `validate-tentacle`). Blocking on those would
+    # abort releases GitHub was about to complete, and it would contradict the
+    # arm-time gate, which reports red non-required checks without blocking
+    # because whether a check may hold a merge is branch protection's call.
+    # mayatk/blendertk make this concrete: their required check is
+    # `static-analysis`, and both now carry additional non-required Qt/mock
+    # suites on every PR.
+    #
+    # Two states LOOK dead and are not, so they keep polling:
+    #   * BLOCKED with 0 pending and 0 failed — the window between the last
+    #     check going green and GitHub recomputing mergeStateStatus. Crossed on
+    #     every successful release; only after 6 consecutive polls (60 s) is it
+    #     called (a required check that is not attached, or a missing review).
+    #   * ZERO check runs — a fresh head (the operator pushed a fix mid-wait)
+    #     whose checks GitHub has not attached yet.
+    # Returns "merged", "dead", "closed", or "timeout".
     param(
         [string]$RepoSlug,
         [int]$PrNumber,
@@ -1172,6 +1289,8 @@ function Wait-ForPRMerged {
     )
 
     $elapsed = 0
+    $quietBlocked = 0
+    $reportedFailures = $false
     while ($elapsed -lt $TimeoutSeconds) {
         Start-Sleep -Seconds 10
         $elapsed += 10
@@ -1184,14 +1303,55 @@ function Wait-ForPRMerged {
             $v = $viewJson | ConvertFrom-Json
             if ($v.mergedAt) {
                 Write-Success "PR #$PrNumber merged"
-                return $true
+                return "merged"
             }
             if ($v.state -eq "CLOSED") {
                 Write-Err "PR #$PrNumber closed without merge"
-                return $false
+                return "closed"
             }
         }
         catch {
+            continue
+        }
+
+        $state = Get-PRGateState $RepoSlug $PrNumber
+        if ($state) {
+            if ($state.MergeStateStatus -eq "DIRTY") {
+                Write-Err "PR #$PrNumber has merge conflicts (mergeStateStatus=DIRTY)"
+                return "dead"
+            }
+            # Red checks are REPORTED once, whether or not they block: on a
+            # non-required check this is the only mention the operator gets
+            # before the PR merges over it.
+            if ($state.FailedChecks.Count -gt 0 -and -not $reportedFailures) {
+                $reportedFailures = $true
+                Write-Host "  !! PR #$PrNumber has $($state.FailedChecks.Count) check(s) reporting FAILURE:" -ForegroundColor Yellow
+                foreach ($checkName in $state.FailedChecks) {
+                    Write-Host "       x $checkName" -ForegroundColor Red
+                }
+            }
+            if ($state.MergeStateStatus -eq "BLOCKED" -and $state.CheckCount -gt 0 -and $state.PendingCount -eq 0) {
+                if ($state.FailedChecks.Count -gt 0) {
+                    # BLOCKED with everything settled and something red: branch
+                    # protection is holding this PR on a REQUIRED check, and
+                    # nothing left to run can clear it.
+                    Write-Err "PR #$PrNumber cannot merge: branch protection is holding it and every check has settled."
+                    Write-Host "     Red: $($state.FailedChecks -join ', ')" -ForegroundColor Red
+                    Write-Host "     Fix on dev and push; auto-merge stays armed and a green re-run lands the PR." -ForegroundColor Yellow
+                    Write-Host "     Then re-run push.ps1 - Finalize picks the merged release up from origin/main." -ForegroundColor Yellow
+                    Write-Host "     Inspect: gh pr view $PrNumber --repo $RepoSlug --json statusCheckRollup" -ForegroundColor Yellow
+                    return "dead"
+                }
+                $quietBlocked++
+                if ($quietBlocked -ge 6) {
+                    Write-Err "PR #$PrNumber has been BLOCKED with every check green for $($quietBlocked * 10)s."
+                    Write-Host "     No failing check - a REQUIRED check is not attached to this PR, or a review is required." -ForegroundColor Yellow
+                    Write-Host "     Inspect: gh pr view $PrNumber --repo $RepoSlug --json mergeStateStatus,statusCheckRollup" -ForegroundColor Yellow
+                    return "dead"
+                }
+            } else {
+                $quietBlocked = 0
+            }
         }
 
         if ($elapsed % 60 -eq 0) {
@@ -1201,10 +1361,11 @@ function Wait-ForPRMerged {
 
     Write-Host "    Warning: Timeout waiting for PR merge (${TimeoutSeconds}s)" -ForegroundColor Yellow
     Write-Host "    Stopping process - check PR status manually" -ForegroundColor Red
-    return $false
+    return "timeout"
 }
 
 function Merge-ToMainViaPR {
+    # Returns "merged", "dead", "closed", "timeout", or $false (setup failure).
     param(
         [string]$RepoPath,
         [string]$PackageName
@@ -1217,7 +1378,6 @@ function Merge-ToMainViaPR {
     if (-not (Ensure-GhAuth)) {
         return $false
     }
-
     $repoSlug = Get-GitHubRepoSlug $RepoPath
     if (-not $repoSlug) {
         Write-Err "Origin remote is not a GitHub URL; cannot use PR mode"
@@ -1241,98 +1401,294 @@ function Merge-ToMainViaPR {
     return (Wait-ForPRMerged $repoSlug $pr $PRMergeTimeoutSeconds)
 }
 
-function Get-ChangelogDelta {
-    # This release's CHANGELOG additions = lines added to CHANGELOG.md on dev
-    # relative to the last-released state (origin/main). A deterministic boundary
-    # (no date heuristics) that fits the existing dated-prose CHANGELOG as-is —
-    # nothing about how the changelog is written changes. Returns the added text
-    # (for the git tag / GitHub Release), or "" when this release added no
-    # CHANGELOG entries (e.g. a docstring-only or dependency-bump release → the
-    # version is still tagged, just without a Release body).
-    param([string]$RepoPath)
+function Get-ReleaseNotes {
+    # CHANGELOG.md lines added between the previous release tag and origin/main:
+    # the curated notes for the tag + GitHub Release. Keyed on TAGS, not on
+    # `origin/main..dev` - the old delta was empty the moment the PR merged, so a
+    # run that aborted after the merge could never reconstruct the notes and
+    # the Release body had to be rebuilt by hand (26 KB of it, 2026-08-23).
+    # With no previous tag there is no boundary; the Release is tag-only.
+    # Caller has fetched origin/main and the tags (Invoke-FinalizePhase does).
+    param([string]$RepoPath, [string]$Version)
+    $target = [version]$Version
+    $prev = $null
+    foreach ($t in (Get-ReleaseTags $RepoPath)) {
+        if ($t -lt $target) { $prev = $t }
+    }
+    if (-not $prev) { return "" }
     Push-Location $RepoPath
     try {
         if (-not (Test-Path "CHANGELOG.md")) { return "" }
-        git fetch origin main --quiet 2>&1 | Out-Null
-        # `dev` (local HEAD) vs origin/main; keep added lines, drop the '+++' header.
-        $diff = git diff origin/main..dev -- CHANGELOG.md 2>$null
+        $diff = git diff "v$prev..origin/main" -- CHANGELOG.md 2>$null
         if (-not $diff) { return "" }
         $added = $diff |
             Where-Object { $_ -match '^\+' -and $_ -notmatch '^\+\+\+' } |
             ForEach-Object { $_.Substring(1) }
         return (($added -join "`n").Trim())
     }
+    finally { Pop-Location }
+}
+
+function Test-GitHubReleaseExists {
+    param([string]$RepoSlug, [string]$Tag)
+    if (-not $RepoSlug -or -not (Get-Command gh -ErrorAction SilentlyContinue)) { return $false }
+    gh release view $Tag --repo $RepoSlug --json tagName 2>&1 | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Complete-Release {
+    # Tag v<Version> at origin/main and cut the GitHub Release, each only if
+    # absent. Both probes run every time: a previous run may have pushed the
+    # tag and then failed on the Release, and "tag exists" must not hide
+    # "Release missing". Non-fatal: the publish + merge already succeeded, so
+    # the worst case is a re-run. Returns $true when anything was done.
+    # Caller has fetched origin/main and the tags.
+    param(
+        [string]$RepoPath,
+        [string]$RepoSlug,
+        [string]$PackageName,
+        [string]$Version
+    )
+    if (-not $Version) { return $false }
+    $tag = "v$Version"
+    $did = $false
+    Push-Location $RepoPath
+    try {
+        $existing = git ls-remote --tags origin $tag 2>$null
+        if (-not $existing) {
+            $sha = (git rev-parse origin/main 2>$null)
+            if ($LASTEXITCODE -ne 0 -or -not $sha) {
+                Write-Err "Cannot resolve origin/main for tag $tag"
+                return $false
+            }
+            $sha = $sha.Trim()
+            # -f so a stale local tag from a prior failed run is re-pointed at the
+            # released SHA (the ls-remote guard above already prevents re-tagging an
+            # existing *remote* release, so this only ever fixes a local-only tag).
+            git tag -f -a $tag $sha -m "$PackageName $tag" 2>&1 | Out-Null
+            git push origin $tag 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "Failed to push tag $tag (create manually)"
+                return $false
+            }
+            Write-Success "Tagged $tag"
+            $did = $true
+        }
+
+        if (-not $RepoSlug -or -not (Get-Command gh -ErrorAction SilentlyContinue)) { return $did }
+        if (Test-GitHubReleaseExists $RepoSlug $tag) { return $did }
+
+        $notes = Get-ReleaseNotes $RepoPath $Version
+        if (-not $notes) {
+            Write-Skip "No CHANGELOG additions for $tag (tag-only, no Release)"
+            return $did
+        }
+        $tmp = [System.IO.Path]::GetTempFileName()
+        try {
+            [System.IO.File]::WriteAllText($tmp, $notes, (New-Object System.Text.UTF8Encoding $false))
+            $out = gh release create $tag --repo $RepoSlug --title "$PackageName $tag" --notes-file $tmp --target main 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "GitHub Release $tag created"
+                $did = $true
+            } else {
+                Write-Err "GitHub Release $tag failed (tag pushed; re-run to retry)"
+                if ($out) { Write-Host "    $out" -ForegroundColor DarkGray }
+            }
+        }
+        finally {
+            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        }
+        return $did
+    }
+    catch {
+        Write-Err "Tag/release step error for $tag : $_"
+        return $did
+    }
     finally {
         Pop-Location
     }
 }
 
-function New-GitReleaseTag {
-    # Annotated tag v<Version> on origin/main HEAD (idempotent) plus a GitHub
-    # Release when there are curated notes. Additive and NON-FATAL: a failure
-    # here never aborts the release — the PyPI publish + main merge already
-    # succeeded by the time this runs, so the worst case is a missing tag/release
-    # the operator can add manually.
-    param(
-        [string]$RepoPath,
-        [string]$RepoSlug,
-        [string]$PackageName,
-        [string]$Version,
-        [string]$Notes
-    )
-    if (-not $Version) { return }
-    $tag = "v$Version"
+function Get-MainVersion {
+    # __version__ as committed on origin/main - never the working tree, which
+    # may already hold the NEXT release's version. Caller has fetched origin/main.
+    param([string]$PackageName, [string]$RepoPath)
     Push-Location $RepoPath
     try {
-        git fetch origin main --quiet 2>&1 | Out-Null
-        $existing = git ls-remote --tags origin $tag 2>$null
-        if ($existing) {
-            Write-Skip "Tag $tag already exists (skipping)"
-            return
-        }
-        $sha = (git rev-parse origin/main 2>$null)
-        if ($LASTEXITCODE -ne 0 -or -not $sha) {
-            Write-Err "Cannot resolve origin/main for tag $tag"
-            return
-        }
-        $sha = $sha.Trim()
+        $content = git show "origin/main:$PackageName/__init__.py" 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $content) { return $null }
+        $joined = ($content -join "`n")
+        if ($joined -match $VERSION_LINE) { return $Matches['ver'] }
+        return $null
+    }
+    finally { Pop-Location }
+}
 
-        # -f so a stale local tag from a prior failed run is re-pointed at the
-        # released SHA (the ls-remote guard above already prevents re-tagging an
-        # existing *remote* release, so this only ever fixes a local-only tag).
-        git tag -f -a $tag $sha -m "$PackageName $tag" 2>&1 | Out-Null
-        git push origin $tag 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "Failed to push tag $tag (create manually)"
-            return
-        }
-        Write-Success "Tagged $tag"
+function Invoke-FinalizePhase {
+    # Reconcile origin/main with PyPI and the v* tags. Idempotent; runs at
+    # package ENTRY (so a previous aborted run is completed before anything new
+    # is prepared) and at EXIT (for this run's own release). Returns one of:
+    #   "noop"       main's version is tagged and released (or nothing to do)
+    #   "finalized"  tagged and/or released this call
+    #   "failed"     publish failed or PyPI never showed the version
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
 
-        if ($Notes -and $RepoSlug -and (Get-Command gh -ErrorAction SilentlyContinue)) {
-            $tmp = [System.IO.Path]::GetTempFileName()
-            try {
-                [System.IO.File]::WriteAllText($tmp, $Notes, (New-Object System.Text.UTF8Encoding $false))
-                $out = gh release create $tag --repo $RepoSlug --title "$PackageName $tag" --notes-file $tmp --target main 2>&1
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Success "GitHub Release $tag created"
-                } else {
-                    Write-Err "GitHub Release $tag failed (tag pushed; create manually)"
-                    if ($out) { Write-Host "    $out" -ForegroundColor DarkGray }
-                }
+    # The ONE fetch for this phase; every helper below reads origin/main and the
+    # tags as fetched here.
+    Push-Location $RepoPath
+    try { git fetch origin main --tags --quiet 2>&1 | Out-Null } finally { Pop-Location }
+
+    $mainVer = Get-MainVersion $PackageName $RepoPath
+    if (-not $mainVer) { return "noop" }
+    $tag = "v$mainVer"
+    $repoSlug = Get-GitHubRepoSlug $RepoPath
+    $pypiName = Get-PypiProjectName $PackageName
+    $tagged = @(Get-ReleaseTags $RepoPath | ForEach-Object { $_.ToString() }) -contains $mainVer
+
+    # Fast exit: tagged, and either the Release exists or there is no GitHub to
+    # hold one (local origin / no gh) - nothing this phase could add.
+    if ($tagged) {
+        $canRelease = $repoSlug -and (Get-Command gh -ErrorAction SilentlyContinue)
+        if (-not $canRelease -or (Test-GitHubReleaseExists $repoSlug $tag)) { return "noop" }
+    }
+
+    $onIndex = $SkipPypiCheck -or (Test-PypiHasVersion $pypiName $mainVer)
+    if (-not $onIndex) {
+        # main carries a version PyPI does not have. Either publish.yml is still
+        # running / failed, or this was a workflow-only merge whose version is the
+        # previous (already tagged) release and publish.yml was paths-filtered out.
+        if ($tagged) { return "noop" }
+        if ($SkipWorkflowWait) {
+            Write-Skip "Workflow wait skipped; $pypiName==$mainVer not yet on PyPI - finalize later"
+            return "noop"
+        }
+        Write-Step "origin/main carries $PackageName $mainVer, not yet on PyPI - waiting for publish.yml..."
+        if (-not (Wait-ForWorkflow $RepoPath $PackageName)) {
+            Write-Err "publish.yml did not succeed for $PackageName $mainVer"
+            return "failed"
+        }
+        if (-not (Wait-PypiHasVersion $pypiName $mainVer -TimeoutSeconds $PypiVisibilityTimeoutSeconds)) {
+            # BLOCKING, unlike the old tail: a tag is a promise that the version is
+            # installable, and downstream pins in this run target it.
+            Write-Err "$pypiName==$mainVer not visible on PyPI after ${PypiVisibilityTimeoutSeconds}s - not tagging"
+            return "failed"
+        }
+    }
+    if ($Versions) { $Versions[$PackageName] = $mainVer }
+
+    if (Complete-Release $RepoPath $repoSlug $PackageName $mainVer) { return "finalized" }
+    return "noop"
+}
+
+function Invoke-PreparePhase {
+    # Turn an ARTIFACT delta into exactly one `Release X.Y.Z` commit on dev.
+    # Returns a hashtable: @{ Class; Version; Committed } or $null on failure.
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+
+    if ($Merge -and -not $DryRun) {
+        # Sync local dev with origin BEFORE deciding anything. Absorbs uncommitted
+        # work as its own commit (same as before) and rebases onto origin/dev.
+        if (-not (Sync-DevWithOrigin $RepoPath -CommitMessage $CommitMessage)) {
+            Write-Err "Pre-release sync failed"
+            return $null
+        }
+    }
+
+    $class = Test-ReleaseDelta $PackageName $RepoPath $Versions
+    Write-Host "  Delta: $class" -ForegroundColor White
+    $result = @{ Class = $class; Version = $null; Committed = $false }
+    if ($class -ne 'artifact') { return $result }
+
+    $version = Resolve-ReleaseVersion $PackageName $RepoPath $Versions
+    if (-not $version) {
+        Write-Err "Cannot resolve a release version for $PackageName : neither PyPI nor a v* tag is reachable."
+        Write-Err "Come online, or push a tag for the last published version, or use -SkipPypiCheck with tags present."
+        return $null
+    }
+    $result.Version = $version
+    $pkgSource = Join-Path $RepoPath $PackageName
+    $currentVer = Get-PackageVersion $pkgSource
+
+    if ($DryRun) {
+        if ($currentVer -ne $version) { Write-Step "[DryRun] Would release $PackageName $version (from $currentVer)" }
+        else { Write-Step "[DryRun] Would release $PackageName $version (version already set on dev)" }
+        $pins = Get-InternalPinUpdates $PackageName $RepoPath $Versions
+        foreach ($dep in $pins.Keys) {
+            Write-Step "[DryRun] Would pin $dep>=$($pins[$dep].To) (was >=$($pins[$dep].From))"
+        }
+        Write-Step "[DryRun] Would regenerate the API registry and commit 'Release $version'"
+        # Downstream DryRun classification must see this package as published at
+        # its would-be version, exactly as a real run refreshes the map in Finalize.
+        if ($Versions) { $Versions[$PackageName] = $version }
+        return $result
+    }
+
+    $preHash = Get-TreeHash $RepoPath
+    Push-Location $RepoPath
+    try {
+        git checkout dev --quiet 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Err "Checkout dev failed (prepare)"; return $null }
+
+        $changed = $false
+        if (Set-PackageVersion $RepoPath $version) {
+            Write-Host "    Version: $currentVer -> $version" -ForegroundColor Cyan
+            $changed = $true
+        }
+        if (Update-InternalPins $PackageName $RepoPath $Versions) { $changed = $true }
+
+        # A current registry in the release commit, so main always carries one and
+        # the PR's `API registry up to date` check is green by construction. Runs
+        # under the venv python (AST-only; no DCC import). --no-shadows keeps the
+        # cross-package shadow report — which lives in m3trik's tree — untouched.
+        $gen = Join-Path (Join-Path $ROOT "m3trik") "scripts\generate_api_registry.py"
+        if (Test-Path $gen) {
+            $genOut = python $gen $PackageName --no-shadows 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "API registry regeneration failed for $PackageName"
+                if ($genOut) { Write-Host "    $genOut" -ForegroundColor DarkGray }
+                return $null
             }
-            finally {
-                Remove-Item $tmp -Force -ErrorAction SilentlyContinue
-            }
+        }
+        if (git status --porcelain) { $changed = $true }
+
+        if ($changed) {
+            git add -A
+            # Deliberately NOT tagged [skip ci]: this commit heads the dev branch the
+            # release PR is opened from, and GitHub skips every workflow (tests.yml
+            # included) for a [skip ci] head -- which is exactly how -UsePR once came
+            # to merge release PRs that had never run a single check.
+            git commit -m "Release $version" | Out-Null
+            if ($LASTEXITCODE -ne 0) { Write-Err "Release commit failed"; return $null }
+            Write-Success "Committed 'Release $version'"
+            $result.Committed = $true
         } else {
-            Write-Skip "No curated notes for $tag (tag-only, no Release)"
+            Write-Skip "dev already carries Release $version"
         }
     }
-    catch {
-        Write-Err "Tag/release step error for $tag : $_"
+    finally { Pop-Location }
+
+    # The version line and floors moved the source hash; the tree is push.ps1's
+    # own mechanical edit on a tree whose receipts were just verified (or which
+    # was exempt). Carry them across so a re-run after an abort passes its gate.
+    $postHash = Get-TreeHash $RepoPath
+    Copy-ReceiptsToTree $PackageName $preHash $postHash
+
+    # Upstream floors this release pins must already be installable.
+    if (-not $SkipPypiCheck -and $REQUIRED_PINS.ContainsKey($PackageName)) {
+        foreach ($dep in $REQUIRED_PINS[$PackageName]) {
+            if (-not $Versions.ContainsKey($dep)) { continue }
+            $depVer = $Versions[$dep]
+            $pypiName = Get-PypiProjectName $dep
+            # Retry window sized to simple-index propagation: the dep may have
+            # published minutes ago in this cascade (60s was measured too short 2026-08-13).
+            if (-not (Wait-PypiHasVersion $pypiName $depVer -TimeoutSeconds 180)) {
+                Write-Err "PyPI does not show $pypiName==$depVer yet (or cannot be reached)."
+                Write-Err "Use -SkipPypiCheck to override, but this can break installs."
+                return $null
+            }
+        }
     }
-    finally {
-        Pop-Location
-    }
+    return $result
 }
 
 Write-Header "Repository Manager"
@@ -1388,9 +1744,12 @@ if ($RecordReceipt -or $ShowReceipts) {
 }
 
 $stopOnFailure = ($Merge -and $Strict)
-$localStrictVersions = $null
+# "What is installable" per strict package (PyPI simple index ∪ v* tags). Each
+# package's entry is refreshed to its released version as it finalizes in this
+# run, so a downstream pin targets what was actually just published.
+$publishedVersions = $null
 if ($Strict) {
-    $localStrictVersions = Get-LocalStrictVersions
+    $publishedVersions = Get-PublishedVersions
 }
 
 # Determine which repos to process
@@ -1600,8 +1959,16 @@ if ($Merge -and $Strict -and -not $SkipReview) {
         finally { Pop-Location }
 
         if (-not ($gateDirty -or $gateAhead -gt 0 -or $gateMainDelta -gt 0)) { continue }
-        if (-not $gateDirty -and $gateAhead -eq 0 -and (Test-OnlyDevBumpChanges $gatePath $gateName)) {
-            Write-Skip "Review gate: $gateName delta is housekeeping only (exempt)"
+        # Only an ARTIFACT delta — something that ships, or a floor that must ratchet —
+        # needs review + tests. A CI-only or sidecar-only delta merges without a
+        # version (or not at all) and never reaches PyPI.
+        $gateClass = Test-ReleaseDelta $gateName $gatePath $publishedVersions
+        if ($gateClass -ne 'artifact') {
+            Write-Skip "Review gate: $gateName delta is $gateClass (exempt)"
+            continue
+        }
+        if (Test-MechanicalDelta $gatePath) {
+            Write-Skip "Review gate: $gateName is ahead only by push.ps1's own Release commit (exempt)"
             continue
         }
 
@@ -1704,10 +2071,9 @@ foreach ($repo in $reposToProcess) {
     $pkgName = $repo.Name
     Write-Host ""
     Write-Host "Processing $pkgName..." -ForegroundColor Cyan
-    
+
     $repoPath = $repo.FullName
     $isStrictPackage = $STRICT_PACKAGES -contains $pkgName
-    $capturedNotes = ""   # curated CHANGELOG notes for this release's tag/Release
 
     # 0. Repo Safety Preflight
     if (-not (Test-RepoOperationSafe $repoPath)) {
@@ -1717,8 +2083,6 @@ foreach ($repo in $reposToProcess) {
         if ($stopOnFailure) { break }
         continue
     }
-
-    # Additional safety: remote refs must not contain conflict markers in critical files.
     if ($Strict -and $isStrictPackage) {
         $remoteSafe = (Test-RemoteConflictMarkers -RepoPath $repoPath -Ref "origin/main") -and
                       (Test-RemoteConflictMarkers -RepoPath $repoPath -Ref "origin/dev")
@@ -1730,236 +2094,89 @@ foreach ($repo in $reposToProcess) {
             continue
         }
     }
-    
-    # 1. Strict Validation (Build & Test)
+
+    # 1. Finalize (entry): complete a previous run's merged-but-unfinished release
+    #    BEFORE preparing anything new, so the version map and tags are truthful.
+    $finalizedOnEntry = $false
+    if ($Strict -and $isStrictPackage -and $Merge -and -not $DryRun) {
+        $entry = Invoke-FinalizePhase $pkgName $repoPath $publishedVersions
+        if ($entry -eq "failed") {
+            $results[$pkgName] = "workflow-failed"
+            $anyErrors = $true
+            Write-Err "A previously merged release could not be finalized - aborting remaining packages"
+            break
+        }
+        if ($entry -eq "finalized") { $finalizedOnEntry = $true }
+    }
+
+    # 2. Prepare
+    $prepared = @{ Class = 'artifact'; Version = $null; Committed = $false }
     if ($Strict -and $isStrictPackage) {
-        # Sync local dev with origin BEFORE auto-bumping. Without this, a bump
-        # computed against a stale local __init__.py can land below origin's
-        # current version, producing an unrebasable conflict on push.
-        if ($Merge -and -not $DryRun) {
-            $syncOk = Sync-DevWithOrigin $repoPath -CommitMessage $CommitMessage
-            if (-not $syncOk) {
-                $results[$pkgName] = "sync-failed"
-                $anyErrors = $true
-                Write-Err "Pre-bump sync failed"
-                if ($stopOnFailure) { break }
-                continue
-            }
-        }
-
-        # Auto-Bump Logic: If code has changed, increment patch version to force downstream updates.
         if ($Merge) {
-            $shouldBump = $false
-            Push-Location $repoPath
-            try {
-                 $st = git status --porcelain
-                 if ($st) { $shouldBump = $true }
-                 else {
-                     # If we have commits ahead of origin/dev, we consider those "new features" requiring a bump.
-                     git fetch origin dev --quiet 2>&1 | Out-Null
-                     $ahead = git rev-list --count origin/dev..dev 2>$null
-                     if ($ahead -and [int]$ahead -gt 0) {
-                        # Check if the last commit was already a bump to avoid loops/double
-                        # bumps. Matches BOTH bump message shapes: the auto-bump/bot
-                        # "Bump version to X" AND the pin-sync "Update dependencies &
-                        # bump version to X" — a run that failed after the pin-sync
-                        # commit used to re-bump on every retry, burning a patch
-                        # version each time. Anchored to those exact shapes: an
-                        # ordinary commit that merely MENTIONS the phrase (e.g.
-                        # 'Revert "Bump version to X"') must still bump, or the
-                        # release ships an already-published version and the
-                        # publish gate silently skips it.
-                        $lastMsg = git log -1 --pretty=%s
-                        if ($lastMsg -notmatch '(?i)^(update dependencies & )?bump version to ') {
-                             $shouldBump = $true
-                        }
-                        # A delta that is only allow-listed housekeeping
-                        # (registry refresh, CHANGELOG curation) skips the
-                        # merge later — don't burn a patch version on dev for
-                        # a release that won't happen; the notes ride along
-                        # with the next real release.
-                        if ($shouldBump -and $Strict -and $isStrictPackage -and (Test-OnlyDevBumpChanges $repoPath $pkgName)) {
-                            Write-Skip "Dev delta is allow-listed housekeeping only (skipping version bump)"
-                            $shouldBump = $false
-                        }
-                     }
-                 }
-            } finally { Pop-Location }
-    
-            if ($shouldBump) {
-                 if ($DryRun) {
-                     Write-Step "[DryRun] Would bump patch version of $pkgName (code changes detected)"
-                     # Mock the new version so downstream sync checks pass
-                     if ($localStrictVersions.ContainsKey($pkgName)) {
-                        $curr = $localStrictVersions[$pkgName]
-                        try {
-                            $parts = $curr -split "\."
-                            $nextPatch = [int]$parts[-1] + 1
-                            $mockVer = "$($parts[0]).$($parts[1]).$nextPatch"
-                            $localStrictVersions[$pkgName] = $mockVer
-                        } catch {}
-                     }
-                 } else {
-                     $newVer = Bump-LocalVersion $repoPath
-                     if ($newVer) {
-                         Write-Host "    [Auto-Bump] Updated to $newVer" -ForegroundColor Cyan
-                         $localStrictVersions[$pkgName] = $newVer
-                         
-                         Push-Location $repoPath
-                         try {
-                            git add .
-                            # Deliberately NOT tagged [skip ci]: this commit heads the
-                            # dev branch the release PR is opened from, and GitHub skips
-                            # every workflow (tests.yml included) for a [skip ci] head --
-                            # which is exactly how -UsePR came to merge release PRs that
-                            # had never run a single check. Nothing auto-triggers on a
-                            # dev push anyway (publish.yml is branches:[main], bump-dev
-                            # is repository_dispatch only), so the tag bought nothing.
-                            git commit -m "Bump version to $newVer" | Out-Null
-                         }
-                         finally { Pop-Location }
-                     }
-                 }
-            }
-        
-            # Keep internal pins consistent with what we're releasing, so pip installs are reliable.
-            $syncOk = Sync-PyProjectDepsToLocalVersions $pkgName $repoPath $localStrictVersions
-            if (-not $syncOk) {
-                $results[$pkgName] = "dep-sync-failed"
+            $prepared = Invoke-PreparePhase $pkgName $repoPath $publishedVersions
+            if (-not $prepared) {
+                $results[$pkgName] = "prepare-failed"
                 $anyErrors = $true
-                Write-Err "Dependency sync failed"
                 if ($stopOnFailure) { break }
                 continue
-            }
-
-            # Ensure pinned upstream versions are already available on PyPI.
-            # This prevents merging downstream pins that would temporarily be
-            # un-installable. Skipped in DryRun: the version map holds simulated
-            # (never-published) bumps there, so the check can only false-fail.
-            if (-not $SkipPypiCheck -and -not $DryRun) {
-                if ($REQUIRED_PINS.ContainsKey($pkgName)) {
-                    foreach ($dep in $REQUIRED_PINS[$pkgName]) {
-                        if ($localStrictVersions.ContainsKey($dep)) {
-                            $depVer = $localStrictVersions[$dep]
-                            $pypiName = Get-PypiProjectName $dep
-                            # Retry window sized to simple-index propagation:
-                            # the dep may have published minutes ago in this
-                            # cascade, and 60s was measured too short 2026-08-13.
-                            $ok = Wait-PypiHasVersion $pypiName $depVer -TimeoutSeconds 180
-                            if (-not $ok) {
-                                $results[$pkgName] = "pypi-missing"
-                                $anyErrors = $true
-                                Write-Err "PyPI does not show $pypiName==$depVer yet (or cannot be reached)."
-                                Write-Err "Use -SkipPypiCheck to override, but this can break installs."
-                                if ($stopOnFailure) { break }
-                            }
-                        }
-                    }
-                    if ($results[$pkgName] -eq "pypi-missing") {
-                        if ($stopOnFailure) { break }
-                        continue
-                    }
-                }
-            } elseif ($DryRun -and -not $SkipPypiCheck -and $REQUIRED_PINS.ContainsKey($pkgName)) {
-                Write-Step "[DryRun] Skipping PyPI pin check (versions are simulated)"
-            }
-
-            # Capture this release's CHANGELOG additions (lines new on dev vs the
-            # last-released main) for the git tag + GitHub Release. No file edit —
-            # the existing dated-prose CHANGELOG is the source as-is. An empty
-            # delta (docstring-only / dependency bump) -> tag-only release.
-            if ($isStrictPackage -and -not $DryRun) {
-                $capturedNotes = Get-ChangelogDelta $repoPath
-                if ($capturedNotes) {
-                    Write-Step "Captured CHANGELOG delta for release notes"
-                } else {
-                    Write-Skip "No CHANGELOG additions this release (tag-only)"
-                }
-            } elseif ($isStrictPackage -and $DryRun) {
-                Write-Step "[DryRun] Would capture CHANGELOG delta for release notes"
             }
         }
-        if (-not $DryRun -and -not $SkipBuild) {
-            # Known transient: `[Errno 13] Permission denied` with no path.
-            # Repo lives under o:\Cloud\... (sync-managed) — likely a sync
-            # agent or AV briefly holding a file in dist/ or build/ during
-            # cleanup. Re-running usually succeeds; -SkipBuild is the
-            # operator escape hatch. Before adding retry/temp-build logic,
-            # capture the FULL stderr on next occurrence (the path in the
-            # Permission denied message tells you whether it's dist/,
-            # build/, .egg-info, or something else) — until we have that,
-            # we don't know what to retry or where to relocate.
-            $buildOk = Test-Build $pkgName $repoPath
-            if (-not $buildOk) {
-                $results[$pkgName] = "build-failed"
-                $anyErrors = $true
-                Write-Err "Build failed - skipping push/merge"
-                if ($stopOnFailure) { break }
-                continue
+        if ($prepared.Class -eq 'artifact') {
+            if (-not $DryRun -and -not $SkipBuild) {
+                # Known transient: `[Errno 13] Permission denied` with no path
+                # (cloud-sync / AV briefly holding a file in dist/ or build/).
+                # Re-running usually succeeds; -SkipBuild is the escape hatch.
+                if (-not (Test-Build $pkgName $repoPath)) {
+                    $results[$pkgName] = "build-failed"
+                    $anyErrors = $true
+                    Write-Err "Build failed - skipping push/merge"
+                    if ($stopOnFailure) { break }
+                    continue
+                }
+            } elseif ($SkipBuild) {
+                Write-Skip "Build validation skipped"
+            } else {
+                Write-Step "[DryRun] Would validate build"
             }
-        } elseif ($SkipBuild) {
-            Write-Skip "Build validation skipped"
-        } else {
-            Write-Step "[DryRun] Would validate build"
         }
     } elseif ($Strict) {
         Write-Skip "Strict mode not supported for $pkgName (skipping build check)"
     }
 
-    # 2. Check for Changes
-    $hasChanges = Test-HasChanges $repoPath
-    
-    # Check if we need to merge (Dev ahead of Main)
-    $needsMerge = $false
-    if ($Merge) {
-        Push-Location $repoPath
-        try {
-            $devExists = git branch --list dev
-            $mainExists = git branch --list main
-            if ($devExists -and $mainExists) {
-                $aheadCount = (git rev-list --count "main..dev" 2>$null)
-                if ($aheadCount -gt 0) {
-                    if ($Strict -and $isStrictPackage -and (Test-OnlyDevBumpChanges $repoPath $pkgName)) {
-                        Write-Skip "Dev is ahead only due to dev bump (skipping merge)"
-                        if ($DryRun) {
-                            # Sync-DevWithOrigin is skipped in DryRun, so this
-                            # classification sees committed state only; a real
-                            # run absorbs uncommitted local work first, which
-                            # can flip this to a real merge.
-                            Write-Host "    Note: [DryRun] classification excludes uncommitted local work" -ForegroundColor DarkGray
-                        }
-                        $needsMerge = $false
-                    } else {
-                        $needsMerge = $true
-                    }
-                }
-            }
-        }
-        finally {
-            Pop-Location
-        }
+    # 3. Push dev when ahead of its upstream (or dirty, in non-merge mode).
+    Push-Location $repoPath
+    try {
+        $dirty = [bool](git status --porcelain 2>$null)
+        $aheadOfOrigin = 0
+        $upstream = (git rev-parse --abbrev-ref "@{u}" 2>$null)
+        if ($upstream) { $a = git rev-list --count "$upstream..HEAD" 2>$null; if ($a) { $aheadOfOrigin = [int]$a } }
+        git fetch origin main --quiet 2>&1 | Out-Null
+        $aheadOfMain = 0
+        $m = git rev-list --count "origin/main..dev" 2>$null
+        if ($m) { $aheadOfMain = [int]$m }
+    }
+    finally { Pop-Location }
+    $hasChanges = $dirty -or ($aheadOfOrigin -gt 0)
+
+    # Merge when dev is ahead of ORIGIN/main by anything that must reach main.
+    $needsMerge = $Merge -and ($aheadOfMain -gt 0) -and ($prepared.Class -in @('artifact', 'must-reach-main'))
+    if ($Merge -and $aheadOfMain -gt 0 -and $prepared.Class -eq 'rides-along') {
+        Write-Skip "Dev is ahead of main by sidecars/CHANGELOG only (rides along with the next release)"
     }
 
     if (-not $hasChanges -and -not $needsMerge) {
-        Write-Skip "No changes to push and fully merged"
-        $results[$pkgName] = "skipped"
+        if ($finalizedOnEntry) { $results[$pkgName] = "finalized" }
+        else { Write-Skip "No changes to push and fully merged"; $results[$pkgName] = "skipped" }
         continue
-    } else {
-        if ($hasChanges) {
-            Write-Host "  Has changes to push" -ForegroundColor White
-        }
-        if ($needsMerge) {
-            Write-Host "  Dev is ahead of Main (Needs Merge)" -ForegroundColor White
-        }
     }
+    if ($hasChanges) { Write-Host "  Has changes to push" -ForegroundColor White }
+    if ($needsMerge) { Write-Host "  Dev is ahead of main (needs merge)" -ForegroundColor White }
 
-    # 3. Push Dev
     if ($hasChanges) {
         if ($DryRun) {
             Write-Step "[DryRun] Would push dev branch"
         } else {
-            $pushOk = Push-DevBranch $repoPath
-            if (-not $pushOk) {
+            if (-not (Push-DevBranch $repoPath)) {
                 $results[$pkgName] = "push-failed"
                 $anyErrors = $true
                 Write-Err "Push failed - skipping merge"
@@ -1969,106 +2186,57 @@ foreach ($repo in $reposToProcess) {
         }
     }
 
-    # 4. Merge to Main
-    # Gate on $needsMerge (not just $Merge): step 2 sets it $false only when dev
-    # is ahead of main ONLY by non-artifact deltas (Test-OnlyDevBumpChanges:
-    # the version bump, bot registry churn, CHANGELOG) — there is nothing to
-    # release. Without this guard the "skipping merge" message was a no-op:
-    # step 4 merged that bump to main anyway, tripping publish.yml into a
-    # *phantom publish* (e.g. pythontk 0.8.77 shipped to PyPI on a re-run with
-    # no real changes, then mis-tagged because $localStrictVersions still held
-    # the old version). A dependency-cascade release changes pyproject.toml
-    # too, so it is NOT skippable -> $needsMerge stays $true -> it still
-    # merges and propagates.
-    if ($Merge -and $needsMerge) {
-        # Check for conflicts first
-        $conflictsOk = Test-MergeConflicts $repoPath
-        if (-not $conflictsOk) {
-             $results[$pkgName] = "merge-conflict"
-             $anyErrors = $true
-             Write-Err "Merge conflicts detected - skipping merge"
-               if ($stopOnFailure) { break }
-               continue
+    # 4. Merge to main
+    if ($needsMerge) {
+        if (-not (Test-MergeConflicts $repoPath)) {
+            $results[$pkgName] = "merge-conflict"
+            $anyErrors = $true
+            Write-Err "Merge conflicts detected - skipping merge"
+            if ($stopOnFailure) { break }
+            continue
         }
-
         if ($DryRun) {
-            Write-Step "[DryRun] Would merge to main and push"
+            if ($prepared.Class -eq 'must-reach-main') { Write-Step "[DryRun] Would merge to main WITHOUT a version (CI/docs-only delta)" }
+            else { Write-Step "[DryRun] Would merge to main and push" }
         } else {
-            $mergeOk = $null
+            $mergeOk = $false
             if ($UsePR) {
-                $mergeOk = Merge-ToMainViaPR $repoPath $pkgName
+                $verdict = Merge-ToMainViaPR $repoPath $pkgName
+                if ($verdict -eq "merged") { $mergeOk = $true }
+                elseif ($verdict -eq "dead") { $results[$pkgName] = "merge-dead" }
+                else { $results[$pkgName] = "merge-failed" }
             } else {
-                $mergeOk = Merge-ToMain $repoPath
+                $mergeOk = [bool](Merge-ToMain $repoPath)
+                if (-not $mergeOk) { $results[$pkgName] = "merge-failed" }
             }
             if (-not $mergeOk) {
-                $results[$pkgName] = "merge-failed"
                 $anyErrors = $true
-                Write-Err "Merge failed"
+                Write-Err "Merge did not complete"
                 if ($stopOnFailure) { break }
                 continue
             }
-            
-            # 5. Wait for Workflow (only if Strict/Core package)
-            if ($isStrictPackage) {
-                if (-not $SkipWorkflowWait) {
-                    $workflowOk = Wait-ForWorkflow $repoPath $pkgName
-                    if (-not $workflowOk) {
-                        $results[$pkgName] = "workflow-failed"
-                        $anyErrors = $true
-                        Write-Err "Workflow failed or timed out - aborting remaining packages"
-                        break
-                    }
-                } else {
-                    Write-Skip "Workflow wait skipped"
-                }
-
-                # Published OK (or wait skipped). Tag this version and cut a
-                # GitHub Release when there are curated notes. Non-fatal.
-                # Re-read the version fresh from disk rather than trusting
-                # $localStrictVersions[$pkgName]: Get-LocalStrictVersions clamps
-                # an unpublished local version down to PyPI's last-published one
-                # (so a phantom-publish re-run doesn't think it needs a fresh
-                # bump). That's correct for the bump-decision earlier, but on a
-                # run that PUBLISHES a version bumped in an earlier attempt (no
-                # re-bump this run -> dict entry never refreshed off the clamp),
-                # this dict still holds the stale pre-bump version at tag time,
-                # so the tag step tags/skips the wrong release entirely.
-                $pkgSourcePath = Join-Path (Join-Path $ROOT $pkgName) $pkgName
-                $releasedVersion = Get-PackageVersion $pkgSourcePath
-                if (-not $releasedVersion -or $releasedVersion -eq "unknown") {
-                    $releasedVersion = $localStrictVersions[$pkgName]
-                }
-
-                # Wheel-upload dependency ordering: downstream packages in this
-                # same run pin (and PyPI-check) this version, so block until it
-                # is actually visible on PyPI's API — the workflow's twine
-                # upload completing does not mean the API reflects it yet.
-                # Non-fatal on timeout: the publish itself succeeded, and the
-                # downstream pin check retries + fails loudly if the version
-                # still isn't visible.
-                if (-not $SkipWorkflowWait -and -not $SkipPypiCheck -and $releasedVersion) {
-                    $pypiName = Get-PypiProjectName $pkgName
-                    if (-not (Wait-PypiHasVersion $pypiName $releasedVersion -TimeoutSeconds $PypiVisibilityTimeoutSeconds)) {
-                        Write-Host "    Warning: $pypiName==$releasedVersion not visible on PyPI after ${PypiVisibilityTimeoutSeconds}s" -ForegroundColor Yellow
-                    }
-                    # Refresh the version map whether or not the wait confirmed:
-                    # the publish itself succeeded, so downstream pins must
-                    # target THIS version. Leaving the clamped pre-bump entry in
-                    # place on timeout let the downstream pin check "pass"
-                    # instantly against the stale published version and pin a
-                    # stale floor, instead of retrying (and failing loudly)
-                    # against the new one. (The map only exists in -Strict runs.)
-                    if ($localStrictVersions) {
-                        $localStrictVersions[$pkgName] = $releasedVersion
-                    }
-                }
-
-                New-GitReleaseTag $repoPath (Get-GitHubRepoSlug $repoPath) $pkgName $releasedVersion $capturedNotes
-            }
         }
     }
-    
-    $results[$pkgName] = "success"
+
+    # 5. Finalize (exit): this run's own release — wait for publish, PyPI, tag, Release.
+    if ($Strict -and $isStrictPackage -and $Merge -and -not $DryRun -and $prepared.Class -eq 'artifact' -and $needsMerge) {
+        $exit = Invoke-FinalizePhase $pkgName $repoPath $publishedVersions
+        if ($exit -eq "failed") {
+            $results[$pkgName] = "workflow-failed"
+            $anyErrors = $true
+            Write-Err "Workflow failed or timed out - aborting remaining packages"
+            break
+        }
+        $results[$pkgName] = "released"
+    } elseif ($needsMerge -and $prepared.Class -eq 'must-reach-main') {
+        $results[$pkgName] = "merged"
+    } elseif ($finalizedOnEntry) {
+        $results[$pkgName] = "finalized"
+    } elseif ($DryRun) {
+        $results[$pkgName] = "dry-run"
+    } else {
+        $results[$pkgName] = "success"
+    }
 }
 
 # Summary
@@ -2078,21 +2246,21 @@ foreach ($repo in $reposToProcess) {
     $pkg = $repo.Name
     $status = $results[$pkg]
     switch ($status) {
+        "released" { Write-Success "$pkg - Released" }
+        "merged" { Write-Success "$pkg - Merged to main (no version: CI/docs-only delta)" }
+        "finalized" { Write-Success "$pkg - Finalized a previously merged release" }
         "success" { Write-Success "$pkg - Completed" }
         "skipped" { Write-Skip "$pkg - No changes" }
-        "dep-sync-failed" { Write-Err "$pkg - pyproject.toml dependency sync failed" }
+        "prepare-failed" { Write-Err "$pkg - Release preparation failed" }
         "build-failed" { Write-Err "$pkg - Build failed" }
         "push-failed" { Write-Err "$pkg - Push failed" }
+        "merge-dead" { Write-Err "$pkg - PR cannot merge (red check or conflict; see above)" }
         "merge-failed" { Write-Err "$pkg - Merge failed" }
         "merge-conflict" { Write-Err "$pkg - Merge conflicts" }
         "workflow-failed" { Write-Err "$pkg - Workflow failed/timed out" }
         "unsafe-repo" { Write-Err "$pkg - Unsafe repo state" }
-        "pypi-missing" { Write-Err "$pkg - Upstream version not on PyPI" }
-        "sync-failed" { Write-Err "$pkg - Pre-bump sync with origin failed" }
-        default { 
-            if ($DryRun) { Write-Host "  o $pkg - Dry Run OK" -ForegroundColor Cyan }
-            else { Write-Host "  ? $pkg - Not processed" -ForegroundColor DarkGray }
-        }
+        "dry-run" { Write-Host "  o $pkg - Dry Run OK" -ForegroundColor Cyan }
+        default { Write-Host "  ? $pkg - Not processed" -ForegroundColor DarkGray }
     }
 }
 

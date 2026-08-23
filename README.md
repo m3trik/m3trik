@@ -17,7 +17,7 @@ Tech-art tooling for game-art and DCC pipelines — one ecosystem, built in laye
 
 PowerShell DevOps for the ecosystem — release automation, repo-maintenance scripts, and cross-package reference docs.
 
-- **[`push.ps1`](push.ps1)** — the release path for the ecosystem packages (`pythontk`, `uitk`, `mayatk`, `blendertk`, `tentacle`): dependency sync, PyPI guard, version tags, GitHub Releases with changelog-delta notes.
+- **[`push.ps1`](push.ps1)** — the release path for the ecosystem packages (`pythontk`, `uitk`, `mayatk`, `blendertk`, `tentacle`): one idempotent `Release X.Y.Z` commit per package (version stepped from what PyPI has, internal floors, fresh API registry), PR-gated merge that fails fast on a red check, PyPI guard, version tags, GitHub Releases with changelog notes since the previous tag. Re-running it completes any release an earlier run left merged-but-unfinished.
 - **[`scripts/`](scripts/)** — maintenance tooling: API-registry generation, Maya↔Blender parity sweeps, docs sweeps, context-budget guard, workspace inventory.
 - **[`docs/`](docs/)** — cross-package reference: API shadow report, context-budget rules, docs standard.
 

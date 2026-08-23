@@ -28,13 +28,19 @@ function Write-Err {
     Write-Host "  !! $Text" -ForegroundColor Red
 }
 
+# The ONE pattern for a package's version assignment, shared by every reader and writer
+# (Get-PackageVersion / Get-MainVersion read it, Set-PackageVersion rewrites it). (?m)^
+# anchors it to the real assignment line, so a docstring or comment that merely mentions
+# `__version__ = "..."` earlier in the file is never read as the version nor clobbered.
+$VERSION_LINE = '(?m)^__version__\s*=\s*["''](?<ver>\d+\.\d+\.\d+)["'']'
+
 function Get-PackageVersion {
     param([string]$PackagePath)
     $initFile = Join-Path $PackagePath "__init__.py"
     if (Test-Path $initFile) {
         $content = Get-Content $initFile -Raw
-        if ($content -match '__version__\s*=\s*"(\d+\.\d+\.\d+)"') {
-            return $Matches[1]
+        if ($content -match $VERSION_LINE) {
+            return $Matches['ver']
         }
     }
     return "unknown"
@@ -162,41 +168,6 @@ function Test-MergeConflicts {
         
         Write-Success "No merge conflicts"
         return $true
-    }
-    finally {
-        Pop-Location
-    }
-}
-
-function Test-HasChanges {
-    param([string]$RepoPath)
-    Push-Location $RepoPath
-    try {
-        # 1. Check for uncommitted changes
-        $status = git status --porcelain 2>&1
-        $hasUncommitted = $status.Length -gt 0
-        
-        # 2. Check if current branch is ahead of upstream
-        $ahead = 0
-        $currentBranch = (git rev-parse --abbrev-ref HEAD 2>$null)
-        if ($currentBranch -and $currentBranch -ne "HEAD") {
-            $upstream = (git rev-parse --abbrev-ref "@{u}" 2>$null)
-            if ($upstream) {
-                $ahead = (git rev-list --count "$upstream..HEAD" 2>$null)
-            }
-        }
-        
-        # 3. Check if dev is ahead of main (specific to our workflow)
-        $aheadOfMain = 0
-        
-        $devExists = git branch --list dev
-        $mainExists = git branch --list main
-        
-        if ($devExists -and $mainExists) {
-            $aheadOfMain = (git rev-list --count "main..dev" 2>$null)
-        }
-        
-        return ($hasUncommitted -or ($ahead -gt 0) -or ($aheadOfMain -gt 0))
     }
     finally {
         Pop-Location

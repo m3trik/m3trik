@@ -111,7 +111,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `TemplateParams` — blendertk, extapps, mayatk
 
 - `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L97)
-- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L93)
+- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L97)
 - `mayatk` — [`TemplateParams`](mayatk/mat_utils/marmoset_bridge/template_params.py#L97)
 
 ### `ToolbagHelpers` — blendertk, extapps, mayatk

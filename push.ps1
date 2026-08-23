@@ -1644,7 +1644,8 @@ function Invoke-PreparePhase {
         # the PR's `API registry up to date` check is green by construction. Runs
         # under the venv python (AST-only; no DCC import). --no-shadows keeps the
         # cross-package shadow report — which lives in m3trik's tree — untouched.
-        $gen = Join-Path (Join-Path $ROOT "m3trik") "scripts\generate_api_registry.py"
+        $m3trikScripts = Join-Path (Join-Path $ROOT "m3trik") "scripts"
+        $gen = Join-Path $m3trikScripts "generate_api_registry.py"
         if (Test-Path $gen) {
             $genOut = python $gen $PackageName --no-shadows 2>&1
             if ($LASTEXITCODE -ne 0) {
@@ -1676,21 +1677,24 @@ function Invoke-PreparePhase {
                 }
             }
             if ($dirtyEngines.Count -gt 0) {
-                Write-Err "Parity artifacts derive from $($dirtyEngines -join ' + ') source, and that tree is dirty."
-                Write-Err "Regenerating now would bake uncommitted engine work into this release. Settle it first."
+                Write-Err "Parity artifacts derive from engine source, and $($dirtyEngines -join ' + ') has uncommitted changes."
+                Write-Err "Regenerating now would bake that work into what this release publishes. Settle it first."
                 return $null
             }
-            $m3trikScripts = Join-Path (Join-Path $ROOT "m3trik") "scripts"
             # The sweep is a HARD gate: it exits 1 on untriaged deltas or a
             # customwidgets lint. Failing here costs seconds; the same failure
             # found in CI costs a merged PR whose publish never runs.
+            # --write writes the report BEFORE returning its code, so a failure
+            # leaves docs/PARITY_SURFACE.md on disk listing the offending rows --
+            # that file IS the work list, which is why the message points at it
+            # rather than at stdout (stdout here is the one "Wrote ..." line).
             $sweep = Join-Path $m3trikScripts "compare_panel_surface.py"
             if (Test-Path $sweep) {
-                $sweepOut = python $sweep --all --write 2>&1
+                python $sweep --all --write | Out-Null
                 if ($LASTEXITCODE -ne 0) {
                     Write-Err "Parity sweep FAILS for $PackageName (untriaged deltas, or a customwidgets lint)."
-                    Write-Err "Fix the gap or ledger it in docs/parity_map.py, then re-run."
-                    if ($sweepOut) { ($sweepOut | Select-Object -Last 5) | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray } }
+                    Write-Err "The rows are under '>> UNTRIAGED' in docs/PARITY_SURFACE.md, just rewritten."
+                    Write-Err "Fix each gap or ledger it in docs/parity_map.py, then re-run."
                     return $null
                 }
             }

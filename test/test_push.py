@@ -1115,6 +1115,11 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, out)
             self.assertIn("Parity sweep FAILS", out)
             self.assertIn("parity_map.py", out)
+            # --write writes the report BEFORE returning its code, so the rows
+            # are on disk while stdout is only "Wrote ...". The message has to
+            # send the operator to the file, or it names a problem with no way
+            # to see it.
+            self.assertIn("PARITY_SURFACE.md", out)
             # Nothing reached the remote: no Release commit, no tag.
             subjects = self._git(origin, "log", "--pretty=%s", "main").stdout
             self.assertNotIn("Release 0.1.1", subjects)
@@ -1158,8 +1163,10 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             out = result.stdout + result.stderr
             self.assertNotEqual(result.returncode, 0, out)
+            # Name the offending tree and say what is wrong with it -- asserting
+            # the meaning, not one adjective the message happens to use.
             self.assertIn("mayatk", out)
-            self.assertIn("dirty", out)
+            self.assertIn("uncommitted", out)
             self.assertFalse((root / "_sweep_ran").exists(), out)
             self.assertNotIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
 

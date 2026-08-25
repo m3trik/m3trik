@@ -19,6 +19,7 @@ Usage:
     python sync_shared_bat.py            # write mirrors (idempotent)
     python sync_shared_bat.py --check    # verify mirrors match the SSoT; exit 1 on drift
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -33,6 +34,14 @@ MIRRORS = (
     REPO_ROOT / "mayatk" / "mayatk" / "env_utils" / "package-manager.bat",
     REPO_ROOT / "blendertk" / "blendertk" / "env_utils" / "package-manager.bat",
 )
+
+# The shadow doctor rides along: the menu calls it as a sibling (%~dp0pm_doctor.py),
+# so it must ship in each wheel next to the menu, mirrored from the same SSoT dir.
+DOCTOR_SOURCE = REPO_ROOT / "m3trik" / "pm_doctor.py"
+DOCTOR_MIRRORS = tuple(m.parent / DOCTOR_SOURCE.name for m in MIRRORS)
+
+#: Every (source, mirrors) pair the sync owns.
+PAIRS = ((SOURCE, MIRRORS), (DOCTOR_SOURCE, DOCTOR_MIRRORS))
 
 
 def _norm(data: bytes) -> bytes:
@@ -79,12 +88,13 @@ def main(argv=None) -> int:
     )
     args = ap.parse_args(argv)
 
-    if not SOURCE.is_file():
-        print(f"[sync_shared_bat] source not found: {SOURCE}", file=sys.stderr)
-        return 2
+    for source, _ in PAIRS:
+        if not source.is_file():
+            print(f"[sync_shared_bat] source not found: {source}", file=sys.stderr)
+            return 2
 
     if args.check:
-        drift = out_of_sync()
+        drift = [m for source, mirrors in PAIRS for m in out_of_sync(source, mirrors)]
         if drift:
             print(
                 "[sync_shared_bat] OUT OF SYNC (run `python sync_shared_bat.py`):",
@@ -96,8 +106,10 @@ def main(argv=None) -> int:
         print("[sync_shared_bat] all mirrors in sync")
         return 0
 
+    written = []
     try:
-        written = sync()
+        for source, mirrors in PAIRS:
+            written.extend(sync(source, mirrors))
     except FileNotFoundError as e:
         print(f"[sync_shared_bat] {e}", file=sys.stderr)
         return 2

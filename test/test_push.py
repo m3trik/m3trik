@@ -7,6 +7,7 @@ without actually publishing to PyPI.
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -2167,6 +2168,83 @@ class TestPushScriptRegressions(unittest.TestCase):
                     self.assertNotEqual(r.returncode, 0, out)
                     self.assertIn(flag.lstrip("-"), out)
                     self.assertNotIn("[DRY RUN MODE]", out)
+
+
+class TestPushDevBranchWithoutADevBranch(unittest.TestCase):
+    """``Push-DevBranch`` must push a package that has no ``dev`` branch.
+
+    Not every registry-set package uses the dev->main flow: extapps ships
+    straight off ``main``. ``Sync-DevWithRemote`` already no-ops for those, but
+    ``Push-DevBranch`` checked out ``dev`` unconditionally and reported a bare
+    "Checkout dev failed" for a branch that does not exist -- leaving the repo
+    committed-but-unpushed and the run's summary blaming the network.
+    """
+
+    @staticmethod
+    def _have_git() -> bool:
+        try:
+            return (
+                subprocess.run(["git", "--version"], capture_output=True).returncode
+                == 0
+            )
+        except FileNotFoundError:
+            return False
+
+    def _git(self, cwd: Path, *args):
+        r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)}: {r.stdout}{r.stderr}")
+        return r
+
+    def test_main_only_repo_is_pushed_not_refused(self):
+        if not self._have_git():
+            self.skipTest("git not available")
+        pwsh = shutil.which("powershell") or shutil.which("pwsh")
+        if not pwsh:
+            self.skipTest("no PowerShell host available")
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            origin = root / "origin.git"
+            origin.mkdir()
+            self._git(origin, "init", "--bare", "--initial-branch=main")
+
+            repo = root / "extappsish"
+            repo.mkdir()
+            self._git(repo, "init", "--initial-branch=main")
+            self._git(repo, "config", "user.email", "ci@example.com")
+            self._git(repo, "config", "user.name", "CI")
+            (repo / "API_CHANGES.md").write_text("base\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "base")
+            self._git(repo, "remote", "add", "origin", str(origin))
+            self._git(repo, "push", "-u", "origin", "main")
+
+            # The uncommitted sidecar refresh a registry regen leaves behind.
+            (repo / "API_CHANGES.md").write_text("refreshed\n", encoding="utf-8")
+
+            common = M3TRIK_DIR / "common.ps1"
+            script = (
+                f". '{common}'; "
+                f"if (Push-DevBranch '{repo}') {{ 'PUSH-OK' }} else {{ 'PUSH-FAILED' }}"
+            )
+            r = subprocess.run(
+                [pwsh, "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            out = r.stdout + r.stderr
+            self.assertIn("PUSH-OK", out, out)
+
+            # The refresh actually reached the remote, on the branch the repo uses.
+            landed = subprocess.run(
+                ["git", "show", "main:API_CHANGES.md"],
+                cwd=str(origin),
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(landed.stdout.strip(), "refreshed", out)
 
 
 class TestPackageStructure(unittest.TestCase):

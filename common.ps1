@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Continue"
+﻿$ErrorActionPreference = "Continue"
 
 function Write-Header {
     param([string]$Text)
@@ -233,10 +233,17 @@ function Push-DevBranch {
     
     Push-Location $RepoPath
     try {
-        # Ensure we're on dev
-        git checkout dev --quiet 2>&1 | Out-Null
+        # Not every registry-set package uses the dev->main flow -- extapps ships
+        # straight off main. Sync-DevWithRemote already no-ops for those, so
+        # checking out `dev` unconditionally here refused the push over a branch
+        # that does not exist, leaving the repo committed-but-unpushed behind a
+        # bare "Checkout dev failed".
+        $branch = "dev"
+        if (-not (git branch --list dev)) { $branch = git rev-parse --abbrev-ref HEAD }
+
+        git checkout $branch --quiet 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Err "Checkout dev failed"
+            Write-Err "Checkout $branch failed"
             return $false
         }
         
@@ -251,15 +258,15 @@ function Push-DevBranch {
             }
         }
 
-        # Bring local dev up to date (after committing local changes)
-        git fetch origin dev --quiet 2>&1 | Out-Null
+        # Bring the local branch up to date (after committing local changes)
+        git fetch origin $branch --quiet 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
-            $behind = git rev-list --count "HEAD..origin/dev" 2>$null
+            $behind = git rev-list --count "HEAD..origin/$branch" 2>$null
             if ($behind -gt 0) {
-                Write-Step "Rebasing onto origin/dev (behind by $behind commits)..."
+                Write-Step "Rebasing onto origin/$branch (behind by $behind commits)..."
                 $oldEap = $ErrorActionPreference
                 $ErrorActionPreference = "Continue"
-                $pullOut = git pull --rebase origin dev --quiet 2>&1
+                $pullOut = git pull --rebase origin $branch --quiet 2>&1
                 $pullCode = $LASTEXITCODE
                 $ErrorActionPreference = $oldEap
                 if ($pullCode -ne 0) {
@@ -270,13 +277,13 @@ function Push-DevBranch {
             }
         }
         
-        Write-Step "Pushing dev branch..."
-        git push origin dev
+        Write-Step "Pushing $branch branch..."
+        git push origin $branch
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Push failed"
             return $false
         }
-        Write-Success "Pushed dev branch"
+        Write-Success "Pushed $branch branch"
         return $true
     }
     finally {

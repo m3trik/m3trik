@@ -133,7 +133,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2174)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2186)
 
 ### `main` — blendertk, extapps, mayatk
 
@@ -168,7 +168,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `register` — extapps, tentacle
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L2179)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L2191)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 

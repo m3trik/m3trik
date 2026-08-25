@@ -159,6 +159,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L154)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L423)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L223)
+- `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L35)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/lookdev.py#L38)

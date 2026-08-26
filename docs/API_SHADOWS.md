@@ -55,13 +55,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L114)
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L165)
-- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L405)
-- `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L266)
+- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
+- `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L230)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L405)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L474)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L38)
 
@@ -133,7 +133,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `launch` — mayatk, tentacle
 
 - `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L14)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2186)
+- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2191)
 
 ### `main` — blendertk, extapps, mayatk
 
@@ -168,7 +168,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `register` — extapps, tentacle
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L2191)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L2196)
+- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1254)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 

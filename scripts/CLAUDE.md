@@ -13,6 +13,7 @@
 | `generate_parity_audit.py` | `tentacle/docs/PARITY_AUDIT.md` | Coarse depth scoreboard; refuses stale registry input (`--allow-stale`); `--check` exits 1 if stale. Trust its `surface` column over line ratios. |
 | `generate_dcc_coverage.py` | `tentacle/docs/DCC_COVERAGE.md` | tentacle DCC slot-coverage report. |
 | `generate_workspace_inventory.py` (+ `Generate-WorkspaceInventory.ps1`) | `docs/workspace_repo_inventory.{md,json}` | Direct child repos: package/code roots, tracked LOC. |
+| `build_stingray_ao_presets.py [--check]` | `mayatk/mat_utils/shaderfx/Standard_{Masked,Transparent}_AO.sfx` | Maya's opacity presets + the opaque preset's AO chain, spliced as text (ShaderFX has no `saveGraph`); `preset_path=Custom` keeps the graph self-contained in scenes. `--check` = drift gate; pinned by `m3trik/test/test_build_stingray_ao_presets.py`. |
 
 ## Gates (exit 0 or the build is red)
 

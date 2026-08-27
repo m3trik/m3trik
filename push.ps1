@@ -74,6 +74,11 @@ Key flags
                       How long to let GitHub attach check runs to a fresh release PR
                       before the -UsePR gate concludes nothing is watching it, and
                       how often to re-probe while waiting.
+-PRGateTriggerRetries How many times to re-fire the pull_request event (close+reopen)
+                      when a release PR attaches NO check runs, before calling it
+                      ungated. GitHub drops pull_request deliveries outright during an
+                      Actions incident; that is a lost event, not a missing gate, and
+                      waiting longer cannot recover it. 0 disables the recovery.
 -SkipBuild            Skip python build/twine validation.
 -SkipWorkflowWait     Skip waiting for the publish workflow on main.
 -SkipPypiCheck        Skip all PyPI availability gates (downstream pin pre-check +
@@ -117,7 +122,16 @@ param(
     [switch]$ShowReceipts,
     [int]$ReceiptMaxAgeDays = 7,
     [switch]$UsePR,
-    [int]$PRMergeTimeoutSeconds = 1800,
+    # 3600s (60 min), not 1800s: uitk's own pull_request Tests workflow took 21,
+    # 24, 26, 26 and 28 minutes across its last five releases (2026-08-19 ->
+    # 08-25) and grows with the suite, so a 30-minute budget sat INSIDE the
+    # runtime of a perfectly healthy release once queue delay and GitHub's
+    # post-green mergeStateStatus recompute are added. Raising it is safe
+    # because the timeout is not what catches a bad release: Wait-ForPRMerged
+    # returns "dead" for every state that can never resolve (DIRTY, BLOCKED with
+    # something red, BLOCKED with everything green for 60s), so this is a
+    # backstop for an unforeseen hang and costs nothing when things are healthy.
+    [int]$PRMergeTimeoutSeconds = 3600,
     # How long to let GitHub attach check runs to a freshly opened release PR before
     # the -UsePR gate calls it ungated. Checks normally appear within seconds; 120s
     # absorbs a slow Actions queue without hiding a real "nothing is watching this PR"
@@ -128,6 +142,15 @@ param(
     # refusal. Reject it at bind time rather than clamping silently.
     [ValidateRange(1, 600)]
     [int]$PRGatePollSeconds = 10,
+    # A PR that attaches no checks has two very different causes, and only one of
+    # them is the "nothing is gating this release" the gate exists to catch. The
+    # other is GitHub never delivering the pull_request event at all - during the
+    # 2026-08-26 Actions/Pull Requests incident up to 4% of runs "failed to
+    # trigger" - which no amount of extra timeout recovers, because there is
+    # nothing queued to wait for. Re-firing the event does. Bounded, because a
+    # head that genuinely cannot be gated must still reach the refusal.
+    [ValidateRange(0, 5)]
+    [int]$PRGateTriggerRetries = 2,
     # 2400s (40 min), not 900s: the publish workflow reliably runs ~17 min for
     # uitk (build + verify-install + twine upload), which OVERRAN the old 900s
     # default and made the script abort a still-in-progress-but-successful
@@ -1126,6 +1149,53 @@ function Get-PRGateState {
     }
 }
 
+function Restart-PRChecks {
+    # Re-fire the pull_request event on an open PR by closing and reopening it.
+    #
+    # Returns 'retriggered' (a new event is on its way), 'unchanged' (the close
+    # failed, so the PR is exactly as it was and the caller's ordinary ungated
+    # refusal still describes it), or 'closed' (closed and NOT reopened - the one
+    # outcome that must abort immediately, because that refusal would then be
+    # telling the operator to go fix a gate when what is wrong is a shut PR).
+    #
+    # close+reopen is the only re-trigger that lands as a CHECK RUN ON THE PR, which
+    # is the sole thing the gate can read: a workflow_dispatch run attaches to the
+    # ref, not to the PR, so it can never satisfy statusCheckRollup, and an empty
+    # commit would rewrite the release head to get there. `reopened` is in the DEFAULT
+    # pull_request type set, so every ecosystem repo's tests.yml already accepts it -
+    # no workflow edit, and nothing to keep in sync.
+    #
+    # Auto-merge is armed only AFTER the gate returns (Enable-AutoMergePR: "Gate
+    # FIRST, arm second"), so there is normally none to lose. A re-run that inherits
+    # an already-armed PR does lose it - closing disarms - and the caller's arm step
+    # re-arms it on the way out, because that step probes for an existing arm rather
+    # than assuming one.
+    param(
+        [string]$RepoSlug,
+        [int]$PrNumber
+    )
+
+    $out = gh pr close $PrNumber --repo $RepoSlug 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "    Could not close PR #$PrNumber to re-trigger its checks: $out" -ForegroundColor DarkGray
+        return 'unchanged'
+    }
+
+    # Reopen is retried, and its failure is LOUD: this is the one window where the
+    # release PR is closed, and a quiet failure here would leave it shut behind a
+    # refusal that talks about missing gates.
+    for ($i = 1; $i -le 3; $i++) {
+        Start-Sleep -Seconds 3
+        $out = gh pr reopen $PrNumber --repo $RepoSlug 2>&1
+        if ($LASTEXITCODE -eq 0) { return 'retriggered' }
+    }
+    Write-Err "PR #$PrNumber was closed to re-trigger its checks and could NOT be reopened."
+    if ($out) { Write-Host "    $out" -ForegroundColor DarkGray }
+    Write-Host "     Reopen it by hand, then re-run this same command:" -ForegroundColor Yellow
+    Write-Host "       gh pr reopen $PrNumber --repo $RepoSlug" -ForegroundColor Yellow
+    return 'closed'
+}
+
 function Test-PRReleaseGate {
     # -UsePR only buys anything if the PR is ACTUALLY gated. Two states made it a
     # no-op that used to pass silently:
@@ -1149,11 +1219,30 @@ function Test-PRReleaseGate {
     )
 
     $elapsed = 0
+    $retries = 0
     $state = Get-PRGateState $RepoSlug $PrNumber
-    while (($null -eq $state -or $state.CheckCount -eq 0) -and $elapsed -lt $PRGateTimeoutSeconds) {
-        Start-Sleep -Seconds $PRGatePollSeconds
-        $elapsed += $PRGatePollSeconds
-        Write-Host "    Waiting for check runs on PR #$PrNumber... ($elapsed/$PRGateTimeoutSeconds seconds)" -ForegroundColor Gray
+    while ($true) {
+        while (($null -eq $state -or $state.CheckCount -eq 0) -and $elapsed -lt $PRGateTimeoutSeconds) {
+            Start-Sleep -Seconds $PRGatePollSeconds
+            $elapsed += $PRGatePollSeconds
+            Write-Host "    Waiting for check runs on PR #$PrNumber... ($elapsed/$PRGateTimeoutSeconds seconds)" -ForegroundColor Gray
+            $state = Get-PRGateState $RepoSlug $PrNumber
+        }
+        if ($null -ne $state -and $state.CheckCount -gt 0) { break }
+        # A probe that cannot be READ is not a PR that cannot be gated: closing and
+        # reopening on the strength of a failing `gh pr view` would mutate the release
+        # PR blind. Leave it to the "cannot read the gate state" refusal below.
+        if ($null -eq $state) { break }
+        if ($DryRun -or $retries -ge $PRGateTriggerRetries) { break }
+        $retries++
+        Write-Host "  -- No check runs after ${elapsed}s - re-firing the pull_request event (attempt $retries/$PRGateTriggerRetries)..." -ForegroundColor Yellow
+        $retrigger = Restart-PRChecks $RepoSlug $PrNumber
+        # Left closed: abort now, having already named the PR and the fix. Falling
+        # through would print the ungated refusal over a PR that is merely shut.
+        if ($retrigger -eq 'closed') { return $false }
+        # Still open and un-retriggered: the refusal below is the right report.
+        if ($retrigger -ne 'retriggered') { break }
+        $elapsed = 0
         $state = Get-PRGateState $RepoSlug $PrNumber
     }
 
@@ -1164,10 +1253,12 @@ function Test-PRReleaseGate {
     }
 
     if ($state.CheckCount -eq 0) {
-        Write-Err "PR #$PrNumber reports ZERO check runs after ${elapsed}s - -UsePR is not gating this release."
+        Write-Err "PR #$PrNumber reports ZERO check runs after ${elapsed}s and $retries re-trigger attempt(s) - -UsePR is not gating this release."
         Write-Host @"
   Auto-merge with no checks lands the PR immediately, so -UsePR would be exactly a
-  direct merge while reporting that it honored a test gate. Known causes:
+  direct merge while reporting that it honored a test gate. The transient cause is
+  already ruled out: a close+reopen re-trigger was attempted $retries time(s) and
+  still nothing attached, so this head is one GitHub will not gate. Known causes:
     * The PR head commit is tagged "[skip ci]" - GitHub skips every workflow,
       tests.yml included, for such a head.
     * The repo's required check was renamed, or its workflow no longer triggers on
@@ -1359,8 +1450,23 @@ function Wait-ForPRMerged {
         }
     }
 
-    Write-Host "    Warning: Timeout waiting for PR merge (${TimeoutSeconds}s)" -ForegroundColor Yellow
-    Write-Host "    Stopping process - check PR status manually" -ForegroundColor Red
+    # A wait that ran out, NOT a release that failed: every state that can never
+    # resolve already returned "dead" above, and auto-merge is still armed, so the
+    # PR lands by itself once its checks finish. Saying so matters - the caller
+    # renders every non-"dead" verdict as the bare "Merge did not complete", which
+    # reads as damage to repair.
+    Write-Err "PR #$PrNumber did not merge within ${TimeoutSeconds}s."
+    if ($reportedFailures) {
+        # A red check is REPORTED and then waited through, because whether it may
+        # hold a merge is branch protection's call - so a timeout can carry one.
+        Write-Host "     Red check(s) were named above; if one of those is REQUIRED, it is what is holding the merge." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "     Nothing has failed - the checks simply had not finished." -ForegroundColor Yellow
+    }
+    Write-Host "     Auto-merge stays armed: the PR lands by itself once they do." -ForegroundColor Yellow
+    Write-Host "     Re-run this same command - Finalize picks the merged release up from origin/main." -ForegroundColor Yellow
+    Write-Host "     Raise -PRMergeTimeoutSeconds if this repo's CI is routinely slower." -ForegroundColor Yellow
     return "timeout"
 }
 

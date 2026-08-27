@@ -1347,11 +1347,24 @@ class TestPushScriptRegressions(unittest.TestCase):
         'if "%2"=="list" goto :prlist',
         'if "%2"=="create" goto :prcreate',
         'if "%2"=="merge" exit /b 0',
+        # Both get a branch only so a test can make them FAIL: the two failures
+        # need OPPOSITE handling (a failed close leaves the PR untouched, a failed
+        # reopen leaves it shut), which is the distinction worth pinning.
+        'if "%2"=="close" goto :prclose',
+        'if "%2"=="reopen" goto :prreopen',
         'if "%2"=="view" goto :prview',
         "exit /b 0",
         "",
         ":prlist",
         'type "%HERE%pr_list.json"',
+        "exit /b 0",
+        "",
+        ":prclose",
+        'if exist "%HERE%pr_close_fails" exit /b 1',
+        "exit /b 0",
+        "",
+        ":prreopen",
+        'if exist "%HERE%pr_reopen_fails" exit /b 1',
         "exit /b 0",
         "",
         ":prcreate",
@@ -1571,6 +1584,154 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, out)
             self.assertIn("ZERO check runs", out)
             self.assertIn("skip ci", out)  # names the cause
+            self.assertNotIn("PR #7 merged", out)
+            # The re-trigger recovery must be BOUNDED: a head GitHub will never
+            # gate has to reach this refusal instead of being retried forever.
+            self.assertIn("2 re-trigger attempt(s)", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_mode_re_fires_a_dropped_pull_request_event(self):
+        """A DROPPED pull_request delivery must not read as "nothing gates this PR".
+
+        The two are indistinguishable through statusCheckRollup: both are zero
+        check runs. But a lost event has nothing queued behind it, so no amount of
+        extra -PRGateTimeoutSeconds recovers it -- only a NEW event does. Measured
+        2026-08-26, when GitHub's Actions/Pull Requests incident ("up to 4% of runs
+        failed to trigger") left pythontk#53 at zero checks with tests.yml, branch
+        protection and Actions permissions all correct, and aborted the cascade at
+        package 1 of 5.
+
+        close+reopen is the re-trigger, because it is the only one that lands as a
+        check run ON the PR: a workflow_dispatch run attaches to the ref instead.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"CLEAN",'
+                '"statusCheckRollup":[{"name":"test","conclusion":"SUCCESS"}]}',
+            )
+            # Only the FIRST gate probe sees the dropped event; the numbered file
+            # falls back to the gated rollup above, which is what the re-fired
+            # event produces.
+            (root / "_bin" / "pr_gates.1.json").write_text(
+                '{"mergeStateStatus":"CLEAN","statusCheckRollup":[]}', encoding="ascii"
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=300, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("re-firing the pull_request event", out)
+            self.assertIn("attempt 1/2", out)
+            calls = self._gh_calls(root)
+            self.assertIn("pr close", calls)
+            self.assertIn("pr reopen", calls)
+            # Recovered, not refused - and the release actually completed.
+            self.assertNotIn("ZERO check runs", out)
+            self.assertIn("PR #7 merged", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_pr_reopen_failure_names_the_pr_it_left_closed(self):
+        """The re-trigger's one hazard is a PR closed and not reopened.
+
+        Failing quietly there would print the ordinary ungated refusal while the
+        release PR sat shut, so the operator would go looking for a missing gate
+        instead of for the PR. It has to name the PR and the command to reopen it.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root, '{"mergeStateStatus":"CLEAN","statusCheckRollup":[]}'
+            )
+            (root / "_bin" / "pr_reopen_fails").write_text("1", encoding="ascii")
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=300, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("could NOT be reopened", out)
+            self.assertIn("gh pr reopen 7", out)
+            self.assertNotIn("PR #7 merged", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_failed_close_still_gets_the_ungated_diagnosis(self):
+        """A re-trigger that never happened must not swallow the real refusal.
+
+        The two re-trigger failures need opposite handling: a failed REOPEN leaves
+        the PR shut, where "give the repo a real gate" would send the operator
+        after the wrong thing, but a failed CLOSE leaves the PR exactly as it was
+        -- open, and genuinely showing no checks -- which is precisely what that
+        refusal describes. Collapsing both into one failure value cost the second
+        case its whole diagnosis.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            env = self._install_fake_gh(
+                root, '{"mergeStateStatus":"CLEAN","statusCheckRollup":[]}'
+            )
+            (root / "_bin" / "pr_close_fails").write_text("1", encoding="ascii")
+
+            result = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=300, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("ZERO check runs", out)
+            self.assertIn("skip ci", out)  # the diagnosis survives
+            self.assertNotIn("could NOT be reopened", out)  # nothing was left shut
+            self.assertNotIn("PR #7 merged", out)
+            # It gave up on the re-trigger instead of spending both attempts on a
+            # close that cannot succeed.
+            self.assertIn("1 re-trigger attempt(s)", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_merge_timeout_says_the_pr_still_lands_on_its_own(self):
+        """A merge wait that runs out is not a release that failed.
+
+        Every state that can never resolve already returned "dead", and auto-merge
+        is still armed, so the PR merges by itself once its checks finish and a
+        re-run finalizes it from origin/main. The caller renders every non-"dead"
+        verdict as the bare "Merge did not complete", so this report is the only
+        thing telling the operator that -- and it used to say the opposite ("check
+        PR status manually"). The budget matters because uitk's own PR test
+        workflow runs 21-28 minutes and merged tonight at 23 of a 30-minute one.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._pr_release_repo(root)
+            # BLOCKED with a check still RUNNING is the transient state auto-merge
+            # exists for, so the gate passes and the wait loop keeps polling it.
+            env = self._install_fake_gh(
+                root,
+                '{"mergeStateStatus":"BLOCKED",'
+                '"statusCheckRollup":[{"name":"test","status":"IN_PROGRESS"}]}',
+            )
+            (root / "_bin" / "pr_merged.json").write_text(
+                '{"state":"OPEN","mergedAt":null}', encoding="ascii"
+            )
+
+            result = self._run(
+                self._pr_release_cmd(root, "-PRMergeTimeoutSeconds", "10"),
+                cwd=root,
+                timeout=300,
+                env=env,
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("did not merge within 10s", out)
+            self.assertIn("Auto-merge stays armed", out)
+            self.assertIn("Re-run this same command", out)
+            # Nothing was red, so it must say so rather than leave the operator
+            # hunting for a failure that never happened.
+            self.assertIn("Nothing has failed", out)
+            # The superseded advice is gone, not merely buried under the new text.
+            self.assertNotIn("check PR status manually", out)
             self.assertNotIn("PR #7 merged", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")

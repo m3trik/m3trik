@@ -60,8 +60,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L230)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L405)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L474)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L38)
 

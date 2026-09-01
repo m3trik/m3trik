@@ -174,7 +174,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
 - `tentacle` — [`register`](tentacle/tcl_blender.py#L2196)
-- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1254)
+- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1356)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 

@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (24)
+## Genuine cross-layer collisions (25)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -28,6 +28,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L336)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
+
+### `Finding` — mayatk, pythontk
+
+- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L81)
+- `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L37)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
 
@@ -94,7 +99,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotApply` — mayatk, pythontk
 
 - `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L148)
-- `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L46)
+- `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L54)
 
 ### `ShotManifest` — mayatk, pythontk
 
@@ -104,7 +109,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotStore` — mayatk, pythontk
 
 - `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L306)
-- `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L269)
+- `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L271)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
 

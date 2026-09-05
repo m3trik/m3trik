@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (27)
+## Genuine cross-layer collisions (26)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -33,12 +33,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L81)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L37)
-
-### `KeyStash` — blendertk, mayatk, pythontk
-
-- `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L213)
-- `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L237)
-- `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L191)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
 
@@ -89,10 +83,10 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `RpcPlugin` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L410)
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L410)
-- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L410)
-- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L410)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L394)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L394)
+- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L394)
+- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L394)
 - `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L410)
 
 ### `Selection` — blendertk, mayatk, tentacle
@@ -114,7 +108,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L329)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L308)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L271)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -126,7 +120,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `TestSandbox` — pythontk, uitk
 
 - `pythontk` — [`TestSandbox`](pythontk/core_utils/test_sandbox.py#L79)
-- `uitk` — [`TestSandbox`](uitk/testing.py#L59)
+- `uitk` — [`TestSandbox`](uitk/testing.py#L51)
 
 ### `ToolbagHelpers` — blendertk, extapps, mayatk
 
@@ -171,8 +165,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L220)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L538)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L827)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L275)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L564)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L154)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L536)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L223)
@@ -203,7 +197,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (204)
+## Intentional mayatk↔blendertk port parity (202)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -284,7 +278,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `InstanceCandidate`
 - `InstanceGroup`
 - `InstancingStrategy`
-- `KeyStashSlots`
 - `Keyframes`
 - `LightUtils`
 - `LightmapBaker`
@@ -313,7 +306,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `PainterRpcClient`
 - `Preview`
 - `ReferenceManagerSlots`
-- `RenderEffects`
+- `RenderOpacity`
 - `RenderOpacitySlots`
 - `RestoreResult`
 - `RigUtils`
@@ -330,7 +323,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SegmentKeys`
 - `SelectionMacros`
 - `ShaderTemplatesSlots`
-- `ShadowPreview`
 - `ShadowRig`
 - `ShadowRigSlots`
 - `ShellXformSlots`

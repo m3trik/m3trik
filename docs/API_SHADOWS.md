@@ -34,8 +34,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L81)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L37)
 
-### `KeyStash` — mayatk, pythontk
+### `KeyStash` — blendertk, mayatk, pythontk
 
+- `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L213)
 - `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L237)
 - `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L191)
 
@@ -88,8 +89,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `RpcPlugin` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L394)
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L394)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L410)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L410)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L410)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L410)
 - `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L410)
@@ -202,7 +203,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (201)
+## Intentional mayatk↔blendertk port parity (204)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -283,6 +284,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `InstanceCandidate`
 - `InstanceGroup`
 - `InstancingStrategy`
+- `KeyStashSlots`
 - `Keyframes`
 - `LightUtils`
 - `LightmapBaker`
@@ -311,6 +313,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `PainterRpcClient`
 - `Preview`
 - `ReferenceManagerSlots`
+- `RenderEffects`
 - `RenderOpacitySlots`
 - `RestoreResult`
 - `RigUtils`
@@ -327,6 +330,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SegmentKeys`
 - `SelectionMacros`
 - `ShaderTemplatesSlots`
+- `ShadowPreview`
 - `ShadowRig`
 - `ShadowRigSlots`
 - `ShellXformSlots`

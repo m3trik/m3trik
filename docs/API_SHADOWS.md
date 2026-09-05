@@ -120,7 +120,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `TestSandbox` — pythontk, uitk
 
 - `pythontk` — [`TestSandbox`](pythontk/core_utils/test_sandbox.py#L79)
-- `uitk` — [`TestSandbox`](uitk/testing.py#L51)
+- `uitk` — [`TestSandbox`](uitk/testing.py#L59)
 
 ### `ToolbagHelpers` — blendertk, extapps, mayatk
 

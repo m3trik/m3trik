@@ -105,7 +105,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotApply` — mayatk, pythontk
 
 - `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L227)
-- `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L54)
+- `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L55)
 
 ### `ShotManifest` — mayatk, pythontk
 

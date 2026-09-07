@@ -3,7 +3,7 @@
 """Splice pythontk's shared horizon shader body into every generated mirror.
 
 ``pythontk/geo_utils/shadow_horizon.glsl`` is the single source of truth for
-the coverage-aware horizon evaluation, and ``HorizonMap.alpha`` beside it is
+the height-field shadow march, and ``HeightFieldMap.alpha`` beside it is
 the numeric oracle that body is written against. One text, every consumer.
 
 Why copies exist at all

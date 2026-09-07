@@ -67,7 +67,7 @@ widget.menu.add(
 | mayatk · mat_utils | [`image_to_plane/image_to_plane_slots.py`](../../mayatk/mayatk/mat_utils/image_to_plane/image_to_plane_slots.py) |
 | mayatk · mat_utils | [`marmoset_bridge/marmoset_bridge_slots.py`](../../mayatk/mayatk/mat_utils/marmoset_bridge/marmoset_bridge_slots.py) |
 | mayatk · mat_utils | [`mat_updater.py`](../../mayatk/mayatk/mat_utils/mat_updater.py) |
-| mayatk · mat_utils | [`render_opacity/render_opacity_slots.py`](../../mayatk/mayatk/mat_utils/render_opacity/render_opacity_slots.py) |
+| mayatk · mat_utils | [`render_opacity/render_effects_slots.py`](../../mayatk/mayatk/mat_utils/render_opacity/render_effects_slots.py) |
 | mayatk · mat_utils | [`shader_templates/_shader_templates.py`](../../mayatk/mayatk/mat_utils/shader_templates/_shader_templates.py) |
 | mayatk · mat_utils | [`substance_bridge/substance_bridge_slots.py`](../../mayatk/mayatk/mat_utils/substance_bridge/substance_bridge_slots.py) |
 | mayatk · mat_utils | [`texture_path_editor.py`](../../mayatk/mayatk/mat_utils/texture_path_editor.py) |

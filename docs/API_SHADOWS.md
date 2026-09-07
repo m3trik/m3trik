@@ -104,7 +104,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotApply` — mayatk, pythontk
 
-- `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L227)
+- `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L232)
 - `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L55)
 
 ### `ShotManifest` — mayatk, pythontk
@@ -114,7 +114,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L329)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L334)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L271)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -203,7 +203,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (204)
+## Intentional mayatk↔blendertk port parity (203)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -314,7 +314,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Preview`
 - `ReferenceManagerSlots`
 - `RenderEffects`
-- `RenderOpacitySlots`
 - `RestoreResult`
 - `RigUtils`
 - `RizomBridgeSlots`

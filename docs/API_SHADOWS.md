@@ -14,7 +14,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Behaviors` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L231)
+- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L230)
 - `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L144)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L83)
 
@@ -203,7 +203,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (203)
+## Intentional mayatk↔blendertk port parity (204)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -314,6 +314,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Preview`
 - `ReferenceManagerSlots`
 - `RenderEffects`
+- `RenderEffectsSlots`
 - `RestoreResult`
 - `RigUtils`
 - `RizomBridgeSlots`

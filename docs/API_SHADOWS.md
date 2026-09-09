@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (27)
+## Genuine cross-layer collisions (30)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -23,11 +23,26 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Call`](extapps/substance_workflow/job.py#L18)
 - `pythontk` — [`Call`](pythontk/net_utils/rpc/job.py#L78)
 
+### `CaptureResult` — mayatk, pythontk
+
+- `mayatk` — [`CaptureResult`](mayatk/anim_utils/playblast_exporter.py#L73)
+- `pythontk` — [`CaptureResult`](pythontk/vid_utils/sequence_exporter.py#L75)
+
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L336)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
+
+### `ExportResult` — mayatk, pythontk
+
+- `mayatk` — [`ExportResult`](mayatk/anim_utils/playblast_exporter.py#L97)
+- `pythontk` — [`ExportResult`](pythontk/vid_utils/sequence_exporter.py#L99)
+
+### `ExportTarget` — mayatk, pythontk
+
+- `mayatk` — [`ExportTarget`](mayatk/anim_utils/playblast_exporter.py#L46)
+- `pythontk` — [`ExportTarget`](pythontk/vid_utils/sequence_exporter.py#L47)
 
 ### `Finding` — mayatk, pythontk
 

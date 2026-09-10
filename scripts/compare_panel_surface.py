@@ -369,6 +369,18 @@ class Surface:
                             aliases[tgt.id] = chain
                             continue
                     if isinstance(node.value, ast.Call):
+                        if _attr_chain(node.value.func).split(".")[-1] == "ContextMenu":
+                            # `uitk.ContextMenu`'s body is a LIST, and its add()
+                            # takes the ROW LABEL where Menu.add takes a
+                            # widget-type name. Alias the handle INTO the menu
+                            # namespace so its rows are extracted whatever the
+                            # local is called -- they reached the menu branch
+                            # only because the variable happened to be named
+                            # `menu`, so renaming it would have silently emptied
+                            # two panels out of the matrix. The `context` head
+                            # is what tells _handle_call to key by that label.
+                            aliases[tgt.id] = "context.menu"
+                            continue
                         key = self._handle_call(node.value, env, aliases, handles, fn_name,
                                                 local_tables, in_loop)
                         if key is not None:
@@ -487,13 +499,39 @@ class Surface:
                     ctype = a0.value
                 elif isinstance(a0, ast.Attribute):
                     ctype = a0.attr
+                else:
+                    # A loop-bound label (`for edge, label in (...): menu.add(label,
+                    # ...)`) is a Name, not a Constant -- resolve it through the
+                    # scope the loop unroller already bound, or a fan-out menu's
+                    # per-edge rows stay unresolved.
+                    resolved = resolve(a0, scope, self.tables)
+                    if isinstance(resolved, str):
+                        ctype = resolved
             if ctype == "Separator":
                 return None
             obj = kw.get("setObjectName")
             label = kw.get("setText")
             if obj in (None, UNRESOLVED) and label in (None, UNRESOLVED):
-                self.dynamic.append(f"{fn_name}: {chain}({ctype}) — unresolved key")
-                return None
+                # A ContextMenu row carries no setText -- its first positional
+                # string IS the label -- so every row of a fan-out menu used to
+                # drop out of the comparison as an unresolved key, and the sweep
+                # went blind to two whole panels' context menus the day they
+                # were built. Key such a row by that string.
+                #
+                # Not restricted to ContextMenu, though the constructor is
+                # aliased above: the menu is PASSED to the helpers that build
+                # its deeper rows (`_add_shot_key_rows(menu, ...)`), and this
+                # walk is not interprocedural, so a parameter carries no such
+                # tag. The trade-off is confined to a plain Menu's untitled
+                # `add("QPushButton")` -- a control with no user-visible
+                # identity, which used to vanish here and is now keyed by its
+                # TYPE, so two in one function merge into one row (the same
+                # thing any duplicate key has always done). Every untitled call
+                # in the tree today is `add("Separator")`, which returns above.
+                if ctype == "?":
+                    self.dynamic.append(f"{fn_name}: {chain}({ctype}) — unresolved key")
+                    return None
+                obj, label = None, ctype
             key = obj if isinstance(obj, str) else (label if isinstance(label, str) else f"{ctype}:{label}")
             props = {p: kw[p] for p in PROPS if p in kw and kw[p] is not UNRESOLVED}
             items = None

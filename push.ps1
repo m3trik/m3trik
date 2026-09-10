@@ -657,7 +657,13 @@ function Set-PackageVersion {
     $content = Get-Content $initFile -Raw
     if ($content -notmatch $VERSION_LINE) { return $false }
     if ($Matches['ver'] -eq $Version) { return $false }
-    $newContent = $content -replace '(?m)^__version__\s*=\s*.*', "__version__ = `"$Version`""
+    # `[^\r\n]*`, never `.*`: in .NET multiline mode `.` matches `\r`, so `.*`
+    # eats the carriage return and the replacement writes the line back with a
+    # bare LF. On a CRLF-normalized file that leaves ONE mixed line ending,
+    # which `ruff format --check` then fails on -- so every release of a CRLF
+    # package (pythontk, mayatk, tentacle) left the tree unformatted, and the
+    # lint gate planned in .claude/FUTURE.md would have failed on each one.
+    $newContent = $content -replace '(?m)^__version__\s*=\s*[^\r\n]*', "__version__ = `"$Version`""
     Set-Content -Path $initFile -Value $newContent -NoNewline
     return $true
 }

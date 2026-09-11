@@ -125,7 +125,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `TestSandbox` — pythontk, uitk
 
-- `pythontk` — [`TestSandbox`](pythontk/core_utils/test_sandbox.py#L79)
+- `pythontk` — [`TestSandbox`](pythontk/core_utils/test_sandbox.py#L88)
 - `uitk` — [`TestSandbox`](uitk/testing.py#L59)
 
 ### `ToolbagHelpers` — blendertk, extapps, mayatk
@@ -142,8 +142,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `close_plugin` — blendertk, extapps, mayatk
 
-- `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L80)
-- `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L121)
+- `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L81)
+- `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L122)
 - `mayatk` — [`close_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L81)
 
 ### `launch` — mayatk, tentacle
@@ -174,7 +174,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L538)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L826)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L154)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L533)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L539)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L225)
 - `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L662)
@@ -186,19 +186,19 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
 - `tentacle` — [`register`](tentacle/tcl_blender.py#L2196)
-- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1356)
+- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1427)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 
-- `blendertk` — [`set_resolution`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L157)
-- `extapps` — [`set_resolution`](extapps/substance_workflow/bake_utils.py#L350)
+- `blendertk` — [`set_resolution`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L158)
+- `extapps` — [`set_resolution`](extapps/substance_workflow/bake_utils.py#L349)
 - `extapps` — [`set_resolution`](extapps/substance_workflow/texture_set_utils.py#L21)
 - `mayatk` — [`set_resolution`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L158)
 
 ### `start_plugin` — blendertk, extapps, mayatk
 
-- `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L73)
-- `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L107)
+- `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L74)
+- `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L108)
 - `mayatk` — [`start_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L74)
 
 ---

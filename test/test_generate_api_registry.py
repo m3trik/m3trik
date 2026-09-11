@@ -619,5 +619,417 @@ class TestCheckGateOnFixtureTree(unittest.TestCase):
         self.assertIn("API_SHADOWS.md", err)
 
 
+def _member(owner: str, name: str) -> "g.SymbolRecord":
+    return g.SymbolRecord(
+        name=name,
+        qualname=f"{owner}.{name}",
+        kind="method",
+        signature="(self)",
+        summary="",
+        line=1,
+    )
+
+
+class TestHoistIsMovedNotRemoved(unittest.TestCase):
+    """Hoisting a member onto a base must not read as a removal.
+
+    The registry records a member at its DEFINING class, so moving one to a
+    base changed its key and the diff called it removed even though the
+    subclass still resolves it. Measured three times: 4 false entries in
+    `blendertk/API_CHANGES.md` (2026-09-01) and 9 in `mayatk` (2026-09-08),
+    every one still resolvable.
+
+    The damage is not the noise. The repo's own rule turns a removal into
+    alias-plus-minor-bump work, so a false positive either buys a deprecation
+    cycle nobody owed or teaches reviewers that Removed is noise -- which is
+    exactly how a REAL removal gets waved through.
+    """
+
+    def _prior(self, pkg):
+        return json.loads(json.dumps(asdict(pkg)))
+
+    def test_a_member_hoisted_to_a_base_is_reported_as_moved(self):
+        sub = _cls("SubstanceBridgeSlots")
+        sub.members = [_member("SubstanceBridgeSlots", "select_bake_source")]
+        before = _pkg("blendertk", [_mod("mat_utils/slots.py", [sub])])
+
+        base = _cls("BlenderBridgeSlotsBase")
+        base.members = [_member("BlenderBridgeSlotsBase", "select_bake_source")]
+        moved_sub = g.ClassEntry(
+            name="SubstanceBridgeSlots",
+            summary="",
+            line=1,
+            bases=["BlenderBridgeSlotsBase"],
+            members=[],
+        )
+        after = _pkg(
+            "blendertk",
+            [
+                _mod("mat_utils/bridge_slots_base.py", [base]),
+                _mod("mat_utils/slots.py", [moved_sub]),
+            ],
+        )
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertNotIn("## Removed", md, f"a hoist was reported as a removal:\n{md}")
+        self.assertIn("## Moved", md)
+        self.assertIn("select_bake_source", md)
+
+    def test_a_class_re_exported_from_another_module_is_moved_not_removed(self):
+        """The 2026-09-08 shape: a module-level CLASS moved packages.
+
+        `mayatk.PlayblastExporter`'s dataclasses were hoisted to pythontk and
+        re-exported by name, and all three read as removed.
+        """
+        before = _pkg(
+            "mayatk", [_mod("anim_utils/playblast.py", [_cls("ExportTarget")])]
+        )
+        after = _pkg("mayatk", [_mod("anim_utils/sequence.py", [_cls("ExportTarget")])])
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertNotIn(
+            "## Removed", md, f"a re-export was reported as removed:\n{md}"
+        )
+        self.assertIn("## Moved", md)
+
+    def test_a_REAL_removal_is_still_reported(self):
+        """The guard must not forgive everything -- that is the whole risk."""
+        gone = _cls("Slots")
+        gone.members = [_member("Slots", "deleted_method")]
+        before = _pkg("mayatk", [_mod("a.py", [gone])])
+        after = _pkg("mayatk", [_mod("a.py", [_cls("Slots")])])
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertIn("## Removed", md, f"a real removal was swallowed:\n{md}")
+        self.assertIn("deleted_method", md)
+
+    def test_a_base_outside_the_package_does_not_forgive_its_members(self):
+        """Only bases recorded in THIS package can resolve a member.
+
+        An unresolvable base must leave the member in Removed rather than being
+        silently forgiven, or a genuine deletion under a foreign base vanishes.
+        """
+        sub = _cls("Panel")
+        sub.members = [_member("Panel", "on_show")]
+        before = _pkg("mayatk", [_mod("a.py", [sub])])
+        after_sub = g.ClassEntry(
+            name="Panel", summary="", line=1, bases=["QtWidgets.QWidget"], members=[]
+        )
+        after = _pkg("mayatk", [_mod("a.py", [after_sub])])
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertIn("## Removed", md)
+        self.assertIn("on_show", md)
+
+
+class TestANamesakeDoesNotForgiveARemoval(unittest.TestCase):
+    """A same-named class in ANOTHER module must not excuse a removal.
+
+    Bases are recorded by simple name, so resolution has to match on simple
+    name -- but ownership must not. `mayatk` and `blendertk` each carry five
+    classes called `Parameters` (one per bridge: blender, unity, marmoset,
+    substance, rizom) plus paired `Installer` / `OpRegistry` / `RpcPlugin` /
+    `MainThreadMarshaller` across the two RPC plugin trees. Merging every
+    namesake into one member set means deleting `affix_parts` from the
+    substance bridge is forgiven by the blender bridge's copy, and a real
+    removal is waved through -- the exact failure the Moved split exists to
+    avoid making easier.
+    """
+
+    def _prior(self, pkg):
+        return json.loads(json.dumps(asdict(pkg)))
+
+    def _bridges(self, substance_members):
+        """The real shape: five `Parameters`, only two of which share a member."""
+        blender = _cls("Parameters")
+        blender.members = [
+            _member("Parameters", "affix_parts"),
+            _member("Parameters", "defaults"),
+        ]
+        substance = _cls("Parameters")
+        substance.members = [_member("Parameters", m) for m in substance_members]
+        return [
+            _mod("env_utils/blender_bridge/parameters.py", [blender]),
+            _mod("mat_utils/substance_bridge/parameters.py", [substance]),
+        ]
+
+    def test_a_member_deleted_from_one_bridge_is_still_reported(self):
+        before = _pkg("mayatk", self._bridges(["affix_parts", "defaults"]))
+        after = _pkg("mayatk", self._bridges(["defaults"]))
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertIn(
+            "## Removed",
+            md,
+            f"a namesake in another module forgave a real removal:\n{md}",
+        )
+        self.assertIn("mat_utils/substance_bridge/parameters.py", md)
+
+    def test_a_class_deleted_while_namesakes_remain_is_still_reported(self):
+        """The same hole one level up: the NAME surviving is not the class surviving."""
+        before = _pkg("mayatk", self._bridges(["defaults"]))
+        after = _pkg("mayatk", self._bridges(["defaults"])[:1])
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertIn(
+            "## Removed",
+            md,
+            f"four surviving namesakes forgave a deleted class:\n{md}",
+        )
+        self.assertIn("mat_utils/substance_bridge/parameters.py::Parameters", md)
+
+    def test_a_base_shared_by_two_rpc_trees_resolves_within_its_own_tree(self):
+        """`_rpc_core.py` is duplicated per bridge; each must resolve locally.
+
+        Both trees define `OpRegistry(_OpRegistryInternal)`. Hoisting a member
+        onto the substance tree's base must be forgiven from the substance
+        subclass -- and matching a base by bare name has to reach the copy in
+        the same module, not an arbitrary one.
+        """
+        sub_path = "mat_utils/substance_bridge/.../plugin_src/_rpc_core.py"
+        mar_path = "mat_utils/marmoset_bridge/.../plugin_src/_rpc_core.py"
+
+        def tree(path, hoisted):
+            base = _cls("_OpRegistryInternal")
+            reg = g.ClassEntry(
+                name="OpRegistry",
+                summary="",
+                line=1,
+                bases=["_OpRegistryInternal"],
+                members=[],
+            )
+            (base if hoisted else reg).members = [_member("OpRegistry", "describe")]
+            if hoisted:
+                base.members = [_member("_OpRegistryInternal", "describe")]
+            return _mod(path, [base, reg])
+
+        before = _pkg("mayatk", [tree(sub_path, False), tree(mar_path, False)])
+        after = _pkg("mayatk", [tree(sub_path, True), tree(mar_path, False)])
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertNotIn(
+            "## Removed", md, f"a hoist within one tree read as removed:\n{md}"
+        )
+        self.assertIn("## Moved", md)
+
+
+class TestACrossPackageHoistIsMoved(unittest.TestCase):
+    """The measured mayatk case: the base lives in ANOTHER ecosystem package.
+
+    On 2026-09-08 the host-independent half of `PlayblastExporter` was hoisted
+    to `pythontk.SequenceExporter` and all nine symbols read as removed. Every
+    one is still reachable from the same import path -- four as inherited
+    methods, and the three dataclasses because the module re-exports them by
+    name (`from pythontk import CaptureResult, ExportResult, ExportTarget`).
+    Resolving only within the package leaves this, the largest of the three
+    measured instances, entirely unfixed.
+
+    Both inputs are passed in rather than read off disk, so the diff of a fake
+    package cannot reach the real registries.
+    """
+
+    def _prior(self, pkg):
+        return json.loads(json.dumps(asdict(pkg)))
+
+    def test_a_base_in_a_sibling_package_resolves_its_members(self):
+        exporter = _cls("PlayblastExporter")
+        exporter.members = [
+            _member("PlayblastExporter", "export"),
+            _member("PlayblastExporter", "capture_still"),
+        ]
+        before = _pkg("mayatk", [_mod("anim_utils/playblast_exporter.py", [exporter])])
+
+        hoisted = g.ClassEntry(
+            name="PlayblastExporter",
+            summary="",
+            line=1,
+            bases=["ptk.SequenceExporter"],
+            members=[_member("PlayblastExporter", "capture_still")],
+        )
+        after = _pkg("mayatk", [_mod("anim_utils/playblast_exporter.py", [hoisted])])
+
+        md = g.emit_changes_markdown(
+            after, self._prior(before), foreign_members={"SequenceExporter": {"export"}}
+        )
+        self.assertNotIn(
+            "## Removed", md, f"a cross-package hoist read as a removal:\n{md}"
+        )
+        self.assertIn("## Moved", md)
+        self.assertIn("PlayblastExporter.export", md)
+
+    def test_a_class_the_module_still_re_exports_is_moved(self):
+        """`from pythontk import ExportTarget` keeps the old path importable."""
+        relpath = "anim_utils/playblast_exporter.py"
+        before = _pkg("mayatk", [_mod(relpath, [_cls("ExportTarget")])])
+        after = _pkg("mayatk", [_mod(relpath, [])])
+
+        md = g.emit_changes_markdown(
+            after, self._prior(before), reexports={relpath: {"ExportTarget"}}
+        )
+        self.assertNotIn(
+            "## Removed", md, f"a re-exported class read as a removal:\n{md}"
+        )
+        self.assertIn("## Moved", md)
+
+    def test_a_member_of_a_re_exported_owner_resolves_in_the_sibling(self):
+        """`CaptureResult.pattern`: the OWNER left, the member went with it.
+
+        The class is re-exported so the old path still resolves, which means
+        its members do too -- but they have to be looked up in the package that
+        now defines the class, not in this one.
+        """
+        relpath = "anim_utils/playblast_exporter.py"
+        owner = _cls("CaptureResult")
+        owner.members = [_member("CaptureResult", "pattern")]
+        before = _pkg("mayatk", [_mod(relpath, [owner])])
+        after = _pkg("mayatk", [_mod(relpath, [])])
+
+        md = g.emit_changes_markdown(
+            after,
+            self._prior(before),
+            foreign_members={"CaptureResult": {"pattern"}},
+            reexports={relpath: {"CaptureResult"}},
+        )
+        self.assertNotIn(
+            "## Removed", md, f"a re-exported owner's member read as removed:\n{md}"
+        )
+        self.assertIn("CaptureResult.pattern", md)
+
+    def test_an_unlisted_sibling_name_is_still_removed(self):
+        """The foreign map is a whitelist, not a blanket pardon."""
+        exporter = _cls("PlayblastExporter")
+        exporter.members = [_member("PlayblastExporter", "deleted_method")]
+        before = _pkg("mayatk", [_mod("a.py", [exporter])])
+        after_cls = g.ClassEntry(
+            name="PlayblastExporter",
+            summary="",
+            line=1,
+            bases=["ptk.SequenceExporter"],
+            members=[],
+        )
+        after = _pkg("mayatk", [_mod("a.py", [after_cls])])
+
+        md = g.emit_changes_markdown(
+            after, self._prior(before), foreign_members={"SequenceExporter": {"export"}}
+        )
+        self.assertIn("## Removed", md, f"a real removal was swallowed:\n{md}")
+        self.assertIn("deleted_method", md)
+
+    def test_a_re_export_in_a_DIFFERENT_module_does_not_forgive(self):
+        """The old import path is what consumers hold -- another module is not it."""
+        before = _pkg(
+            "mayatk", [_mod("a.py", [_cls("ExportTarget")]), _mod("b.py", [])]
+        )
+        after = _pkg("mayatk", [_mod("a.py", []), _mod("b.py", [])])
+
+        md = g.emit_changes_markdown(
+            after, self._prior(before), reexports={"b.py": {"ExportTarget"}}
+        )
+        self.assertIn("## Removed", md, f"a foreign module's import forgave it:\n{md}")
+
+
+class TestModuleConstantsAreTracked(unittest.TestCase):
+    """A public module constant is public API and must diff like one.
+
+    The release that removed `cli.DEFAULT_HOST` and `cli.DEFAULT_USER` read as
+    purely ADDITIVE, because the walk collected classes and functions only. The
+    repo's rule keys alias-plus-minor-bump work off exactly that diff, so a
+    removal nothing reports is a removal nobody handles.
+    """
+
+    @staticmethod
+    def _walk(src: str):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            f = root / "m.py"
+            f.write_text(src, encoding="utf-8")
+            return g._walk_module(f, root)
+
+    def _prior(self, pkg):
+        return json.loads(json.dumps(asdict(pkg)))
+
+    def test_public_all_caps_are_collected_and_private_ones_are_not(self):
+        mod = self._walk(
+            "DEFAULT_HOST = 'localhost'\n"
+            "DEFAULT_PORT: int = 4434\n"
+            "_PRIVATE_CACHE = {}\n"
+            "lowercase_default = 1\n"
+            "class Keep:\n"
+            "    INNER_CONSTANT = 2\n"
+        )
+        names = {c.name for c in mod.constants}
+        self.assertEqual({"DEFAULT_HOST", "DEFAULT_PORT"}, names)
+
+    def test_a_module_of_only_constants_is_still_recorded(self):
+        """Previously such a module vanished entirely -- no funcs, no classes."""
+        mod = self._walk("MAX_RETRIES = 3\n")
+        self.assertIsNotNone(mod)
+        self.assertEqual(["MAX_RETRIES"], [c.name for c in mod.constants])
+
+    def _pkg_with(self, *names):
+        mod = _mod("cli.py", [])
+        mod.constants = [
+            g.SymbolRecord(
+                name=n, qualname=n, kind="constant", signature="", summary="", line=1
+            )
+            for n in names
+        ]
+        return _pkg("pythontk", [mod])
+
+    def test_a_removed_constant_is_reported(self):
+        before = self._pkg_with("DEFAULT_HOST", "DEFAULT_USER", "TIMEOUT")
+        after = self._pkg_with("TIMEOUT")
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertIn("## Removed", md, f"a removed constant went unreported:\n{md}")
+        self.assertIn("DEFAULT_HOST", md)
+        self.assertIn("DEFAULT_USER", md)
+
+    def test_a_new_constant_is_reported_once_the_baseline_tracks_them(self):
+        before = self._pkg_with("TIMEOUT")
+        after = self._pkg_with("TIMEOUT", "RETRIES")
+
+        md = g.emit_changes_markdown(after, self._prior(before))
+        self.assertIn("## Added", md)
+        self.assertIn("RETRIES", md)
+
+    def test_a_baseline_predating_the_field_does_not_report_653_additions(self):
+        """The upgrade itself must not flood one release's diff.
+
+        653 constants become visible across the seven packages the moment this
+        lands. Reporting them all as Added would bury that release's real
+        changes -- the same "teach reviewers to skim" failure this entry is
+        about -- so a baseline with no `constants` recorded ANYWHERE is treated
+        as predating the field, and only removals and signature changes are
+        reported for that one diff.
+        """
+        after = self._pkg_with("TIMEOUT", "RETRIES")
+        prior = self._prior(self._pkg_with("TIMEOUT"))
+        for mod in prior["modules"]:  # a sidecar written before constants existed
+            mod.pop("constants", None)
+
+        md = g.emit_changes_markdown(after, prior)
+        self.assertNotIn("RETRIES", md, f"the upgrade flooded the diff:\n{md}")
+
+    def test_a_pre_field_baseline_still_reports_class_changes_both_ways(self):
+        """Suppression is scoped to added CONSTANTS, not to the whole diff.
+
+        The risk it guards against is the opposite of the one it creates: an
+        upgrade rule that quietly swallowed the release's genuine additions
+        would be worse than the flood it prevents.
+        """
+        before = _pkg("pythontk", [_mod("cli.py", [_cls("Gone")])])
+        after = _pkg("pythontk", [_mod("cli.py", [_cls("Fresh")])])
+        prior = self._prior(before)
+        for mod in prior["modules"]:
+            mod.pop("constants", None)
+
+        md = g.emit_changes_markdown(after, prior)
+        self.assertIn("## Removed", md, f"suppression swallowed a class:\n{md}")
+        self.assertIn("Gone", md)
+        self.assertIn("## Added", md, f"suppression swallowed an addition:\n{md}")
+        self.assertIn("Fresh", md)
+
+
 if __name__ == "__main__":
     unittest.main()

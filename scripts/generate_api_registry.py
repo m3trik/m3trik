@@ -142,6 +142,11 @@ class ModuleEntry:
     summary: str
     functions: list[SymbolRecord] = field(default_factory=list)
     classes: list[ClassEntry] = field(default_factory=list)
+    # Public module-level ALL_CAPS. They are importable public API and their
+    # removal is a breaking change, but the walk collected only classes and
+    # functions, so dropping `cli.DEFAULT_HOST` / `DEFAULT_USER` read as a
+    # purely ADDITIVE release and skipped the alias-plus-minor-bump rule.
+    constants: list[SymbolRecord] = field(default_factory=list)
 
 
 @dataclass
@@ -360,6 +365,7 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
 
     funcs: list[SymbolRecord] = []
     classes: list[ClassEntry] = []
+    constants: list[SymbolRecord] = []
 
     # Every class in the module, so a public class can resolve members it
     # inherits from a private base declared alongside it.
@@ -386,6 +392,30 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                     deprecated=deprecated,
                 )
             )
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            # Only ALL_CAPS names: a module-level lowercase binding is a
+            # runtime detail (a logger, a compiled regex, a singleton), and
+            # recording those would bury the constants that ARE contract.
+            targets = (
+                [t for t in node.targets if isinstance(t, ast.Name)]
+                if isinstance(node, ast.Assign)
+                else [node.target]
+                if isinstance(node.target, ast.Name)
+                else []
+            )
+            for target in targets:
+                if not target.id.isupper() or not _is_public(target.id):
+                    continue
+                constants.append(
+                    SymbolRecord(
+                        name=target.id,
+                        qualname=target.id,
+                        kind="constant",
+                        signature="",
+                        summary="",
+                        line=node.lineno,
+                    )
+                )
         elif isinstance(node, ast.ClassDef):
             if not _is_public(node.name):
                 continue
@@ -406,9 +436,15 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                 )
             )
 
-    if not funcs and not classes:
+    if not funcs and not classes and not constants:
         return None
-    return ModuleEntry(relpath=relpath, summary=summary, functions=funcs, classes=classes)
+    return ModuleEntry(
+        relpath=relpath,
+        summary=summary,
+        functions=funcs,
+        classes=classes,
+        constants=constants,
+    )
 
 
 def _iter_py_files(root: Path) -> Iterable[Path]:
@@ -497,6 +533,9 @@ def emit_registry_markdown(pkg: PackageData) -> str:
             dep = " **DEPRECATED**" if fn.deprecated else ""
             summary = f" — {fn.summary}" if fn.summary else ""
             lines.append(f"- [`{fn.qualname}{fn.signature}`]({link}){dep}{summary}")
+        for const in mod.constants:
+            link = _src_link(pkg, mod.relpath, const.line)
+            lines.append(f"- [`{const.name}`]({link}) — constant")
         for cls in mod.classes:
             link = _src_link(pkg, mod.relpath, cls.line)
             base = f"({', '.join(cls.bases)})" if cls.bases else ""
@@ -534,6 +573,8 @@ def emit_symbol_index(pkg: PackageData) -> str:
         for fn in mod.functions:
             dep = " **DEPRECATED**" if fn.deprecated else ""
             lines.append(f"- `{fn.name}{fn.signature}`{dep}")
+        if mod.constants:
+            lines.append(f"- constants: {', '.join(c.name for c in mod.constants)}")
         for cls in mod.classes:
             base = f"({', '.join(cls.bases)})" if cls.bases else ""
             lines.append(f"- `class {cls.name}{base}`")
@@ -553,6 +594,7 @@ def _package_data_from_json(d: dict) -> PackageData:
     modules: list[ModuleEntry] = []
     for m in d.get("modules", []):
         funcs = [SymbolRecord(**f) for f in m.get("functions", [])]
+        consts = [SymbolRecord(**c) for c in m.get("constants", [])]
         classes = []
         for c in m.get("classes", []):
             members = [SymbolRecord(**mem) for mem in c.get("members", [])]
@@ -571,6 +613,7 @@ def _package_data_from_json(d: dict) -> PackageData:
                 summary=m.get("summary", ""),
                 functions=funcs,
                 classes=classes,
+                constants=consts,
             )
         )
     return PackageData(
@@ -663,6 +706,8 @@ def _flatten_signatures(pkg: PackageData) -> dict[str, str]:
         prefix = mod.relpath
         for fn in mod.functions:
             out[f"{prefix}::{fn.qualname}"] = fn.signature
+        for const in mod.constants:
+            out[f"{prefix}::{const.name}"] = "(constant)"
         for cls in mod.classes:
             out[f"{prefix}::{cls.name}"] = "(class)"
             for member in cls.members:
@@ -670,11 +715,199 @@ def _flatten_signatures(pkg: PackageData) -> dict[str, str]:
     return out
 
 
+def _class_index(
+    entries: "Iterable[tuple[str, str, list[str], set[str]]]",
+    foreign: dict[str, set[str]] | None = None,
+) -> tuple[dict[tuple[str, str], set[str]], dict[str, list[tuple[str, str]]]]:
+    """What each class STILL resolves, keyed by the module that defines it.
+
+    The registry records a member at its DEFINING class, so hoisting a method
+    onto a base reads as a removal from the subclass even though the subclass
+    still resolves it. Measured three times -- 4 entries on `blendertk`
+    (2026-09-01), 9 on `mayatk` (2026-09-08) -- and the damage is not the noise
+    itself: the repo's own rule turns a removal into alias-plus-minor-bump
+    work, so a false positive either buys a deprecation cycle nobody owed or
+    teaches reviewers that the Removed section is noise, which is exactly how a
+    REAL removal gets waved through.
+
+    Ownership is keyed by ``(module, class name)``, never by bare name: each
+    DCC package carries five classes called `Parameters` (one per bridge) and
+    paired `Installer` / `OpRegistry` / `RpcPlugin` / `MainThreadMarshaller`
+    across two RPC plugin trees, so merging namesakes would let a deletion from
+    one bridge be excused by another -- reintroducing the same waved-through
+    removal from the other direction.
+
+    Bases must still match on simple name, because that is all the registry
+    records for them. A base in the SAME module wins; then a name unique
+    package-wide; then ``foreign``, for bases that live in a sibling ecosystem
+    package (`ptk.SequenceExporter`). An ambiguous base, or one nothing can
+    resolve, is left alone so its members stay reported as removed rather than
+    being silently forgiven.
+
+    Parameters:
+        entries: ``(module relpath, class name, base names, member names)``.
+        foreign: ``{class name: members it resolves}`` from sibling packages.
+
+    Returns:
+        ``({(module, class): {member names it resolves}}, {class name: [keys]})``.
+    """
+    foreign = foreign or {}
+    own: dict[tuple[str, str], set[str]] = {}
+    bases: dict[tuple[str, str], list[str]] = {}
+    by_name: dict[str, list[tuple[str, str]]] = {}
+    for relpath, name, base_names, members in entries:
+        key = (relpath, name)
+        own.setdefault(key, set()).update(members)
+        bases.setdefault(key, []).extend(b.split(".")[-1] for b in base_names)
+        by_name.setdefault(name, []).append(key)
+
+    def walk(key: tuple[str, str], seen: set) -> set[str]:
+        if key in seen:  # a cycle in recorded bases must not hang the diff
+            return set()
+        seen.add(key)
+        out = set(own.get(key, ()))
+        relpath = key[0]
+        for base in bases.get(key, ()):
+            if (relpath, base) in own:
+                target = (relpath, base)  # a sibling in the same module wins
+            else:
+                candidates = by_name.get(base, ())
+                target = candidates[0] if len(candidates) == 1 else None
+            if target is not None:
+                out |= walk(target, seen)
+            else:
+                out |= foreign.get(base, set())
+        return out
+
+    return {key: walk(key, set()) for key in own}, by_name
+
+
+def _pkg_class_entries(
+    pkg: PackageData,
+) -> "Iterable[tuple[str, str, list[str], set[str]]]":
+    """`_class_index` entries for a walked package."""
+    for mod in pkg.modules:
+        for cls in mod.classes:
+            yield (
+                mod.relpath,
+                cls.name,
+                list(cls.bases or []),
+                {m.qualname.split(".")[-1] for m in cls.members},
+            )
+
+
+def _json_class_entries(
+    data: dict,
+) -> "Iterable[tuple[str, str, list[str], set[str]]]":
+    """`_class_index` entries for a registry sidecar read off disk."""
+    for mod in data.get("modules", []):
+        for cls in mod.get("classes", []):
+            yield (
+                mod["relpath"],
+                cls["name"],
+                list(cls.get("bases") or []),
+                {m["qualname"].split(".")[-1] for m in cls.get("members", [])},
+            )
+
+
+def sibling_class_members(
+    exclude: str,
+    repo_root: Path = REPO_ROOT,
+    packages: tuple = ECOSYSTEM_PACKAGES,
+) -> dict[str, set[str]]:
+    """``{class name: members it resolves}`` for the OTHER ecosystem packages.
+
+    A base can live one layer down the chain -- `mayatk.PlayblastExporter`
+    derives from `ptk.SequenceExporter` -- and that is the shape of the largest
+    measured false-removal batch, so resolving only within the package leaves
+    it unfixed. Read from the committed sidecars rather than re-walking: they
+    are the same source the diff itself compares against, and it keeps this
+    cheap enough to run per package.
+
+    A name carried by more than one sibling with differing members is DROPPED,
+    not merged. Nothing resolving is the safe direction: the member stays in
+    Removed, where a human sees it.
+    """
+    seen: dict[str, set[str]] = {}
+    ambiguous: set[str] = set()
+    for name in packages:
+        if name == exclude:
+            continue
+        path = repo_root / name / "API_REGISTRY.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue  # no readable sidecar: its bases simply stay unresolved
+        resolved, _ = _class_index(_json_class_entries(data))
+        for (_, cls_name), members in resolved.items():
+            if cls_name in seen and seen[cls_name] != members:
+                ambiguous.add(cls_name)
+            seen.setdefault(cls_name, set()).update(members)
+    for name in ambiguous:
+        seen.pop(name, None)
+    return seen
+
+
+def module_reexports(
+    source_root: Path, relpaths: "Iterable[str]"
+) -> dict[str, set[str]]:
+    """``{module relpath: names it imports}`` for the given modules.
+
+    A hoisted class is usually re-exported from its old home so the import path
+    consumers hold keeps working -- `playblast_exporter.py` does exactly this
+    for `CaptureResult`, `ExportResult` and `ExportTarget`. The registry walks
+    definitions, not imports, so without this the re-export is invisible and a
+    still-importable name reads as removed.
+
+    Only the modules that actually lost a symbol are parsed, so this costs a
+    handful of files rather than the whole tree.
+    """
+    out: dict[str, set[str]] = {}
+    for relpath in relpaths:
+        path = source_root / relpath
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        names: set[str] = set()
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                names.update(a.asname or a.name.split(".")[0] for a in node.names)
+        if names:
+            out[relpath] = names
+    return out
+
+
+def _relpaths_losing_symbols(pkg: PackageData, prior_json: dict | None) -> set[str]:
+    """Modules whose recorded symbols shrank -- the only ones worth reparsing."""
+    if not prior_json:
+        return set()
+    live = _flatten_signatures(pkg)
+    return {
+        key.split("::", 1)[0]
+        for key in (
+            set(_flatten_signatures(_package_data_from_json(prior_json))) - set(live)
+        )
+    }
+
+
 def emit_changes_markdown(
     pkg: PackageData,
     prior_json: dict | None,
     baseline_label: str = "prior baseline",
+    foreign_members: dict[str, set[str]] | None = None,
+    reexports: dict[str, set[str]] | None = None,
 ) -> str:
+    """Render the public-API delta against a prior registry sidecar.
+
+    Parameters:
+        foreign_members: ``{class name: members it resolves}`` for bases that
+            live in a sibling ecosystem package (`sibling_class_members`).
+        reexports: ``{module relpath: names it imports}``, so a class hoisted
+            elsewhere and re-exported from its old home is not read as removed
+            (`module_reexports`). Both are passed IN rather than read off disk
+            so that diffing a synthetic package cannot reach the real tree.
+    """
     new = _flatten_signatures(pkg)
     if prior_json is None:
         return (
@@ -689,6 +922,8 @@ def emit_changes_markdown(
         prefix = mod["relpath"]
         for fn in mod.get("functions", []):
             prior[f"{prefix}::{fn['qualname']}"] = fn["signature"]
+        for const in mod.get("constants", []):
+            prior[f"{prefix}::{const['name']}"] = "(constant)"
         for cls in mod.get("classes", []):
             prior[f"{prefix}::{cls['name']}"] = "(class)"
             for member in cls.get("members", []):
@@ -696,12 +931,59 @@ def emit_changes_markdown(
 
     added = sorted(set(new) - set(prior))
     removed = sorted(set(prior) - set(new))
+    if not any("constants" in m for m in prior_json.get("modules", [])):
+        # This baseline predates constant tracking, so every constant in the
+        # package would read as new: 653 of them across the seven packages,
+        # burying that release's real changes under an upgrade artefact. The
+        # test suppresses only ADDITIONS and only on this one diff -- the next
+        # baseline records the field, and removals are never suppressed.
+        added = [k for k in added if new[k] != "(constant)"]
     changed = sorted(k for k in set(new) & set(prior) if new[k] != prior[k])
+
+    # A symbol that MOVED is not a symbol that went away. Split the removals:
+    # a member the class still resolves through a base, or a class that turns
+    # up ADDED in another module, is reported as moved instead. Anything
+    # unresolved stays in Removed, so a real removal still fires the
+    # alias-plus-minor-bump rule.
+    foreign_members = foreign_members or {}
+    reexports = reexports or {}
+    resolved, by_name = _class_index(_pkg_class_entries(pkg), foreign_members)
+    # A class only counts as moved if it actually appeared somewhere new. Its
+    # name merely surviving proves nothing -- five bridges ship a `Parameters`.
+    reappeared = {key.split("::", 1)[1] for key in added if new.get(key) == "(class)"}
+    moved: list[str] = []
+    still_removed: list[str] = []
+    for key in removed:
+        relpath, symbol = key.split("::", 1)
+        parts = symbol.split(".")
+        if len(parts) >= 2:
+            owner, member = parts[-2], parts[-1]
+            names = resolved.get((relpath, owner))
+            if names is None and owner in reexports.get(relpath, ()):
+                # The owner moved out but the module still imports it, so the
+                # old path resolves; ask the package that now defines it.
+                names = foreign_members.get(owner)
+            if names is None:
+                # The class left this module too; follow it only when its name
+                # is unambiguous package-wide.
+                candidates = by_name.get(owner, ())
+                names = resolved[candidates[0]] if len(candidates) == 1 else set()
+            gone = member not in names
+        else:
+            # A module-level class that turned up elsewhere in the package, or
+            # that this very module still re-exports. A module-level FUNCTION
+            # is never forgiven -- its import path really did change.
+            gone = not (
+                prior.get(key) == "(class)"
+                and (symbol in reappeared or symbol in reexports.get(relpath, ()))
+            )
+        (still_removed if gone else moved).append(key)
+    removed = still_removed
 
     lines = [f"# {pkg.name} — API Changes", ""]
     lines.append(f"_Diff vs {baseline_label}._")
     lines.append("")
-    if not (added or removed or changed):
+    if not (added or removed or changed or moved):
         lines.append(f"No public API changes since {baseline_label}.")
         return "\n".join(lines) + "\n"
 
@@ -718,6 +1000,19 @@ def emit_changes_markdown(
         for key in added:
             mod, sym = key.split("::", 1)
             lines.append(f"- `{mod}::{sym}{new[key]}`")
+        lines.append("")
+    if moved:
+        lines.append(f"## Moved ({len(moved)})")
+        lines.append("")
+        lines.append(
+            "_Still resolvable at the same call site -- hoisted to a base class "
+            "or re-exported from another module. NOT a removal: no alias or "
+            "minor bump is owed._"
+        )
+        lines.append("")
+        for key in moved:
+            mod, sym = key.split("::", 1)
+            lines.append(f"- `{mod}::{sym}`")
         lines.append("")
     if changed:
         lines.append(f"## Signature changed ({len(changed)})")
@@ -967,7 +1262,14 @@ def regenerate(
             )
             targets[pkg_dir / "API_REGISTRY.json"] = registry_json + "\n"
             targets[pkg_dir / "API_CHANGES.md"] = emit_changes_markdown(
-                data, prior, baseline_label
+                data,
+                prior,
+                baseline_label,
+                foreign_members=sibling_class_members(data.name, repo_root),
+                reexports=module_reexports(
+                    repo_root / data.source_root,
+                    _relpaths_losing_symbols(data, prior),
+                ),
             )
 
         for path, content in targets.items():
@@ -1066,7 +1368,9 @@ def regenerate(
     if not check_only:
         total_modules = sum(len(p.modules) for p in packages)
         total_symbols = sum(
-            len(m.functions) + sum(1 + len(c.members) for c in m.classes)
+            len(m.functions)
+            + len(m.constants)
+            + sum(1 + len(c.members) for c in m.classes)
             for p in packages
             for m in p.modules
         )

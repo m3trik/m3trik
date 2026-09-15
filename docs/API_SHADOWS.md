@@ -26,7 +26,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L336)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L188)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
 ### `Finding` — mayatk, pythontk
@@ -69,7 +69,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
-- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L366)
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L381)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
@@ -114,7 +114,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L334)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L364)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L271)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -174,7 +174,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L538)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L826)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L154)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L539)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L563)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L225)
 - `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L662)

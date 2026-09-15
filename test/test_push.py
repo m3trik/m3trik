@@ -1372,6 +1372,9 @@ class TestPushScriptRegressions(unittest.TestCase):
         "",
         ":prcreate",
         'if exist "%HERE%pr_create_fails" exit /b 1',
+        # The real gh narrates on stderr ("Creating pull request for dev into
+        # main...") beside the URL on stdout; a marker file makes the shim do so.
+        'if exist "%HERE%pr_create_stderr" echo Creating pull request for dev into main 1>&2',
         'type "%HERE%pr_create.txt"',
         "exit /b 0",
         "",
@@ -2315,6 +2318,25 @@ class TestPushScriptRegressions(unittest.TestCase):
                 'Write-Output "RESULT=$ok"\n',
             )
             self.assertIn("RESULT=False", result.stdout, result.stdout + result.stderr)
+
+    def test_the_release_pr_number_is_read_from_gh_output_that_also_hit_stderr(self):
+        """``gh pr create`` narrates on stderr, so ``2>&1`` captures an ARRAY.
+
+        ``-match`` on an array filters it and never sets ``$Matches``, so reading
+        the number threw and only the ``pr list`` fallback found the PR; with no
+        open PR listed (a slow API) the release had no PR at all.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            env = self._install_fake_gh(root, "[]")
+            (root / "_bin" / "pr_create_stderr").write_text("", encoding="ascii")
+            result = self._run_push_functions(
+                root,
+                "$n = Ensure-ReleasePR 'm3trik/pythontk' 'pythontk'\n"
+                'Write-Output "RESULT=$n"\n',
+                env=env,
+            )
+            self.assertIn("RESULT=7", result.stdout, result.stdout + result.stderr)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_release_notes_keep_non_ascii_on_an_oem_console(self):

@@ -1128,8 +1128,10 @@ function Ensure-ReleasePR {
         return $null
     }
 
-    # Parse PR number from URL
-    if ($createOut -match "/pull/(?<num>\d+)") {
+    # Parse PR number from URL. gh narrates on stderr, so `2>&1` captured an ARRAY,
+    # and -match on an array filters it without ever setting $Matches: match the
+    # joined text instead.
+    if (($createOut | Out-String) -match "/pull/(?<num>\d+)") {
         return [int]$Matches["num"]
     }
 

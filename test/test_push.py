@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import date, timedelta
 from pathlib import Path
 import unittest
 
@@ -1327,8 +1328,10 @@ class TestPushScriptRegressions(unittest.TestCase):
     # from sibling files so each test can pick a scenario without rewriting the
     # shim; a NUMBERED file (`pr_gates.2.json`) answers the Nth call of that
     # probe, so a test can script "pending for two polls, then red". Every call
-    # is appended to gh_calls.log. `release create` copies the --notes-file at
-    # call time, because push.ps1 deletes the temp file in `finally`.
+    # is appended to gh_calls.log. `release create` copies the --notes-file, and
+    # `release upload` its file (into _bin/uploads), at call time, because
+    # push.ps1 deletes both temp files in `finally`. `release view` of an existing
+    # Release prints release_assets.json when present: the asset list gh reports.
     # .cmd + CRLF: cmd.exe rejects LF-only batch files, and PATHEXT resolution
     # makes `gh` find it from PowerShell.
     _GH_SHIM_LINES = [
@@ -1395,7 +1398,9 @@ class TestPushScriptRegressions(unittest.TestCase):
         "",
         ":release",
         'if "%2"=="view" (',
-        '  if exist "%HERE%release_exists" exit /b 0',
+        '  if exist "%HERE%release_exists" goto :releaseview',
+        # A plain `exit /b 1`: `if not exist ... exit /b 1` inside this block
+        # reached PowerShell as exit code 0 (measured), i.e. "Release exists".
         "  exit /b 1",
         ")",
         'if "%2"=="create" (',
@@ -1403,6 +1408,16 @@ class TestPushScriptRegressions(unittest.TestCase):
         '  >"%HERE%release_exists" echo 1',
         "  exit /b 0",
         ")",
+        # `release upload <tag> <file> --repo <slug>`: %~4 is the file.
+        'if "%2"=="upload" (',
+        '  if not exist "%HERE%uploads" mkdir "%HERE%uploads"',
+        '  copy /y "%~4" "%HERE%uploads\\%~nx4" >nul',
+        "  exit /b 0",
+        ")",
+        "exit /b 0",
+        "",
+        ":releaseview",
+        'if exist "%HERE%release_assets.json" type "%HERE%release_assets.json"',
         "exit /b 0",
         "",
         ":runlist",
@@ -1449,6 +1464,50 @@ class TestPushScriptRegressions(unittest.TestCase):
     def _gh_calls(self, root: Path) -> str:
         log = root / "_bin" / "gh_calls.log"
         return log.read_text(encoding="ascii", errors="replace") if log.exists() else ""
+
+    def _run_push_functions(self, root: Path, body: str, env=None, timeout=120):
+        """Run PowerShell *body* with every push.ps1 function defined.
+
+        push.ps1 is a script -- a param block, then a main body that releases --
+        so it cannot be dot-sourced the way common.ps1 is. Its function
+        definitions are lifted from the parser's AST instead, which defines them
+        without executing a line of the main body, and *body* calls one
+        directly: the only way to hand a single function a crafted input (a
+        synthetic diff, a Release in a given state). Script-scope settings the
+        functions read (``$RELEASE_ASSETS``, the ``-Skip*`` switches) stay unset
+        unless *body* sets them.
+        """
+        script = root / "_push_functions.ps1"
+        script.write_text(
+            f". '{M3TRIK_DIR / 'common.ps1'}'\n"
+            "$pushAst = [System.Management.Automation.Language.Parser]::ParseFile("
+            f"'{M3TRIK_DIR / 'push.ps1'}', [ref]$null, [ref]$null)\n"
+            "$isFunction = { param($node) $node -is "
+            "[System.Management.Automation.Language.FunctionDefinitionAst] }\n"
+            "foreach ($fn in $pushAst.FindAll($isFunction, $false)) {\n"
+            "    . ([scriptblock]::Create($fn.Extent.Text))\n"
+            "}\n" + body,
+            # Windows PowerShell reads a BOM-less script as the ANSI code page.
+            encoding="utf-8-sig",
+        )
+        return self._run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script),
+            ],
+            cwd=root,
+            timeout=timeout,
+            env=env,
+        )
+
+    def _commit_date(self, repo: Path, ref: str) -> str:
+        """*ref*'s commit date (YYYY-MM-DD): where push.ps1 cuts release notes."""
+        return self._git(repo, "log", "-1", "--format=%cs", ref).stdout.strip()
 
     def _pr_release_repo(self, root: Path):
         """A pythontk repo with a real dev delta and a github.com origin."""
@@ -2020,7 +2079,8 @@ class TestPushScriptRegressions(unittest.TestCase):
             (repo / "pythontk" / "__init__.py").write_text(
                 '__package__ = "pythontk"\n__version__ = "0.1.1"\n', encoding="utf-8"
             )
-            (repo / "CHANGELOG.md").write_text("# log\n\n- 0.1.1: the fix\n", encoding="utf-8")
+            entry = f"- **{self._commit_date(repo, 'v0.1.0')} -- the fix.**"
+            (repo / "CHANGELOG.md").write_text(f"# log\n\n{entry}\n", encoding="utf-8")
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-m", "Release 0.1.1")
             self._git(repo, "checkout", "main")
@@ -2040,7 +2100,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("Finalized a previously merged release", out)
             self.assertIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
             notes = (root / "_bin" / "release_notes.txt").read_text(encoding="utf-8")
-            self.assertIn("- 0.1.1: the fix", notes)
+            self.assertIn(entry, notes)
 
             # Idempotent: nothing left to do.
             again = self._run(self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env)
@@ -2061,7 +2121,8 @@ class TestPushScriptRegressions(unittest.TestCase):
             (repo / "pythontk" / "__init__.py").write_text(
                 '__package__ = "pythontk"\n__version__ = "0.1.1"\n', encoding="utf-8"
             )
-            (repo / "CHANGELOG.md").write_text("# log\n\n- 0.1.1: the fix\n", encoding="utf-8")
+            entry = f"- **{self._commit_date(repo, 'v0.1.0')} -- the fix.**"
+            (repo / "CHANGELOG.md").write_text(f"# log\n\n{entry}\n", encoding="utf-8")
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-m", "Release 0.1.1")
             self._git(repo, "checkout", "main")
@@ -2080,19 +2141,22 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertNotIn("Tagged", out)  # v0.1.1 already existed
             self.assertIn("GitHub Release v0.1.1 created", out)
             notes = (root / "_bin" / "release_notes.txt").read_text(encoding="utf-8")
-            self.assertIn("- 0.1.1: the fix", notes)
+            self.assertIn(entry, notes)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_release_notes_are_changelog_lines_since_previous_tag(self):
-        """The Release body is exactly the CHANGELOG lines added after the
+        """The Release body is exactly the CHANGELOG entries added after the
         previous v* tag -- computed from tags, so it works after the merge too
-        (the old origin/main..dev delta was empty the moment the PR landed)."""
+        (the old origin/main..dev delta was empty the moment the PR landed).
+        An old entry REWORDED since that tag is a `+` line too, and stays out."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
             self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
             self._git(repo, "checkout", "dev")
-            (repo / "CHANGELOG.md").write_text("# log\n\n- old entry\n", encoding="utf-8")
+            (repo / "CHANGELOG.md").write_text(
+                "# log\n\n- **2026-01-05 -- old entry naming a client.**\n", encoding="utf-8"
+            )
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-m", "old notes")
             self._git(repo, "checkout", "main")
@@ -2103,8 +2167,11 @@ class TestPushScriptRegressions(unittest.TestCase):
             self._git(repo, "tag", "-f", "-a", "v0.1.0", "-m", "v0.1.0")
             self._git(repo, "push", "-f", "origin", "v0.1.0")
             self._git(repo, "checkout", "dev")
+            new = f"- **{self._commit_date(repo, 'v0.1.0')} -- NEW:"
             (repo / "CHANGELOG.md").write_text(
-                "# log\n\n- NEW: the fix\n- NEW: the other fix\n- old entry\n", encoding="utf-8"
+                f"# log\n\n{new} the fix.**\n{new} the other fix.**\n"
+                "- **2026-01-05 -- old entry, neutralized.**\n",
+                encoding="utf-8",
             )
             (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
             self._git(repo, "add", "-A")
@@ -2121,9 +2188,370 @@ class TestPushScriptRegressions(unittest.TestCase):
             notes = (root / "_bin" / "release_notes.txt").read_text(encoding="utf-8")
             self.assertEqual(
                 [ln for ln in notes.splitlines() if ln.strip()],
-                ["- NEW: the fix", "- NEW: the other fix"],
+                [f"{new} the fix.**", f"{new} the other fix.**"],
                 out,
             )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_release_notes_leave_out_an_edited_old_entry(self):
+        """An old entry reworded since the previous tag is not republished.
+
+        `git diff v<prev>..origin/main -- CHANGELOG.md` shows an edited line as a
+        `+` line exactly like a new one, so neutralizing a name inside an entry
+        the previous release already shipped put that entry into the next
+        Release body. Notes are the added bullets dated on or after the previous
+        tag's commit date -- same-day included -- with the added lines that
+        continue them.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "main")
+            (repo / "CHANGELOG.md").write_text(
+                "# log\n\n## 2026\n\n"
+                "- **2026-01-05 -- an old entry that names a client (`a.py`).** Body.\n"
+                "  A continuation that names the client too.\n",
+                encoding="utf-8",
+            )
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "old notes")
+            self._git(repo, "tag", "-f", "-a", "v0.1.0", "-m", "v0.1.0")
+            tag_date = self._commit_date(repo, "v0.1.0")
+            later = (date.fromisoformat(tag_date) + timedelta(days=1)).isoformat()
+            expected = [
+                f"- **{later} -- a new entry (`b.py`).** Body.",
+                "",
+                "  **Detail.** A continuation paragraph.",
+                "  - a sub-bullet",
+                "",
+                f"- **{tag_date} -- an entry from the day of the previous tag (`c.py`).**",
+            ]
+            (repo / "CHANGELOG.md").write_text(
+                "# log\n\n## 2026\n\n"
+                + "\n".join(expected)
+                + "\n- **2026-01-05 -- an old entry, neutralized (`a.py`).** Body.\n"
+                "  A continuation, neutralized.\n",
+                encoding="utf-8",
+            )
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "new entries + neutralized history")
+            self._git(repo, "push", "origin", "main")
+            self._git(repo, "push", "-f", "origin", "v0.1.0")
+
+            notes = root / "notes.txt"
+            result = self._run_push_functions(
+                root,
+                f"$notes = Get-ReleaseNotes '{repo}' '0.1.1'\n"
+                f"[System.IO.File]::WriteAllText('{notes}', $notes, "
+                "(New-Object System.Text.UTF8Encoding $false))\n",
+            )
+            out = result.stdout + result.stderr
+            self.assertTrue(notes.exists(), out)
+            self.assertEqual(notes.read_text(encoding="utf-8").splitlines(), expected, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_the_public_hygiene_gate_stops_a_leak_and_passes_a_clean_tree(self):
+        """``Test-PublicHygiene`` runs ``scripts/check_public_hygiene.py`` over the
+        packages a run would publish, and is False on a denylisted identifier.
+
+        The denylist is synthetic on purpose: the real one is private and lives
+        outside every repo.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            denylist = root / "denylist.txt"
+            denylist.write_text("ZORK_?WIDGET\n", encoding="utf-8")
+            script = M3TRIK_DIR / "scripts" / "check_public_hygiene.py"
+            call = (
+                f"$ok = Test-PublicHygiene '{root}' @('pythontk') "
+                f"-Script '{script}' -Denylist '{denylist}'\n"
+                'Write-Output "RESULT=$ok"\n'
+            )
+            clean = self._run_push_functions(root, call)
+            self.assertIn("RESULT=True", clean.stdout, clean.stdout + clean.stderr)
+
+            (repo / "notes.md").write_text("see Zork_Widget here\n", encoding="utf-8")
+            leak = self._run_push_functions(root, call)
+            out = leak.stdout + leak.stderr
+            self.assertIn("RESULT=False", leak.stdout, out)
+            self.assertIn("notes.md", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_the_public_hygiene_gate_skips_a_private_repo_a_run_touches(self):
+        """``-All`` takes every git repo under the root, private ones too.
+
+        A private repo may name clients, so the gate is handed ``--public-only``
+        and scans only the repos its script lists as public.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            private, _ = self._init_dummy_repo(root, "unitytk", "0.1.0", [])
+            (private / "notes.md").write_text("see Zork_Widget here\n", encoding="utf-8")
+            denylist = root / "denylist.txt"
+            denylist.write_text("ZORK_?WIDGET\n", encoding="utf-8")
+            script = M3TRIK_DIR / "scripts" / "check_public_hygiene.py"
+            result = self._run_push_functions(
+                root,
+                f"$ok = Test-PublicHygiene '{root}' @('pythontk', 'unitytk') "
+                f"-Script '{script}' -Denylist '{denylist}'\n"
+                'Write-Output "RESULT=$ok"\n',
+            )
+            out = result.stdout + result.stderr
+            self.assertIn("RESULT=True", result.stdout, out)
+            self.assertIn("private", out)
+
+    def test_the_public_hygiene_gate_fails_when_python_cannot_run(self):
+        """A stale ``$LASTEXITCODE`` of 0 must not pass a check that never ran."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            script = M3TRIK_DIR / "scripts" / "check_public_hygiene.py"
+            result = self._run_push_functions(
+                root,
+                "cmd /c exit 0\n"
+                "$env:PATH = Join-Path $env:SystemRoot 'System32'\n"
+                f"$ok = Test-PublicHygiene '{root}' @('pythontk') -Script '{script}'\n"
+                'Write-Output "RESULT=$ok"\n',
+            )
+            self.assertIn("RESULT=False", result.stdout, result.stdout + result.stderr)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_release_notes_keep_non_ascii_on_an_oem_console(self):
+        """Notes keep their non-ASCII characters whatever the console encoding.
+
+        PowerShell decodes a native command's stdout with the CONSOLE encoding --
+        on a stock Windows console the OEM code page 437 -- while git writes
+        UTF-8, so an em dash in a CHANGELOG reached the published pythontk
+        v0.9.40 Release body as three mojibake characters. The diff is read as
+        bytes and decoded as UTF-8 instead.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "main")
+            entry = (
+                f"- **{self._commit_date(repo, 'v0.1.0')} — café → "
+                "naïve (`a.py`).** A body — with an em dash."
+            )
+            (repo / "CHANGELOG.md").write_text(f"# log\n\n{entry}\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "notes")
+            self._git(repo, "push", "origin", "main")
+
+            notes = root / "notes.txt"
+            result = self._run_push_functions(
+                root,
+                "[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(437)\n"
+                f"$notes = Get-ReleaseNotes '{repo}' '0.1.1'\n"
+                f"[System.IO.File]::WriteAllText('{notes}', $notes, "
+                "(New-Object System.Text.UTF8Encoding $false))\n",
+            )
+            out = result.stdout + result.stderr
+            self.assertTrue(notes.exists(), out)
+            self.assertEqual(notes.read_text(encoding="utf-8").splitlines(), [entry], out)
+
+    def test_release_note_selection_on_a_synthetic_diff(self):
+        """`Select-ReleaseNotes` over one crafted diff holding every CHANGELOG shape.
+
+        The previous tag is dated 2026-09-11. Kept: added bullets dated on or
+        after it, whatever follows the date (an em dash, `--`, `-`, a `(later)`
+        suffix), and the undated lines that continue a kept bullet in the SAME
+        run of added lines -- body paragraphs, a sub-bullet, an unindented
+        paragraph. A bullet dated ON the tag's day is kept on purpose: releases
+        and new entries share days. Left out: a bullet dated before the tag (an
+        edited old entry, even directly under a kept one), an undated bullet, a
+        heading (a new year's `## 2027` is structure, not a note), and an added
+        line that continues nothing kept (an edit inside an old entry whose
+        headline is context).
+        """
+        diff = [
+            "diff --git a/CHANGELOG.md b/CHANGELOG.md",
+            "index 1111111..2222222 100644",
+            "--- a/CHANGELOG.md",
+            "+++ b/CHANGELOG.md",
+            "@@ -1,8 +1,26 @@",
+            " # pkg — Changelog",
+            " ",
+            "+## 2027",
+            "+",
+            "+- **2027-01-04 -- a new year's first entry (`a.py`).** Body.",
+            "+",
+            " ## 2026",
+            " ",
+            "-- **2026-09-10 — an old entry that names a client (`d.py`).** Old.",
+            "+- **2026-09-15 — a new entry (`b.py`).** First paragraph.",
+            "+",
+            "+  **Detail.** A continuation paragraph.",
+            "+  - a sub-bullet",
+            "+",
+            "+An unindented paragraph that still belongs to it.",
+            "+",
+            "+- **2026-09-11 - an entry from the day of the previous tag (`c.py`).**",
+            "+- **2026-09-12 (later) — a suffixed date (`e.py`).**",
+            "+- **2026-09-10 — an old entry, neutralized (`d.py`).** Old.",
+            "+  Its continuation, edited in the same run.",
+            "+- **An undated bullet (`f.py`).**",
+            "+  and its continuation",
+            " - **2026-09-09 — untouched (`g.py`).**",
+            "@@ -40,3 +58,3 @@",
+            " - **2026-08-01 — an old entry (`h.py`).**",
+            "-  An old continuation that names a client.",
+            "+  An old continuation, neutralized.",
+            " - **2026-07-01 — older (`i.py`).**",
+        ]
+        expected = [
+            "- **2027-01-04 -- a new year's first entry (`a.py`).** Body.",
+            "",
+            "- **2026-09-15 — a new entry (`b.py`).** First paragraph.",
+            "",
+            "  **Detail.** A continuation paragraph.",
+            "  - a sub-bullet",
+            "",
+            "An unindented paragraph that still belongs to it.",
+            "",
+            "- **2026-09-11 - an entry from the day of the previous tag (`c.py`).**",
+            "- **2026-09-12 (later) — a suffixed date (`e.py`).**",
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            diff_file = root / "changelog.diff"
+            diff_file.write_text("\n".join(diff) + "\n", encoding="utf-8")
+            notes = root / "notes.txt"
+            result = self._run_push_functions(
+                root,
+                f"$diff = [System.IO.File]::ReadAllLines('{diff_file}', "
+                "[System.Text.Encoding]::UTF8)\n"
+                "$notes = Select-ReleaseNotes $diff '2026-09-11'\n"
+                f"[System.IO.File]::WriteAllText('{notes}', $notes, "
+                "(New-Object System.Text.UTF8Encoding $false))\n",
+            )
+            out = result.stdout + result.stderr
+            self.assertTrue(notes.exists(), out)
+            self.assertEqual(notes.read_text(encoding="utf-8").splitlines(), expected, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_release_asset_is_uploaded_as_committed_at_the_tag(self):
+        """The asset attached to Release vX.Y.Z is the file AT vX.Y.Z.
+
+        Publish-ReleaseAssets uploaded the WORKING-TREE file, so a re-run or a
+        late finalize after dev moved on attached whatever was on disk to an
+        older Release -- and an asset a Release already carries is never
+        re-uploaded, so the wrong file stayed. The blob must arrive byte for
+        byte (non-ASCII, LF-only: what a decoded PowerShell pipeline rewrites);
+        a declared path absent at the tag is skipped with a warning although it
+        exists on disk; an asset the Release already carries is left alone; and
+        the staging directory is removed.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pkg", "0.1.0", [])
+            # Commit the bytes as written, whatever the host's autocrlf says.
+            self._git(repo, "config", "core.autocrlf", "false")
+            self._git(repo, "checkout", "main")
+            (repo / "pkg" / "installer.py").write_bytes(
+                "print('as released — café')\nprint(2)\n".encode("utf-8")
+            )
+            (repo / "pkg" / "kept.py").write_bytes(b"already attached\n")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "installer")
+            self._git(repo, "tag", "-f", "-a", "v0.1.0", "-m", "v0.1.0")
+            # dev moved on: the installer changed on disk, and a declared asset
+            # that did not exist at the tag has appeared.
+            (repo / "pkg" / "installer.py").write_bytes(b"print('unreleased')\n")
+            (repo / "pkg" / "later.py").write_bytes(b"added after the release\n")
+            blob = subprocess.run(
+                ["git", "cat-file", "blob", "v0.1.0:pkg/installer.py"],
+                cwd=str(repo),
+                capture_output=True,
+                check=True,
+            ).stdout
+            self.assertIn("—".encode("utf-8"), blob)
+            self.assertNotIn(b"\r", blob)
+
+            env = self._install_fake_gh(root, "{}", slug="m3trik/pkg")
+            bin_dir = root / "_bin"
+            (bin_dir / "release_exists").write_text("1", encoding="ascii")
+            (bin_dir / "release_assets.json").write_text(
+                '{"assets":[{"name":"kept.py"}]}', encoding="ascii"
+            )
+            stage_root = root / "_tmp"
+            stage_root.mkdir()
+            env["TMP"] = env["TEMP"] = str(stage_root)
+
+            result = self._run_push_functions(
+                root,
+                "$RELEASE_ASSETS = @{ 'pkg' = @('pkg/installer.py', 'pkg/kept.py', "
+                "'pkg/later.py') }\n"
+                f"$did = Publish-ReleaseAssets '{repo}' 'm3trik/pkg' 'pkg' 'v0.1.0'\n"
+                '"PUBLISHED=$did"\n',
+                env=env,
+            )
+            out = result.stdout + result.stderr
+            uploads = bin_dir / "uploads"
+            self.assertIn("PUBLISHED=True", out)
+            self.assertEqual((uploads / "installer.py").read_bytes(), blob, out)
+            self.assertFalse((uploads / "later.py").exists(), out)
+            self.assertIn("pkg/later.py is not a file at v0.1.0", out)
+            self.assertFalse((uploads / "kept.py").exists(), out)
+            self.assertEqual([p for p in stage_root.iterdir() if p.is_dir()], [], out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_finalize_fast_exit_covers_a_package_with_release_assets(self):
+        """Tagged, and a Release carrying every declared asset: noop from ONE gh call.
+
+        A package declaring Release assets never took the tagged-and-released
+        fast exit, so every run paid a PyPI index read, a `git ls-remote` and two
+        `gh release view` calls to conclude there was nothing to do. One
+        `gh release view --json assets` answers both "the Release exists" and "it
+        carries every asset". A Release MISSING one must still be completed --
+        the fast exit cannot hide an aborted upload.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pkg", "0.1.0", [])
+            self._git(repo, "checkout", "main")
+            (repo / "pkg" / "installer.py").write_bytes(b"print('v1')\n")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "installer")
+            self._git(repo, "tag", "-f", "-a", "v0.1.0", "-m", "v0.1.0")
+            self._git(repo, "push", "origin", "main")
+            self._git(repo, "push", "-f", "origin", "v0.1.0")
+            self._retarget_origin_to_github(repo, origin, "m3trik/pkg")
+            env = self._install_fake_gh(root, "{}", slug="m3trik/pkg")
+            bin_dir = root / "_bin"
+            (bin_dir / "release_exists").write_text("1", encoding="ascii")
+            pypi_log = root / "pypi_calls.log"
+            body = (
+                "$RELEASE_ASSETS = @{ 'pkg' = @('pkg/installer.py') }\n"
+                # An offline PyPI that records being asked, and lists the version.
+                "function Get-PypiVersions {\n"
+                "    param($ProjectName)\n"
+                f"    Add-Content -LiteralPath '{pypi_log}' -Value $ProjectName\n"
+                "    return @('0.1.0')\n"
+                "}\n"
+                f"$verdict = Invoke-FinalizePhase 'pkg' '{repo}' @{{}}\n"
+                '"FINALIZE=$verdict"\n'
+            )
+
+            (bin_dir / "release_assets.json").write_text(
+                '{"assets":[{"name":"installer.py"}]}', encoding="ascii"
+            )
+            complete = self._run_push_functions(root, body, env=env)
+            out = complete.stdout + complete.stderr
+            self.assertIn("FINALIZE=noop", out)
+            self.assertFalse(pypi_log.exists(), f"the fast exit still read PyPI:\n{out}")
+            views = [c for c in self._gh_calls(root).splitlines() if c.startswith("release")]
+            self.assertEqual(len(views), 1, f"{views}\n{out}")
+            self.assertIn("--json assets", views[0])
+
+            # The same Release without the asset: an aborted upload to complete.
+            (bin_dir / "gh_calls.log").unlink()
+            (bin_dir / "release_assets.json").write_text('{"assets":[]}', encoding="ascii")
+            partial = self._run_push_functions(root, body, env=env)
+            out = partial.stdout + partial.stderr
+            self.assertIn("FINALIZE=finalized", out)
+            self.assertTrue((bin_dir / "uploads" / "installer.py").exists(), out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_receipt_survives_a_sidecar_only_commit(self):

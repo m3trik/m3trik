@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-08T13:53:52.295495+00:00",
+  "generated_at": "2026-09-15T20:24:31.685538+00:00",
   "workspace_root": "O:/Cloud/Code/_scripts",
   "repo_count": 12,
   "repos": [
@@ -34,26 +34,26 @@
         {
           "name": "examples",
           "path": "examples",
-          "code_file_count": 1,
+          "code_file_count": 2,
           "dominant_suffixes": [
-            ".py (1)"
+            ".py (2)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 1,
+          "code_file_count": 5,
           "dominant_suffixes": [
-            ".py (1)"
+            ".py (5)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": true,
-      "tracked_code_files": 16,
-      "tracked_total_lines": 847,
-      "tracked_nonempty_lines": 693
+      "tracked_code_files": 21,
+      "tracked_total_lines": 1814,
+      "tracked_nonempty_lines": 1492
     },
     {
       "name": "blendertk",
@@ -87,16 +87,16 @@
             "xform_utils"
           ],
           "immediate_modules": [],
-          "recursive_module_count": 104
+          "recursive_module_count": 184
         }
       ],
       "code_roots": [
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 61,
+          "code_file_count": 117,
           "dominant_suffixes": [
-            ".py (60)",
+            ".py (116)",
             ".ps1 (1)"
           ]
         }
@@ -104,9 +104,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 250,
-      "tracked_total_lines": 86809,
-      "tracked_nonempty_lines": 79051
+      "tracked_code_files": 413,
+      "tracked_total_lines": 214545,
+      "tracked_nonempty_lines": 195998
     },
     {
       "name": "comfyui",
@@ -145,6 +145,14 @@
           ]
         },
         {
+          "name": "examples",
+          "path": "examples",
+          "code_file_count": 1,
+          "dominant_suffixes": [
+            ".json (1)"
+          ]
+        },
+        {
           "name": "patches",
           "path": "patches",
           "code_file_count": 1,
@@ -164,11 +172,11 @@
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 10,
+          "code_file_count": 18,
           "dominant_suffixes": [
+            ".py (9)",
             ".ps1 (8)",
-            ".sh (1)",
-            ".py (1)"
+            ".sh (1)"
           ]
         },
         {
@@ -182,10 +190,10 @@
       ],
       "has_docs": true,
       "has_tests": true,
-      "has_examples": false,
-      "tracked_code_files": 90,
-      "tracked_total_lines": 17677,
-      "tracked_nonempty_lines": 16630
+      "has_examples": true,
+      "tracked_code_files": 99,
+      "tracked_total_lines": 18609,
+      "tracked_nonempty_lines": 17381
     },
     {
       "name": "extapps",
@@ -207,39 +215,41 @@
             "photogrammetry",
             "substance_workflow",
             "texture_maps",
-            "unity_workflow"
+            "unity_workflow",
+            "webxr_preview"
           ],
           "immediate_modules": [],
-          "recursive_module_count": 76
+          "recursive_module_count": 71
         }
       ],
       "code_roots": [
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 32,
+          "code_file_count": 45,
           "dominant_suffixes": [
-            ".py (32)"
+            ".py (45)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 147,
-      "tracked_total_lines": 31564,
-      "tracked_nonempty_lines": 27924
+      "tracked_code_files": 157,
+      "tracked_total_lines": 42787,
+      "tracked_nonempty_lines": 38020
     },
     {
       "name": "m3trik",
       "path": "m3trik",
       "domain": "",
-      "summary": "PowerShell DevOps for the m3trik ecosystem \u2014 release automation, repo-maintenance scripts, and cross-package reference docs.",
+      "summary": "Tech-art tooling for game-art and DCC pipelines \u2014 one ecosystem, built in layers:",
       "repo_kind": "Operations / scripts",
       "manifests": [],
       "root_scripts": [
         "common.ps1",
         "package-manager.bat",
+        "pm_doctor.py",
         "push.ps1"
       ],
       "package_roots": [],
@@ -255,27 +265,27 @@
         {
           "name": "scripts",
           "path": "scripts",
-          "code_file_count": 12,
+          "code_file_count": 19,
           "dominant_suffixes": [
-            ".py (9)",
+            ".py (16)",
             ".ps1 (3)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 4,
+          "code_file_count": 12,
           "dominant_suffixes": [
-            ".py (4)"
+            ".py (12)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 20,
-      "tracked_total_lines": 8755,
-      "tracked_nonempty_lines": 7742
+      "tracked_code_files": 36,
+      "tracked_total_lines": 17651,
+      "tracked_nonempty_lines": 15652
     },
     {
       "name": "mayatk",
@@ -310,7 +320,7 @@
             "xform_utils"
           ],
           "immediate_modules": [],
-          "recursive_module_count": 191
+          "recursive_module_count": 220
         },
         {
           "name": "test",
@@ -318,12 +328,18 @@
           "immediate_subpackages": [],
           "immediate_modules": [
             "_run_hm_tests",
+            "_suite_driver",
             "base_test",
             "check_cmds_naming",
             "check_cmds_syntax",
             "conftest",
             "dump_runtime_surface",
+            "rig_metrics",
+            "rizom_headless_probe",
             "run_tests",
+            "scene_import_live_e2e",
+            "shadow_preview_device_check",
+            "shell_xform_ui_check",
             "test_anim_utils",
             "test_arnold_bridge",
             "test_audio_clips",
@@ -339,11 +355,12 @@
             "test_auto_instancer_scene",
             "test_blender_bridge",
             "test_blendshape_animator",
-            "test_bridge",
             "test_calculator",
             "test_cam_utils",
+            "test_cancel_provider",
             "test_channel_box",
             "test_channels",
+            "test_color_id",
             "test_components",
             "test_compute_plan",
             "test_connect_switch_to_constraint",
@@ -351,6 +368,7 @@
             "test_core_utils",
             "test_create_locator_naming",
             "test_curtain",
+            "test_curtain_drape",
             "test_curve_to_tube",
             "test_data_nodes",
             "test_devtools",
@@ -359,10 +377,13 @@
             "test_display_utils",
             "test_duplicate_radial",
             "test_dynamic_pipe",
+            "test_edit_bridge",
             "test_edit_tools_duplicate",
             "test_edit_tools_geometry",
             "test_edit_tools_misc",
             "test_edit_utils",
+            "test_emissive_groups",
+            "test_emissive_groups_panel",
             "test_env_utils",
             "test_fbx_export_preparers",
             "test_fbx_utils",
@@ -371,21 +392,22 @@
             "test_game_shader_config",
             "test_group_combine",
             "test_hdr_manager",
-            "test_hierarchy_manager",
-            "test_hierarchy_sidecar",
+            "test_hierarchy_sync",
             "test_hotkey_collisions",
             "test_image_to_plane",
             "test_image_tracer",
             "test_instancing_extras",
+            "test_key_stash",
+            "test_key_stash_panel",
             "test_light_utils",
             "test_lightmap_baker",
-            "test_macro_manager_slots",
             "test_macros",
             "test_mash",
+            "test_mat_bake_sets",
             "test_mat_manifest",
             "test_mat_marmoset_bridge",
             "test_mat_snapshot",
-            "test_mat_transfer",
+            "test_mat_updater",
             "test_mat_utils",
             "test_mat_utils_extended",
             "test_mat_utils_resolve_path",
@@ -404,20 +426,24 @@
             "test_node_utils",
             "test_nurbs_utils",
             "test_original_mesh_separated",
-            "test_pivot_rot_place",
             "test_pivot_transfer_scenarios",
             "test_pivot_watcher",
             "test_playblast_exporter",
             "test_preview",
+            "test_rack_builder",
             "test_reference_manager",
             "test_remaining",
             "test_render_opacity",
             "test_render_opacity_export",
             "test_render_utils",
             "test_rig_utils",
+            "test_run_tests",
             "test_scale_keys",
             "test_scene_audit",
+            "test_scene_data_sidecar",
             "test_scene_exporter",
+            "test_scene_import",
+            "test_scene_state",
             "test_script_output",
             "test_segment_keys",
             "test_separate_objects",
@@ -425,8 +451,12 @@
             "test_sequencer_audio_shift",
             "test_sequencer_gui",
             "test_shader_attribute_map",
-            "test_shader_remapper",
+            "test_shader_converter",
             "test_shader_templates",
+            "test_shadow_preview",
+            "test_shadow_rig",
+            "test_shadow_rig_panel",
+            "test_shell_xform",
             "test_shot_export_view",
             "test_shot_manifest",
             "test_shot_manifest_audio_integration",
@@ -434,6 +464,8 @@
             "test_shot_manifest_csv_load",
             "test_shot_manifest_mapping",
             "test_shot_plan",
+            "test_shots_panel",
+            "test_skinning",
             "test_smart_bake",
             "test_smart_bake_slots",
             "test_snap",
@@ -441,39 +473,48 @@
             "test_static_analysis",
             "test_style_setter",
             "test_substance_bridge",
+            "test_substance_bridge_scene",
             "test_substance_connection",
+            "test_substance_rpc_plugin",
+            "test_suite_driver",
             "test_tentacle_editors",
             "test_texture_baker",
             "test_texture_path_editor",
-            "test_tube_rig_cleanliness",
+            "test_tube_rig",
             "test_ui_utils",
             "test_unity_bridge",
+            "test_usd",
+            "test_uv_budget",
             "test_uv_cleanup_actions",
             "test_uv_diagnostics",
             "test_uv_rizom_bridge",
             "test_uv_snapshot",
+            "test_uv_texture_transfer",
             "test_uv_utils",
             "test_wheel_rig",
             "test_workspace",
+            "test_workspace_mel",
             "test_xform_matrices",
-            "test_xform_utils"
+            "test_xform_utils",
+            "tube_rig_export_live_check",
+            "unity_bridge_ui_check"
           ],
-          "recursive_module_count": 156
+          "recursive_module_count": 189
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 468,
-      "tracked_total_lines": 252717,
-      "tracked_nonempty_lines": 220093
+      "tracked_code_files": 532,
+      "tracked_total_lines": 412303,
+      "tracked_nonempty_lines": 362598
     },
     {
       "name": "pythontk",
       "path": "pythontk",
       "domain": "",
-      "summary": "Foundation layer of a DCC-tooling ecosystem: composable primitives for files, strings, iteration, math, geometry, images, video, audio, and networking, plus shared class mixins and package infrastructure.",
+      "summary": "Foundation layer of a DCC-tooling ecosystem: composable primitives for files, strings, iteration, math, geometry, images, video, audio and networking, the host-agnostic engines built on them (PBR texture conversion, shot timeline, instancing), plus shared class mixins and package infrastructure.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -496,9 +537,9 @@
             "vid_utils"
           ],
           "immediate_modules": [
-            "help"
+            "__main__"
           ],
-          "recursive_module_count": 67
+          "recursive_module_count": 124
         },
         {
           "name": "test",
@@ -511,59 +552,122 @@
             "test_all_packages_namespace_aliases",
             "test_app_installer",
             "test_app_launcher",
+            "test_assembly_sorter",
             "test_atomic_write",
             "test_audio_utils",
             "test_bridge",
+            "test_cancel_scope",
             "test_class_property",
             "test_cli",
             "test_color",
             "test_core",
-            "test_drape",
+            "test_core_utils",
+            "test_doc_audit",
             "test_execution_monitor",
+            "test_export_profile",
+            "test_export_verify",
+            "test_fbx_media",
             "test_file",
+            "test_file_naming",
             "test_file_transfer",
+            "test_frame_extractor",
             "test_fuzzy_matcher",
+            "test_glb_key_reduction",
+            "test_glb_pipeline",
+            "test_handlers",
             "test_help_mixin",
             "test_hierarchy_diff",
+            "test_hierarchy_indexer",
+            "test_hierarchy_matching",
+            "test_hierarchy_path",
             "test_hierarchy_utils",
             "test_hotkey_utils",
             "test_html_presets",
             "test_img",
             "test_iter",
+            "test_key_stash_core",
+            "test_ktx2_encoder",
             "test_logging_mixin",
+            "test_main_cli",
             "test_map_compositor",
             "test_map_factory",
             "test_map_factory_grouping",
+            "test_map_optimizer",
             "test_map_registry_ambiguity",
+            "test_map_registry_duplicate_token",
+            "test_map_registry_register",
             "test_map_registry_resolution",
             "test_map_registry_resolve",
+            "test_map_registry_short_alias_boundary",
+            "test_mask_generator",
             "test_mat_report",
             "test_math",
             "test_mesh_convert",
+            "test_mesh_ops",
+            "test_metadata",
             "test_module_reloader",
             "test_module_resolver",
             "test_namedtuple_container",
             "test_namespace_handler",
+            "test_naming_convention",
             "test_net_utils",
             "test_noise",
             "test_output_template",
             "test_package_manager",
+            "test_packaging_metadata",
+            "test_plate_emitter",
+            "test_plugin_core",
             "test_pointcloud",
             "test_polyline",
+            "test_polyline_transport_frames",
             "test_preset_store",
+            "test_preview_playblast",
+            "test_preview_server",
+            "test_preview_viewer_live",
+            "test_process_exit",
+            "test_process_stream",
             "test_progression",
             "test_py39_compat",
+            "test_rail_surface",
+            "test_ramp_keys",
+            "test_region_masks",
+            "test_remote_file",
             "test_rpc",
+            "test_run_tests",
             "test_schema_spec",
+            "test_script_run",
+            "test_sequence_exporter",
+            "test_shadow_atlas",
+            "test_shadow_horizon",
+            "test_shadow_projection",
+            "test_shadow_web",
+            "test_shots_core",
+            "test_shots_manifest_core",
             "test_singleton_mixin",
+            "test_ssh_client",
+            "test_status_badge",
+            "test_step_toggle",
             "test_str",
+            "test_surface_snapshot",
             "test_symbol_record",
+            "test_sync_rpc_core",
+            "test_sync_shadow_shaders",
+            "test_task_factory",
+            "test_temp_artifacts",
             "test_template_set",
+            "test_test_sandbox",
             "test_texture_factory_non_greedy",
+            "test_usd",
             "test_user_config",
-            "test_vid"
+            "test_uv_budget",
+            "test_uv_pack",
+            "test_uv_transfer",
+            "test_uv_unwrap",
+            "test_vid",
+            "test_weights",
+            "test_workspace"
           ],
-          "recursive_module_count": 58
+          "recursive_module_count": 121
         }
       ],
       "code_roots": [
@@ -579,9 +683,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": true,
-      "tracked_code_files": 148,
-      "tracked_total_lines": 62500,
-      "tracked_nonempty_lines": 53687
+      "tracked_code_files": 289,
+      "tracked_total_lines": 186924,
+      "tracked_nonempty_lines": 164576
     },
     {
       "name": "server",
@@ -602,39 +706,41 @@
         {
           "name": "scripts",
           "path": "scripts",
-          "code_file_count": 1,
+          "code_file_count": 2,
           "dominant_suffixes": [
+            ".py (1)",
             ".sh (1)"
           ]
         },
         {
           "name": "server",
           "path": "server",
-          "code_file_count": 50,
+          "code_file_count": 66,
           "dominant_suffixes": [
-            ".sh (19)",
+            ".sh (28)",
+            ".py (13)",
             ".yml (11)",
-            ".py (8)",
-            ".ps1 (7)",
-            ".conf (2)"
+            ".conf (8)",
+            ".ps1 (2)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 10,
+          "code_file_count": 24,
           "dominant_suffixes": [
-            ".ps1 (9)",
-            ".sh (1)"
+            ".ps1 (14)",
+            ".sh (5)",
+            ".py (5)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 67,
-      "tracked_total_lines": 7736,
-      "tracked_nonempty_lines": 6719
+      "tracked_code_files": 98,
+      "tracked_total_lines": 15119,
+      "tracked_nonempty_lines": 13402
     },
     {
       "name": "tentacle",
@@ -655,11 +761,13 @@
             "ui"
           ],
           "immediate_modules": [
+            "tcl",
             "tcl_blender",
             "tcl_max",
-            "tcl_maya"
+            "tcl_maya",
+            "tentacle_installer"
           ],
-          "recursive_module_count": 95
+          "recursive_module_count": 108
         }
       ],
       "code_roots": [
@@ -675,9 +783,9 @@
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 92,
+          "code_file_count": 116,
           "dominant_suffixes": [
-            ".py (87)",
+            ".py (111)",
             ".json (5)"
           ]
         }
@@ -685,9 +793,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 309,
-      "tracked_total_lines": 81127,
-      "tracked_nonempty_lines": 75151
+      "tracked_code_files": 351,
+      "tracked_total_lines": 117928,
+      "tracked_nonempty_lines": 107713
     },
     {
       "name": "uitk",
@@ -708,10 +816,15 @@
           ],
           "immediate_modules": [
             "conftest",
+            "native_trace",
             "run_tests",
             "test_affix_option",
+            "test_attribute_window",
+            "test_attributes",
             "test_bridge_slots",
             "test_bridge_slots_header",
+            "test_bridge_template_description",
+            "test_cancel_manager",
             "test_centered_icon",
             "test_choice_capture",
             "test_collapsable_group",
@@ -721,39 +834,63 @@
             "test_compile",
             "test_compiled_loader",
             "test_conftest_qsettings_sandbox",
+            "test_conftest_teardown_backstop",
+            "test_context_menu",
+            "test_convert",
+            "test_cursor_manager",
+            "test_designer_plugin",
             "test_dismiss_on_move",
             "test_double_spin_box",
             "test_dynamic_slot_init",
+            "test_embedded_menu",
             "test_events",
             "test_expandable_list",
             "test_external_app_handler",
-            "test_file_manager",
             "test_filter_option",
+            "test_first_paint_stability",
             "test_footer",
+            "test_form_panel",
             "test_header",
+            "test_icon_states",
+            "test_icons",
+            "test_lazy_subpackage_exports",
             "test_line_edit_validator",
+            "test_list_input_dialog",
             "test_main_window_resize",
             "test_mainwindow",
             "test_mainwindow_menus",
             "test_marking_menu",
+            "test_marking_menu_anchor_pairing",
             "test_marking_menu_chord_release",
+            "test_marking_menu_double_click",
             "test_marking_menu_instance_retirement",
             "test_marking_menu_integration",
             "test_marking_menu_leaf_click",
             "test_marking_menu_multiscreen",
             "test_marking_menu_position_stability",
+            "test_marking_menu_preload",
+            "test_marking_menu_present_order",
+            "test_marking_menu_pressed_state",
             "test_marking_menu_resolver",
             "test_marking_menu_shortcuts",
             "test_menu",
             "test_menu_button",
+            "test_message_box",
             "test_optionBox",
             "test_overlay_clone_positioning",
+            "test_package_exports",
             "test_persistence_full_chain",
             "test_persistence_hardening",
             "test_preset_manager",
             "test_progress_adapter",
+            "test_progress_bar",
+            "test_qt_wait",
             "test_recent_values_store",
+            "test_region",
+            "test_registry_manager",
+            "test_rich_text",
             "test_rich_text_formatter",
+            "test_run_tests",
             "test_runtime_loader",
             "test_script_output",
             "test_separator",
@@ -762,8 +899,10 @@
             "test_shortcut_capture",
             "test_shortcut_commands",
             "test_shortcut_editor",
+            "test_shortcut_guard",
             "test_shortcuts",
             "test_signals",
+            "test_size_grip",
             "test_slider",
             "test_spinbox",
             "test_state_manager",
@@ -773,13 +912,21 @@
             "test_switchboard_browser",
             "test_switchboard_editors_mixin",
             "test_switchboard_history",
+            "test_switchboard_namespace",
             "test_switchboard_sources",
             "test_switchboard_style_mixin",
             "test_switchboard_tag_persistence",
+            "test_switchboard_toggle",
+            "test_table_actions",
+            "test_table_widget_add",
+            "test_table_widget_autofit",
+            "test_table_widget_click_forward",
+            "test_table_widget_truncation",
             "test_table_widget_wheel",
             "test_text_edit_log_handler",
             "test_tooltip_mixin",
             "test_tree_column_config",
+            "test_tree_formatting",
             "test_tree_header_actions",
             "test_tree_selection",
             "test_ui_handler",
@@ -787,36 +934,42 @@
             "test_value_option",
             "test_visibility_policy",
             "test_widget_combobox",
-            "test_widgets"
+            "test_widgets",
+            "test_window_panel"
           ],
-          "recursive_module_count": 86
+          "recursive_module_count": 126
         },
         {
           "name": "uitk",
           "path": "uitk",
           "immediate_subpackages": [
             "bridge",
+            "designer",
             "examples",
+            "handlers",
             "loaders",
+            "managers",
             "switchboard",
+            "themes",
             "widgets"
           ],
           "immediate_modules": [
             "_bootstrap",
             "compile",
             "events",
-            "file_manager"
+            "file_manager",
+            "testing"
           ],
-          "recursive_module_count": 118
+          "recursive_module_count": 133
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 225,
-      "tracked_total_lines": 119863,
-      "tracked_nonempty_lines": 102725
+      "tracked_code_files": 287,
+      "tracked_total_lines": 184863,
+      "tracked_nonempty_lines": 159296
     },
     {
       "name": "unitytk",
@@ -838,22 +991,32 @@
             "run_tests",
             "test_asset_delivery",
             "test_audio_events_integration",
+            "test_base_test",
             "test_bool_to_fade_curve",
-            "test_c130_fcr_integration",
-            "test_c5m_visibility",
             "test_clip_name_contract_integration",
+            "test_controller_runtime_integration",
+            "test_deploy_templates",
+            "test_emissive_groups_integration",
             "test_fade_window_preservation",
+            "test_keyed_visibility",
             "test_launcher",
             "test_lightmap_metadata_integration",
+            "test_multi_section_audio_integration",
+            "test_render_effects_e2e",
             "test_render_opacity_controller",
             "test_render_opacity_e2e",
             "test_render_opacity_integration",
+            "test_run_tests",
+            "test_scene_builder",
+            "test_shadow_plane_integration",
+            "test_shadow_plane_runtime_integration",
             "test_shared_material_standalone",
             "test_shot_metadata_integration",
             "test_shots_audio_sidebyside_integration",
-            "test_standalone_enduser"
+            "test_standalone_enduser",
+            "test_temp_projects"
           ],
-          "recursive_module_count": 18
+          "recursive_module_count": 28
         },
         {
           "name": "unitytk",
@@ -864,18 +1027,19 @@
           "immediate_modules": [
             "asset_delivery",
             "launcher",
-            "scene_builder"
+            "scene_builder",
+            "template_deployer"
           ],
-          "recursive_module_count": 3
+          "recursive_module_count": 4
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 27,
-      "tracked_total_lines": 10539,
-      "tracked_nonempty_lines": 8977
+      "tracked_code_files": 37,
+      "tracked_total_lines": 17120,
+      "tracked_nonempty_lines": 14735
     },
     {
       "name": "www",
@@ -892,9 +1056,9 @@
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 3,
+          "code_file_count": 4,
           "dominant_suffixes": [
-            ".py (2)",
+            ".py (3)",
             ".sh (1)"
           ]
         },
@@ -912,9 +1076,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 28,
-      "tracked_total_lines": 61490,
-      "tracked_nonempty_lines": 56374
+      "tracked_code_files": 29,
+      "tracked_total_lines": 61937,
+      "tracked_nonempty_lines": 56744
     }
   ],
   "non_repo_code_folders": []

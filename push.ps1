@@ -195,6 +195,14 @@ $REQUIRED_PINS = @{
     "tentacle"  = @("pythontk", "uitk", "mayatk", "blendertk")
 }
 
+# Files attached to a package's GitHub Release, relative to its repo, each uploaded
+# as committed at the release tag (Publish-ReleaseAssets). tentacle's one-file
+# installer: its README links releases/latest/download/<name>, which resolves only
+# to a Release asset (a blob link hands "Save link as" an HTML page).
+$RELEASE_ASSETS = @{
+    "tentacle" = @("tentacle/tentacle_installer.py")
+}
+
 # ------------------------------------------------------------------------------------------------
 # Verification receipts
 # One writer for .claude/receipts.json: a receipt records that a named check ("review",
@@ -249,6 +257,42 @@ function Get-TreeHash {
         if ($indexFile) { Remove-Item -LiteralPath $indexFile -Force -ErrorAction SilentlyContinue }
         Pop-Location
     }
+}
+
+function Test-PublicHygiene {
+    # The public-hygiene gate: scripts/check_public_hygiene.py over $Names (repo folders
+    # under $Root), its report echoed. $true when the trees are clean, or when this machine
+    # has no private denylist (the script reports SKIP); $false on a denylisted identifier
+    # and on a check that could not run - a pushed leak cannot be recalled, so an unanswered
+    # check stops the run as surely as a failed one. -Script and -Denylist exist for tests;
+    # the real denylist lives outside every repo.
+    param(
+        [string]$Root,
+        [string[]]$Names,
+        [string]$Script = (Join-Path $PSScriptRoot "scripts\check_public_hygiene.py"),
+        [string]$Denylist = ""
+    )
+    if (-not $Names) { return $true }
+    if (-not (Test-Path -LiteralPath $Script)) {
+        Write-Err "Public hygiene gate missing: $Script"
+        return $false
+    }
+    # Checked first: a python that cannot start leaves $LASTEXITCODE as the previous native
+    # command left it, and a stale 0 would pass a check that never ran.
+    if (-not (Get-Command python -CommandType Application -ErrorAction SilentlyContinue)) {
+        Write-Err "Public hygiene gate cannot run: no python on PATH"
+        return $false
+    }
+    # --public-only: a run hands over every repo it touches (-All takes the private ones
+    # too), and a private repo may name clients.
+    $cliArgs = @($Script, "--workspace", $Root, "--public-only")
+    if ($Denylist) { $cliArgs += @("--denylist", $Denylist) }
+    $report = & python @cliArgs @Names 2>&1
+    $code = $LASTEXITCODE
+    foreach ($line in @($report)) { Write-Host "  $line" }
+    if ($code -eq 0) { return $true }
+    Write-Err "Public hygiene gate failed (exit $code): nothing was committed, pushed or released"
+    return $false
 }
 
 function Get-RecentlyModifiedFiles {
@@ -1513,14 +1557,43 @@ function Merge-ToMainViaPR {
     return (Wait-ForPRMerged $repoSlug $pr $PRMergeTimeoutSeconds)
 }
 
+function Invoke-GitStdout {
+    # Run git with $Arguments in $RepoPath (absolute), copying its stdout UNTOUCHED
+    # into the writable stream $Destination; stderr is discarded. Returns git's exit
+    # code. PowerShell's own capture of a native command DECODES stdout with the
+    # console encoding - on a stock Windows console the OEM code page 437 - so
+    # non-ASCII text and line endings do not survive it: an em dash in a CHANGELOG
+    # reached the pythontk v0.9.40 Release body as three mojibake characters.
+    param([string]$RepoPath, [string]$Arguments, [System.IO.Stream]$Destination)
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = (Get-Command git -CommandType Application | Select-Object -First 1).Path
+    $psi.Arguments = $Arguments
+    $psi.WorkingDirectory = $RepoPath
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    try {
+        # Drained alongside stdout: a full stderr pipe would stall git mid-copy.
+        $stderr = $proc.StandardError.ReadToEndAsync()
+        $proc.StandardOutput.BaseStream.CopyTo($Destination)
+        $proc.WaitForExit()
+        [void]$stderr.Wait(5000)
+        return $proc.ExitCode
+    }
+    finally { $proc.Dispose() }
+}
+
 function Get-ReleaseNotes {
-    # CHANGELOG.md lines added between the previous release tag and origin/main:
-    # the curated notes for the tag + GitHub Release. Keyed on TAGS, not on
-    # `origin/main..dev` - the old delta was empty the moment the PR merged, so a
-    # run that aborted after the merge could never reconstruct the notes and
+    # The CHANGELOG.md entries added between the previous release tag and
+    # origin/main: the curated notes for the tag + GitHub Release. Keyed on TAGS,
+    # not on `origin/main..dev` - the old delta was empty the moment the PR merged,
+    # so a run that aborted after the merge could never reconstruct the notes and
     # the Release body had to be rebuilt by hand (26 KB of it, 2026-08-23).
-    # With no previous tag there is no boundary; the Release is tag-only.
-    # Caller has fetched origin/main and the tags (Invoke-FinalizePhase does).
+    # Select-ReleaseNotes picks the entries out of the diff, bounded by the date of
+    # the previous tag's commit. With no previous tag there is no boundary; the
+    # Release is tag-only. Caller has fetched origin/main and the tags
+    # (Invoke-FinalizePhase does).
     param([string]$RepoPath, [string]$Version)
     $target = [version]$Version
     $prev = $null
@@ -1531,14 +1604,47 @@ function Get-ReleaseNotes {
     Push-Location $RepoPath
     try {
         if (-not (Test-Path "CHANGELOG.md")) { return "" }
-        $diff = git diff "v$prev..origin/main" -- CHANGELOG.md 2>$null
-        if (-not $diff) { return "" }
-        $added = $diff |
-            Where-Object { $_ -match '^\+' -and $_ -notmatch '^\+\+\+' } |
-            ForEach-Object { $_.Substring(1) }
-        return (($added -join "`n").Trim())
+        # Bytes decoded as UTF-8, never PowerShell's console-decoded capture (see
+        # Invoke-GitStdout); a failed diff leaves no lines, so no notes.
+        $buffer = New-Object System.IO.MemoryStream
+        $null = Invoke-GitStdout (Get-Location).ProviderPath "diff v$prev..origin/main -- CHANGELOG.md" $buffer
+        $diff = [System.Text.Encoding]::UTF8.GetString($buffer.ToArray()) -split "\r?\n"
+        $since = git log -1 --format=%cs "v$prev" 2>$null
+        return (Select-ReleaseNotes $diff $since)
     }
     finally { Pop-Location }
+}
+
+function Select-ReleaseNotes {
+    # The notes in a CHANGELOG.md diff: every ADDED top-level bullet dated on or
+    # after $Since (YYYY-MM-DD, the previous release tag's commit date), with the
+    # added lines that continue it in the same run - body paragraphs, sub-bullets.
+    # A diff cannot tell an edit from an addition: a reworded or neutralized OLD
+    # entry is `+` lines exactly like a new one, and taking every `+` line
+    # republished it in the next Release. So a bullet dated before $Since is an
+    # edited entry that already shipped and stays out, as do an undated bullet, a
+    # heading (a new year's `## 2027` is structure, not a note) and an added line
+    # that continues nothing kept (an edit inside an old entry's body).
+    # A bullet dated ON $Since is kept: releases and new entries share days, and
+    # dropping a new same-day entry would lose a note, where keeping one only
+    # republishes an entry edited on the very day it shipped.
+    param([string[]]$DiffLines, [string]$Since)
+    $notes = @()
+    $inHunk = $false
+    $keep = $false
+    foreach ($line in $DiffLines) {
+        if ($line.StartsWith("@@")) { $inHunk = $true; $keep = $false; continue }
+        # The file header, context and removed lines all end a run of added lines.
+        if (-not $inHunk -or -not $line.StartsWith("+")) { $keep = $false; continue }
+        $text = $line.Substring(1)
+        if ($text.StartsWith("#")) { $keep = $false; continue }
+        if ($text -match '^[-*+]\s') {
+            $keep = ($text -match '^[-*+]\s+(\*\*)?(?<date>\d{4}-\d{2}-\d{2})') -and
+                ([string]::CompareOrdinal($Matches['date'], $Since) -ge 0)
+        }
+        if ($keep) { $notes += $text }
+    }
+    return (($notes -join "`n").Trim())
 }
 
 function Test-GitHubReleaseExists {
@@ -1546,6 +1652,90 @@ function Test-GitHubReleaseExists {
     if (-not $RepoSlug -or -not (Get-Command gh -ErrorAction SilentlyContinue)) { return $false }
     gh release view $Tag --repo $RepoSlug --json tagName 2>&1 | Out-Null
     return ($LASTEXITCODE -eq 0)
+}
+
+function Get-ReleaseAssetNames {
+    # The asset names on the GitHub Release at $Tag, or $null when there is no such
+    # Release (or gh cannot say): ONE `gh release view` answers both. Returned
+    # wrapped, so a Release with no assets is an empty array rather than $null.
+    param([string]$RepoSlug, [string]$Tag)
+    $json = gh release view $Tag --repo $RepoSlug --json assets 2>$null
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $names = @()
+    if ($json) { $names = @((($json -join "`n") | ConvertFrom-Json).assets | ForEach-Object { $_.name }) }
+    return ,$names
+}
+
+function Get-MissingReleaseAssets {
+    # The $RELEASE_ASSETS paths of $PackageName whose file name is not in $Have, the
+    # names a Release carries (gh names an asset after its file).
+    param([string]$PackageName, [string[]]$Have)
+    return @($RELEASE_ASSETS[$PackageName] | Where-Object { @($Have) -notcontains (Split-Path -Leaf $_) })
+}
+
+function Save-GitBlob {
+    # Write the blob at $Spec (`<ref>:<path>`) to $Destination byte for byte, as
+    # committed: Invoke-GitStdout copies git's raw stdout, where a PowerShell
+    # pipeline would decode it and rewrite non-ASCII bytes and every line ending.
+    # Returns $false when $Spec names no blob. Throws on an incomplete copy: an
+    # asset a Release already carries is never re-uploaded, so a short file must
+    # never reach gh.
+    param([string]$RepoPath, [string]$Spec, [string]$Destination)
+    Push-Location $RepoPath
+    try {
+        if ((git cat-file -t $Spec 2>$null) -ne "blob") { return $false }
+        $size = [long](git cat-file -s $Spec 2>$null)
+        $repo = (Get-Location).ProviderPath
+    }
+    finally { Pop-Location }
+    $file = [System.IO.File]::Create($Destination)
+    try { $code = Invoke-GitStdout $repo "cat-file blob `"$Spec`"" $file }
+    finally { $file.Dispose() }
+    $written = (Get-Item -LiteralPath $Destination).Length
+    if ($code -ne 0 -or $written -ne $size) {
+        throw "Incomplete copy of $Spec (git exit $code, $written of $size bytes)"
+    }
+    return $true
+}
+
+function Publish-ReleaseAssets {
+    # Attach $RELEASE_ASSETS[$PackageName] to the Release at $Tag, skipping any the
+    # Release already carries: a re-run completes an aborted upload and never
+    # re-uploads. Each file goes up AS COMMITTED AT $Tag, never from the working
+    # tree - a re-run or late finalize after dev moved on would otherwise attach
+    # whatever is on disk now to an older Release, and since a present asset is
+    # never re-uploaded, that wrong file would stay. Non-fatal, like the rest of
+    # Complete-Release. Returns $true when anything was uploaded.
+    param([string]$RepoPath, [string]$RepoSlug, [string]$PackageName, [string]$Tag)
+    if (-not $RELEASE_ASSETS.ContainsKey($PackageName)) { return $false }
+    $missing = @(Get-MissingReleaseAssets $PackageName (Get-ReleaseAssetNames $RepoSlug $Tag))
+    if ($missing.Count -eq 0) { return $false }
+    # gh names an asset after its file, so each is staged under its own leaf name.
+    $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("push-assets-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $stage -Force | Out-Null
+    $did = $false
+    try {
+        foreach ($rel in $missing) {
+            $name = Split-Path -Leaf $rel
+            $file = Join-Path $stage $name
+            if (-not (Save-GitBlob $RepoPath "${Tag}:$rel" $file)) {
+                Write-Host "  !! Release asset $rel is not a file at $Tag - not attached" -ForegroundColor Yellow
+                continue
+            }
+            $out = gh release upload $Tag $file --repo $RepoSlug 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Release asset $name attached to $Tag"
+                $did = $true
+            } else {
+                Write-Err "Release asset $name failed for $Tag (re-run to retry)"
+                if ($out) { Write-Host "    $out" -ForegroundColor DarkGray }
+            }
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return $did
 }
 
 function Complete-Release {
@@ -1588,11 +1778,14 @@ function Complete-Release {
         }
 
         if (-not $RepoSlug -or -not (Get-Command gh -ErrorAction SilentlyContinue)) { return $did }
-        if (Test-GitHubReleaseExists $RepoSlug $tag) { return $did }
+        if (Test-GitHubReleaseExists $RepoSlug $tag) {
+            if (Publish-ReleaseAssets $RepoPath $RepoSlug $PackageName $tag) { $did = $true }
+            return $did
+        }
 
         $notes = Get-ReleaseNotes $RepoPath $Version
         if (-not $notes) {
-            Write-Skip "No CHANGELOG additions for $tag (tag-only, no Release)"
+            Write-Skip "No new dated CHANGELOG entries for $tag (tag-only, no Release)"
             return $did
         }
         $tmp = [System.IO.Path]::GetTempFileName()
@@ -1602,6 +1795,7 @@ function Complete-Release {
             if ($LASTEXITCODE -eq 0) {
                 Write-Success "GitHub Release $tag created"
                 $did = $true
+                Publish-ReleaseAssets $RepoPath $RepoSlug $PackageName $tag | Out-Null
             } else {
                 Write-Err "GitHub Release $tag failed (tag pushed; re-run to retry)"
                 if ($out) { Write-Host "    $out" -ForegroundColor DarkGray }
@@ -1658,10 +1852,17 @@ function Invoke-FinalizePhase {
     $tagged = @(Get-ReleaseTags $RepoPath | ForEach-Object { $_.ToString() }) -contains $mainVer
 
     # Fast exit: tagged, and either the Release exists or there is no GitHub to
-    # hold one (local origin / no gh) - nothing this phase could add.
+    # hold one (local origin / no gh) - nothing this phase could add. For a package
+    # with Release assets, "exists" means it carries every one: ONE
+    # `gh release view --json assets` answers both, and a Release missing one (an
+    # aborted upload) goes on to Complete-Release, which attaches it.
     if ($tagged) {
         $canRelease = $repoSlug -and (Get-Command gh -ErrorAction SilentlyContinue)
-        if (-not $canRelease -or (Test-GitHubReleaseExists $repoSlug $tag)) { return "noop" }
+        if (-not $canRelease) { return "noop" }
+        if ($RELEASE_ASSETS.ContainsKey($PackageName)) {
+            $have = Get-ReleaseAssetNames $repoSlug $tag
+            if ($null -ne $have -and @(Get-MissingReleaseAssets $PackageName $have).Count -eq 0) { return "noop" }
+        } elseif (Test-GitHubReleaseExists $repoSlug $tag) { return "noop" }
     }
 
     $onIndex = $SkipPypiCheck -or (Test-PypiHasVersion $pypiName $mainVer)
@@ -2003,6 +2204,18 @@ if ($reposToProcess.Count -gt 1) {
     }
     $remaining = $reposToProcess | Where-Object { $RELEASE_ORDER -notcontains $_.Name }
     $reposToProcess = @($ordered + $remaining)
+}
+
+# ------------------------------------------------------------------------------------------------
+# Public-hygiene gate (every run). A client identifier in anything this run could commit, push
+# or cut into Release notes stops it HERE, before any of that happens: a pushed leak cannot be
+# recalled. The denylist lives outside every repo, so the check itself publishes nothing; a
+# machine without it gets SKIP and runs on (Test-PublicHygiene).
+# ------------------------------------------------------------------------------------------------
+if ($reposToProcess.Count -gt 0) {
+    $hygieneNames = @($reposToProcess | ForEach-Object { $_.Name })
+    Write-Step "Public hygiene: $($hygieneNames -join ', ')"
+    if (-not (Test-PublicHygiene $ROOT $hygieneNames)) { exit 1 }
 }
 
 # ------------------------------------------------------------------------------------------------

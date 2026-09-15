@@ -53,8 +53,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# The static walker only emits def'd class members; restrict the runtime side to
-# the same kinds so plain class attributes don't read as spurious drift.
+# The static walker only emits def'd class members, so a live member is LIVE-ONLY
+# drift only in these kinds - a plain class attribute is no registry member. Every
+# live name still counts as PRESENT: a descriptor such as ClassProperty is a def to
+# the walker and an attribute at runtime.
 METHOD_KINDS = {"method", "staticmethod", "classmethod", "property"}
 
 
@@ -161,9 +163,7 @@ def runtime_surface_from_package(pkg_name: str) -> dict[str, list[dict]]:
         except Exception:  # noqa: BLE001
             skipped.append(obj.__name__)
             continue
-        surface[obj.__name__] = [
-            r.as_dict() for r in records if r.kind in METHOD_KINDS
-        ]
+        surface[obj.__name__] = [r.as_dict() for r in records]
     if skipped:
         # Surface, don't hide, what couldn't be introspected.
         print(
@@ -198,8 +198,9 @@ def compute_drift(
 
       * ``missing``      - in the registry, absent at runtime (real contract
                            break / stale registry) -> FAIL.
-      * ``added``        - live-only (metaclass/mixin-injected, nested class) ->
-                           advisory; the static walker cannot see these.
+      * ``added``        - live-only METHOD_KINDS member (metaclass/mixin-
+                           injected, nested class) -> advisory; the static
+                           walker cannot see these.
       * ``kind_changed`` - present both sides, different kind (e.g. a wrapping
                            decorator over ``@staticmethod`` yields a plain
                            function at runtime) -> advisory; the member exists.
@@ -208,7 +209,7 @@ def compute_drift(
     for cls in sorted(set(static) & set(runtime)):
         s, r = static[cls], runtime[cls]
         missing = sorted(set(s) - set(r))
-        added = sorted(set(r) - set(s))
+        added = sorted(name for name in set(r) - set(s) if r[name] in METHOD_KINDS)
         kind_changed = sorted(
             (name, s[name], r[name]) for name in set(s) & set(r) if s[name] != r[name]
         )

@@ -652,6 +652,13 @@ def _status_bucket(entry):
 def diff_pair(maya_py, blend_py, pair_key, ledger, is_slot, domain=None):
     """Full classified diff of one pair. Returns a dict of classified delta lists."""
     m, b = Surface(maya_py), Surface(blend_py)
+    # Co-located panels that build their rows from a sibling task_definitions.py
+    # (the scene exporters): those rows are surface too.
+    for surface, panel in ((m, maya_py), (b, blend_py)):
+        for key, rec in definition_rows(panel).items():
+            surface._add_control(key, rec["loc"], rec["ctype"], rec["label"],
+                                 rec["props"], items=rec["items"], mech=rec["mech"],
+                                 fn=rec["fn"])
     lg = _ledger_for(ledger, pair_key, is_slot)
     lg_handlers = ledger["handlers"].get(pair_key, {}) if is_slot else {}
     accepted = ledger["default_deltas"].get(pair_key, {})
@@ -731,7 +738,8 @@ def diff_pair(maya_py, blend_py, pair_key, ledger, is_slot, domain=None):
     # ---- same-key property / item diffs
     for key in sorted(set(m.controls) & set(b.controls)):
         mr, br = m.controls[key], b.controls[key]
-        for p in PROPS:
+        props = PROPS + DEFINITION_PROPS if mr.get("mech") == "definition" else PROPS
+        for p in props:
             if p == "setToolTip":
                 continue  # tooltip wording drifts legitimately; don't diff text
             mv, bv = mr["props"].get(p), br["props"].get(p)
@@ -831,6 +839,81 @@ def diff_pair(maya_py, blend_py, pair_key, ledger, is_slot, domain=None):
 
 
 # =========================================================================== discovery
+# Definition-row properties worth diffing (beyond PROPS): the widget class and the
+# objectName a row persists under, plus a disabled placeholder's state.
+DEFINITION_PROPS = ("widget_type", "object_name", "setEnabled")
+
+
+def _literal(node):
+    """A definition value as plain data: constants, ``self.<table>`` as the table's
+    name, containers of those; anything else (a ``TooltipFormat.fmt`` call) is None."""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        return f"{node.value.id}.{node.attr}"
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return [_literal(e) for e in node.elts]
+    return None
+
+
+def definition_rows(panel_py):
+    """The task / check rows a co-located panel builds from its sibling
+    ``task_definitions.py`` (the scene exporters), as control records.
+
+    The rows are dict literals returned by the ``task_definitions`` /
+    ``check_definitions`` properties, not ``setObjectName`` sites, so the
+    surface walk never saw them: the sweep reported the exporter panels as
+    0 rows / clean while nine rows, three tasks and the whole scheduler map
+    differed (2026-09-13). Keyed by row name (the ledger key); the widget
+    class, objectName, defaults and the combo's table name ride along so the
+    same-key diff below reports a flipped default or a different table.
+    """
+    path = os.path.join(os.path.dirname(panel_py), "task_definitions.py")
+    if not os.path.isfile(path):
+        return {}
+    try:
+        tree = ast.parse(read(path), filename=path)
+    except SyntaxError:
+        return {}
+    rows = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name not in (
+            "task_definitions", "check_definitions"
+        ):
+            continue
+        returned = next(
+            (n.value for n in ast.walk(node)
+             if isinstance(n, ast.Return) and isinstance(n.value, ast.Dict)),
+            None,
+        )
+        if returned is None:
+            continue
+        for key_node, value in zip(returned.keys, returned.values):
+            if not isinstance(key_node, ast.Constant) or not isinstance(value, ast.Dict):
+                continue
+            spec = {
+                k.value: _literal(v)
+                for k, v in zip(value.keys, value.values)
+                if isinstance(k, ast.Constant)
+            }
+            props = {k: spec[k] for k in PROPS + DEFINITION_PROPS
+                     if k in spec and spec[k] is not None and k != "setToolTip"}
+            props.setdefault("widget_type", "QCheckBox")
+            table = spec.get("add")
+            rows[key_node.value] = {
+                "loc": f"task_definitions:{node.name}",
+                "ctype": props["widget_type"],
+                "label": spec.get("set_row_label") or spec.get("setText") or key_node.value,
+                "props": props,
+                "items": [table] if isinstance(table, str) else None,
+                "mech": "definition",
+                "fn": node.name,
+            }
+    return rows
+
+
 def _slots_classes(path):
     """``*Slots`` class names defined in *path* — what makes a file a panel."""
     try:
@@ -864,13 +947,13 @@ def _resolve(panel):
     ``*Slots``-class pairing ``--all`` uses.  Both steps are needed, because a
     filename is not what makes a file a panel:
 
-    - A package can ship BOTH forms for one tool -- blendertk's scene exporter
-      is ``_scene_exporter.py`` (the Qt-free engine, which defines no controls)
+    - A package can ship BOTH forms for one tool -- each scene exporter is
+      ``_scene_exporter.py`` (the Qt-free engine, which defines no controls)
       *and* ``scene_exporter_slots.py`` (the panel).  Only files defining a
       ``*Slots`` class are accepted here, so the engine can never win.
-    - The twin need not share the Maya file's stem at all: mayatk
-      ``_scene_exporter.py`` pairs with blendertk ``scene_exporter_slots.py``,
-      which no ``_scene_exporter*`` glob can find.  Whichever side resolves is
+    - The twin need not share the Maya file's stem at all (until 2026-09-13
+      mayatk's exporter panel lived in ``_scene_exporter.py``, which no
+      ``scene_exporter*`` glob could find).  Whichever side resolves is
       therefore used to look the other up by class name.
 
     Resolving to the engine diffed the Maya panel against an empty surface and

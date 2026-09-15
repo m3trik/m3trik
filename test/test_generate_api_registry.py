@@ -243,6 +243,93 @@ class TestPrivateBaseMembersResolved(unittest.TestCase):
         self.assertEqual({("own", "method")}, members)
 
 
+class TestImportedPrivateBasesResolve(unittest.TestCase):
+    """A public class resolves members from private mixins in SIBLING modules.
+
+    The scene exporters split ``TaskManager(TaskFactory, _SceneTasksMixin, ...)``
+    with each mixin in its own ``_task_*.py``; resolving same-file bases only
+    read that split as 44 removed methods. The import walk is transitive, so the
+    modules it reaches form a graph -- where two mixins sharing a base module is
+    a diamond, not a cycle.
+    """
+
+    def setUp(self):
+        # ASTs are cached per path for the whole run; never serve a fixture
+        # another test's tree.
+        g._PARSED.clear()
+
+    @staticmethod
+    def _members(files: dict) -> set:
+        with tempfile.TemporaryDirectory() as td:
+            pkg = Path(td) / "pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("", encoding="utf-8")
+            for name, src in files.items():
+                (pkg / name).write_text(src, encoding="utf-8")
+            mod = g._walk_module(pkg / "public.py", pkg)
+            public = next(c for c in mod.classes if c.name == "Public")
+            return {m.name for m in public.members}
+
+    def test_a_diamond_resolves_the_shared_module_on_both_paths(self):
+        """Two mixins importing their bases from one module both resolve.
+
+        The walk kept ONE visited set for the whole traversal, so the shared
+        module was skipped the second time it was reached -- as though it were a
+        cycle -- and the second mixin's base stayed unresolved.
+        """
+        members = self._members(
+            {
+                "public.py": (
+                    "from ._left import _LeftMixin\n"
+                    "from ._right import _RightMixin\n"
+                    "class Public(_LeftMixin, _RightMixin):\n"
+                    "    def own(self): pass\n"
+                ),
+                "_left.py": (
+                    "from ._shared import _LeftBase\n"
+                    "class _LeftMixin(_LeftBase):\n"
+                    "    def left(self): pass\n"
+                ),
+                # The absolute form of the same package-internal import.
+                "_right.py": (
+                    "from pkg._shared import _RightBase\n"
+                    "class _RightMixin(_RightBase):\n"
+                    "    def right(self): pass\n"
+                ),
+                "_shared.py": (
+                    "class _LeftBase:\n"
+                    "    def left_base(self): pass\n"
+                    "class _RightBase:\n"
+                    "    def right_base(self): pass\n"
+                ),
+            }
+        )
+        self.assertEqual({"own", "left", "left_base", "right", "right_base"}, members)
+
+    def test_an_import_cycle_is_still_cut(self):
+        """Only a module already on the current import path is skipped."""
+        members = self._members(
+            {
+                "public.py": (
+                    "from ._a import _AMixin\n"
+                    "class Public(_AMixin):\n"
+                    "    def own(self): pass\n"
+                ),
+                "_a.py": (
+                    "from ._b import _BBase\n"
+                    "class _AMixin(_BBase):\n"
+                    "    def a(self): pass\n"
+                ),
+                "_b.py": (
+                    "from ._a import _AMixin\n"
+                    "class _BBase:\n"
+                    "    def b(self): pass\n"
+                ),
+            }
+        )
+        self.assertEqual({"own", "a", "b"}, members)
+
+
 class TestChangesBaseline(unittest.TestCase):
     """API_CHANGES.md must diff against the last RELEASE (origin/main), not
     the working-tree JSON the run is about to rewrite. The working-tree

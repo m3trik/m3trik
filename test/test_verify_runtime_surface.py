@@ -50,6 +50,23 @@ class TestComputeDrift(unittest.TestCase):
         self.assertEqual(report["C"]["missing"], [])
         self.assertEqual(report["C"]["added"], [])
 
+    def test_a_descriptor_member_is_present_not_missing(self):
+        # A @ClassProperty is a def to the static walker and an ATTRIBUTE at
+        # runtime (a descriptor instance): it exists, so kind_changed, never missing.
+        static = {"C": {"LIMIT": "method"}}
+        runtime = {"C": {"LIMIT": "attribute"}}
+        report = v.compute_drift(static, runtime)
+        self.assertEqual(report["C"]["missing"], [])
+        self.assertEqual(report["C"]["kind_changed"], [("LIMIT", "method", "attribute")])
+
+    def test_live_only_plain_attributes_are_not_added(self):
+        # The runtime side keeps every kind (so a descriptor is never "missing"),
+        # but a plain class attribute is no registry member: not live-only drift.
+        static = {"C": {"a": "method"}}
+        runtime = {"C": {"a": "method", "DEFAULT": "attribute", "extra": "method"}}
+        report = v.compute_drift(static, runtime)
+        self.assertEqual(report["C"]["added"], ["extra"])
+
     def test_only_intersection_of_classes_compared(self):
         # A class on just one side is out of scope (not comparable) -> no report.
         static = {"OnlyStatic": {"a": "method"}}

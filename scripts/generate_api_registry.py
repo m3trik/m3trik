@@ -303,7 +303,8 @@ def _class_members(
     _visited: set[str] | None = None,
 ) -> list[SymbolRecord]:
     """Public members of *node*, including those inherited from PRIVATE bases
-    declared in the same module.
+    declared in the same module or imported from a sibling module of the
+    same package (:func:`_imported_private_classes`).
 
     Without this the registry silently omits a large slice of the real public
     surface: the repo's convention puts capability groups on private mixins
@@ -313,10 +314,14 @@ def _class_members(
     ``ptk.PackageManager.install`` were both unfindable in ``API_INDEX.md``,
     which defeats the "grep the registry before writing a helper" rule.
 
-    Only *private*, *same-module* bases are resolved.  A public base is
-    already documented under its own entry, so pulling its members up would
-    duplicate rather than reveal; a cross-module base can't be resolved from
-    one file's AST (``verify_runtime_surface.py`` is the gate for that).
+    Only *private* bases are resolved -- declared alongside, or imported
+    from a private module of the same package (the scene exporters' phase
+    mixins, ``class TaskManager(TaskFactory, _SceneTasksMixin, ...)`` with
+    each mixin in its own ``_task_*.py``; without that hop the 2026-09-13
+    split read as 44 removed methods).  A public base is already documented
+    under its own entry, so pulling its members up would duplicate rather
+    than reveal; a base from another package can't be resolved from this
+    tree (``verify_runtime_surface.py`` is the gate for that).
     Bases are walked left-to-right, depth-first, first definition winning —
     Python's MRO for the single-inheritance-per-capability shape used here.
 
@@ -349,6 +354,89 @@ def _class_members(
     return out
 
 
+_PARSED: dict[Path, ast.Module | None] = {}
+
+
+def _parse_cached(path: Path) -> ast.Module | None:
+    """*path*'s AST, parsed once per run; None when unreadable or unparseable."""
+    if path not in _PARSED:
+        try:
+            _PARSED[path] = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        except (OSError, UnicodeDecodeError, SyntaxError):
+            _PARSED[path] = None
+    return _PARSED[path]
+
+
+def _import_target(node: ast.ImportFrom, path: Path, pkg_source_root: Path) -> Path | None:
+    """The ``.py`` file an ``ImportFrom`` names, when it is a module of the
+    package being walked (absolute ``pkg.a.b`` or relative ``.b``); else None."""
+    parts = (node.module or "").split(".") if node.module else []
+    if node.level:
+        base = path.parent
+        for _ in range(node.level - 1):
+            base = base.parent
+    else:
+        if not parts or parts[0] != pkg_source_root.name:
+            return None
+        base, parts = pkg_source_root, parts[1:]
+    if not parts:
+        return None
+    target = base.joinpath(*parts).with_suffix(".py")
+    return target if target.is_file() else None
+
+
+def _imported_private_classes(
+    tree: ast.Module,
+    path: Path,
+    pkg_source_root: Path,
+    _visiting: set[Path] | None = None,
+) -> dict[str, ast.ClassDef]:
+    """Private classes *tree* imports from sibling modules of its own package,
+    keyed by the name they are bound to here.
+
+    What lets a public class resolve the members it inherits from a private
+    mixin declared in ANOTHER file (see :func:`_class_members`).  Transitive
+    -- a mixin's own imported private bases come along, so a chain
+    ``TaskManager -> _SceneTasksMixin -> _TaskDataMixin`` across three files
+    resolves -- same-package only, and an unreadable target simply stays
+    unresolved.  ``_visiting`` is the import PATH down to *path*, not every
+    module seen so far: only a module already on it is a cycle to break.  A
+    module reached by two routes (two mixins importing their bases from one
+    module, a diamond) is walked on each, so neither route loses its bases;
+    :func:`_parse_cached` still parses it once.
+    """
+    visiting = {path} if _visiting is None else _visiting
+    found: dict[str, ast.ClassDef] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        wanted = {
+            (alias.asname or alias.name): alias.name
+            for alias in node.names
+            if not _is_public(alias.name)
+        }
+        if not wanted:
+            continue
+        target = _import_target(node, path, pkg_source_root)
+        if target is None or target in visiting:
+            continue
+        module = _parse_cached(target)
+        if module is None:
+            continue
+        classes = {n.name: n for n in module.body if isinstance(n, ast.ClassDef)}
+        # The target's own imported private bases first, so its classes'
+        # bases resolve too; its own definitions then win over those.
+        transitive = _imported_private_classes(
+            module, target, pkg_source_root, visiting | {target}
+        )
+        for bound, source in wanted.items():
+            if source in classes:
+                found[bound] = classes[source]
+        for name, cls in transitive.items():
+            found.setdefault(name, cls)
+    return found
+
+
 def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     """Parse one .py file. Return None if it has no public surface."""
     try:
@@ -367,11 +455,13 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     classes: list[ClassEntry] = []
     constants: list[SymbolRecord] = []
 
-    # Every class in the module, so a public class can resolve members it
-    # inherits from a private base declared alongside it.
-    local_classes = {
-        n.name: n for n in tree.body if isinstance(n, ast.ClassDef)
-    }
+    # Every class in the module -- plus the private ones it imports from
+    # sibling modules -- so a public class can resolve members it inherits
+    # from a private base declared alongside it or in its own file.
+    local_classes = _imported_private_classes(tree, path, pkg_source_root)
+    local_classes.update(
+        {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    )
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

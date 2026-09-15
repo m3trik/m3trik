@@ -26,19 +26,19 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L336)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L188)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
 ### `Finding` — mayatk, pythontk
 
 - `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L82)
-- `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L37)
+- `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L39)
 
 ### `KeyStash` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L213)
 - `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L242)
-- `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L191)
+- `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L194)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
 
@@ -69,7 +69,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
-- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L366)
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L381)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
@@ -114,7 +114,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L334)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L364)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L271)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -174,7 +174,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L538)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L826)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L154)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L539)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L550)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L225)
 - `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L662)
@@ -186,7 +186,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
 - `tentacle` — [`register`](tentacle/tcl_blender.py#L2196)
-- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1427)
+- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1694)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 

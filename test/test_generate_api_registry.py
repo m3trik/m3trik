@@ -1260,6 +1260,22 @@ class TestDeprecationExpiryGate(unittest.TestCase):
     """
 
     def setUp(self):
+        # The gate is only ACTIVE when the pythontk sibling supplies
+        # ``Deprecation.version_key``; without it the generator deliberately
+        # degrades to a stand-in that raises ValueError, so every deadline
+        # reads as "cannot expire" and these expectations do not apply. That
+        # is a routine state, not a broken one -- m3trik must reach main
+        # BEFORE the packages land their side of a cross-repo change, so in
+        # that window CI clones a pythontk with no deprecation.py. Skip, never
+        # fail: the rest of this module needs no sibling at all.
+        try:
+            g._version_key("1.0.0")
+        except ValueError:
+            self.skipTest(
+                "pythontk sibling predates core_utils/deprecation.py; the "
+                "expiry gate is inactive (see _load_version_key)"
+            )
+
         self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self._td.cleanup)
         self.root = Path(self._td.name)

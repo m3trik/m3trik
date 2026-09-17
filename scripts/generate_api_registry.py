@@ -98,9 +98,42 @@ def _load_version_key():
     The expiry gate and the runtime roster must agree on what a removal version
     IS; a second parser here would be free to drift into accepting something
     the other rejects, and the failure mode of that drift is an alias that
-    never expires -- the exact bug the gate exists to catch.
+    never expires -- the exact bug the gate exists to catch. So when the
+    sibling cannot supply one, this does NOT fall back to a local parser.
+
+    A pythontk checkout predating ``core_utils/deprecation.py`` is a real and
+    ROUTINE state, not a broken one: ``m3trik/CLAUDE.md`` requires this repo to
+    reach main BEFORE the packages land their side of a cross-repo change, so
+    between those two pushes every sibling is a pythontk without the module --
+    and this import runs at module scope, where a raise takes down the whole
+    generator, which every package's PR runs as ``--check``. Measured
+    2026-09-17: it did, with `FileNotFoundError` at COLLECTION.
+
+    The stand-in raises ``ValueError`` for every input, which is the contract
+    both consumers already handle -- :func:`deprecations` sorts such a row last
+    ("cannot expire, which is itself worth seeing") and
+    :func:`expired_deprecations` skips it. The gate therefore goes quiet rather
+    than wrong, and says so on stderr, because a silently disabled expiry gate
+    is the failure this whole mechanism exists to prevent.
     """
     path = REPO_ROOT / "pythontk" / "pythontk" / "core_utils" / "deprecation.py"
+    if not path.is_file():
+        print(
+            f"[api-registry] NOTE: {path} is absent (a pythontk predating "
+            "ptk.Deprecation), so the deprecation EXPIRY GATE is inactive for "
+            "this run. Registry output is unaffected; an overdue alias will "
+            "not be reported until the sibling carries the module.",
+            file=sys.stderr,
+        )
+
+        def _unavailable(version: str):
+            raise ValueError(
+                "no Deprecation.version_key: the pythontk sibling predates "
+                "core_utils/deprecation.py"
+            )
+
+        return _unavailable
+
     spec = importlib.util.spec_from_file_location("_ptk_deprecation", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load Deprecation from {path}")

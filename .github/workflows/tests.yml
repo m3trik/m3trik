@@ -12,6 +12,21 @@ name: Tests
 # refresh-api-registry.yml's ordering rule requires m3trik/scripts to reach
 # main BEFORE the packages land their side of a cross-repo change.
 #
+# EXPECT A RED WINDOW, and do not "fix" it by reverting. That ordering rule
+# means a change split across this repo and a package is HALF LANDED while
+# this workflow runs: the siblings are cloned at their published branch, so
+# the generator here can be newer than the pythontk it loads its DTOs from.
+# Measured 2026-09-17 on this file's own first two runs -- the generator gained
+# a `remove_in` field on pythontk's `SymbolRecord` and a dependency on
+# `core_utils/deprecation.py`, and against the then-current pythontk@dev that
+# was one collection error, then 33 failures of
+# `SymbolRecord.__init__() got an unexpected keyword argument 'remove_in'`.
+# The absent-module half was made to degrade (see `_load_version_key`); the
+# DTO half CANNOT -- recording a deadline needs a field to put it in -- so it
+# stays red until the package half lands, and then goes green with no change
+# here. Read a failure on this workflow against what is unlanded in the
+# siblings BEFORE treating it as a defect in this repo.
+#
 # The suite is NOT self-contained -- it needs the monorepo layout. Measured
 # 2026-09-16 against an isolated `git archive` checkout: with no siblings,
 # test_generate_api_registry ERRORS AT COLLECTION (the generator loads

@@ -91,6 +91,99 @@ def _load_symbol_record() -> type:
 
 SymbolRecord = _load_symbol_record()
 
+
+def _load_version_key():
+    """Load ``Deprecation.version_key`` from pythontk source, as above.
+
+    The expiry gate and the runtime roster must agree on what a removal version
+    IS; a second parser here would be free to drift into accepting something
+    the other rejects, and the failure mode of that drift is an alias that
+    never expires -- the exact bug the gate exists to catch.
+    """
+    path = REPO_ROOT / "pythontk" / "pythontk" / "core_utils" / "deprecation.py"
+    spec = importlib.util.spec_from_file_location("_ptk_deprecation", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load Deprecation from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.Deprecation.version_key
+
+
+_version_key = _load_version_key()
+
+#: ``__version__ = "1.2.3"`` in a package root, read with a regex rather than an
+#: import: this generator runs on a bare CI box where the package it is walking
+#: is not installed and its dependencies are absent. The optional annotation
+#: matters -- ``__version__: str = "1.2.3"`` is valid and would otherwise read
+#: as "no version", which silently disables the expiry gate for that package.
+_PKG_VERSION_RE = re.compile(
+    r"^__version__\s*(?::[^=]*)?=\s*[\"']([^\"']+)[\"']", re.MULTILINE
+)
+
+
+def package_version(pkg_dir: Path, name: str) -> str:
+    """The walked package's own ``__version__``, or ``""`` if it declares none."""
+    init = pkg_dir / name / "__init__.py"
+    if not init.is_file():
+        return ""
+    match = _PKG_VERSION_RE.search(init.read_text(encoding="utf-8", errors="replace"))
+    return match.group(1) if match else ""
+
+
+def deprecations(pkg: PackageData) -> list[tuple[str, str, str]]:
+    """Every retired symbol in *pkg* as ``(relpath, qualname, remove_in)``.
+
+    Sorted by removal version so the oldest debt reads first.
+    """
+    found: list[tuple[str, str, str]] = []
+    for mod in pkg.modules:
+        for fn in mod.functions:
+            if fn.deprecated:
+                found.append((mod.relpath, fn.qualname, fn.remove_in))
+        for cls in mod.classes:
+            if cls.deprecated:
+                found.append((mod.relpath, cls.name, cls.remove_in))
+            for member in cls.members:
+                if member.deprecated:
+                    found.append((mod.relpath, member.qualname, member.remove_in))
+
+    def order(row: tuple[str, str, str]) -> tuple:
+        try:
+            return (0, _version_key(row[2]), row[1])
+        except ValueError:
+            # No removal version recorded (a bare marker, or the stdlib's).
+            # Sorted last: it cannot expire, which is itself worth seeing.
+            return (1, (0, 0, 0), row[1])
+
+    return sorted(found, key=order)
+
+
+def expired_deprecations(pkg: PackageData, version: str) -> list[tuple[str, str, str]]:
+    """Retired symbols whose removal release *version* has already reached.
+
+    An empty *version*, or a symbol with no ``remove_in``, can never expire --
+    both are reported by :func:`deprecations` instead, where they read as debt
+    rather than as a passing gate.
+    """
+    if not version:
+        return []
+    try:
+        current = _version_key(version)
+    except ValueError:
+        return []
+    out = []
+    for row in deprecations(pkg):
+        if not row[2]:
+            continue
+        try:
+            if current >= _version_key(row[2]):
+                out.append(row)
+        except ValueError:
+            continue
+    return out
+
+
 ECOSYSTEM_PACKAGES = (
     "pythontk",
     "uitk",
@@ -134,6 +227,11 @@ class ClassEntry:
     line: int
     bases: list[str] = field(default_factory=list)
     members: list[SymbolRecord] = field(default_factory=list)
+    # A retired CLASS is the shape `ptk.Git` and unitytk's `SceneBuilder` take,
+    # and the walk recorded it as live because only methods were ever read for
+    # a deprecation marker.
+    deprecated: bool = False
+    remove_in: str = ""
 
 
 @dataclass
@@ -228,10 +326,73 @@ def _format_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return sig
 
 
-def _decorator_kinds(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, bool]:
-    """Return (kind, deprecated). kind is method/staticmethod/classmethod/property."""
+#: Decorator spellings that retire a WHOLE symbol. ``Deprecation.parameter`` is
+#: deliberately absent: it retires one keyword of a function that stays, and
+#: marking its owner DEPRECATED would make the registry claim a live method is
+#: going away -- the same false positive the Removed/Moved split exists to
+#: avoid. PEP 702's spellings are listed so a symbol retired with the stdlib
+#: decorator (3.13+) reads the same as one retired with ``pythontk``'s.
+_DEPRECATION_DECORATORS = (
+    "deprecated",
+    "Deprecation.symbol",
+    "warnings.deprecated",
+    "typing_extensions.deprecated",
+)
+
+
+def _decorator_path(dec: ast.expr) -> str:
+    """Dotted source spelling of a decorator, e.g. ``ptk.Deprecation.symbol``.
+
+    The previous reader took only ``dec.id`` / ``dec.attr``, so it saw
+    ``symbol`` for ``@Deprecation.symbol(...)`` and could not tell it from any
+    other one-word attribute decorator. Every deprecation in this ecosystem is
+    written through a class namespace (the encapsulation rule leaves no other
+    spelling), so the dotted form is the only one that can be matched at all.
+    """
+    if isinstance(dec, ast.Call):
+        dec = dec.func
+    parts: list[str] = []
+    while isinstance(dec, ast.Attribute):
+        parts.append(dec.attr)
+        dec = dec.value
+    if isinstance(dec, ast.Name):
+        parts.append(dec.id)
+    return ".".join(reversed(parts))
+
+
+def _deprecation_of(decorators: list) -> tuple[bool, str]:
+    """``(deprecated, remove_in)`` read off a decorator list.
+
+    ``remove_in`` is a literal keyword on the decorator call, so it survives
+    the static walk -- which is the point: the runtime roster only sees modules
+    something imported, while this sees every decorated symbol in the package
+    and is therefore what the expiry gate can be built on.
+    """
+    for dec in decorators:
+        path = _decorator_path(dec)
+        if not any(
+            path == name or path.endswith(f".{name}")
+            for name in _DEPRECATION_DECORATORS
+        ):
+            continue
+        remove_in = ""
+        if isinstance(dec, ast.Call):
+            for keyword in dec.keywords:
+                if (
+                    keyword.arg == "remove_in"
+                    and isinstance(keyword.value, ast.Constant)
+                    and isinstance(keyword.value.value, str)
+                ):
+                    remove_in = keyword.value.value
+        return True, remove_in
+    return False, ""
+
+
+def _decorator_kinds(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[str, bool, str]:
+    """Return (kind, deprecated, remove_in). kind is method/staticmethod/classmethod/property."""
     kind = "method"
-    deprecated = False
     for dec in node.decorator_list:
         name = (
             dec.id
@@ -250,9 +411,8 @@ def _decorator_kinds(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str,
             kind = "classmethod"
         elif name == "property":
             kind = "property"
-        elif name == "deprecated":
-            deprecated = True
-    return kind, deprecated
+    deprecated, remove_in = _deprecation_of(node.decorator_list)
+    return kind, deprecated, remove_in
 
 
 def _is_public(name: str) -> bool:
@@ -280,7 +440,7 @@ def _own_members(node: ast.ClassDef, owner: str) -> list[SymbolRecord]:
             continue
         if not _is_public(member.name) or _is_property_accessor(member):
             continue
-        kind, deprecated = _decorator_kinds(member)
+        kind, deprecated, remove_in = _decorator_kinds(member)
         out.append(
             SymbolRecord(
                 name=member.name,
@@ -290,6 +450,7 @@ def _own_members(node: ast.ClassDef, owner: str) -> list[SymbolRecord]:
                 summary=_first_sentence(ast.get_docstring(member)),
                 line=member.lineno,
                 deprecated=deprecated,
+                remove_in=remove_in,
             )
         )
     return out
@@ -367,7 +528,9 @@ def _parse_cached(path: Path) -> ast.Module | None:
     return _PARSED[path]
 
 
-def _import_target(node: ast.ImportFrom, path: Path, pkg_source_root: Path) -> Path | None:
+def _import_target(
+    node: ast.ImportFrom, path: Path, pkg_source_root: Path
+) -> Path | None:
     """The ``.py`` file an ``ImportFrom`` names, when it is a module of the
     package being walked (absolute ``pkg.a.b`` or relative ``.b``); else None."""
     parts = (node.module or "").split(".") if node.module else []
@@ -459,27 +622,23 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     # sibling modules -- so a public class can resolve members it inherits
     # from a private base declared alongside it or in its own file.
     local_classes = _imported_private_classes(tree, path, pkg_source_root)
-    local_classes.update(
-        {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
-    )
+    local_classes.update({n.name: n for n in tree.body if isinstance(n, ast.ClassDef)})
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if not _is_public(node.name):
                 continue
-            kind, deprecated = "function", False
-            for dec in node.decorator_list:
-                if isinstance(dec, ast.Name) and dec.id == "deprecated":
-                    deprecated = True
+            deprecated, remove_in = _deprecation_of(node.decorator_list)
             funcs.append(
                 SymbolRecord(
                     name=node.name,
                     qualname=node.name,
-                    kind=kind,
+                    kind="function",
                     signature=_format_signature(node),
                     summary=_first_sentence(ast.get_docstring(node)),
                     line=node.lineno,
                     deprecated=deprecated,
+                    remove_in=remove_in,
                 )
             )
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -516,6 +675,7 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                 ast.unparse(b) if not isinstance(b, ast.Name) else b.id
                 for b in node.bases
             ]
+            cls_deprecated, cls_remove_in = _deprecation_of(node.decorator_list)
             classes.append(
                 ClassEntry(
                     name=node.name,
@@ -523,6 +683,8 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                     line=node.lineno,
                     bases=bases,
                     members=members,
+                    deprecated=cls_deprecated,
+                    remove_in=cls_remove_in,
                 )
             )
 
@@ -580,6 +742,22 @@ def walk_package(pkg_dir: Path, repo_root: Path = REPO_ROOT) -> PackageData:
 # ---------- Markdown emission -------------------------------------------------
 
 
+def _deprecated_tag(symbol) -> str:
+    """The ``**DEPRECATED (remove in X.Y.Z)**`` decoration, or an empty string.
+
+    Shared by the three places that render one so the removal version cannot
+    show up in the member rows and be missing from the module-level function
+    and class headers, which is how a reviewer ends up trusting a registry that
+    marks only some of the retirements it knows about.
+    """
+    if not getattr(symbol, "deprecated", False):
+        return ""
+    remove_in = getattr(symbol, "remove_in", "")
+    return (
+        f" **DEPRECATED (remove in {remove_in})**" if remove_in else " **DEPRECATED**"
+    )
+
+
 def _src_link(pkg: PackageData, relpath: str, line: int) -> str:
     return f"{pkg.source_root}/{relpath}#L{line}"
 
@@ -620,7 +798,7 @@ def emit_registry_markdown(pkg: PackageData) -> str:
         lines.append("")
         for fn in mod.functions:
             link = _src_link(pkg, mod.relpath, fn.line)
-            dep = " **DEPRECATED**" if fn.deprecated else ""
+            dep = _deprecated_tag(fn)
             summary = f" — {fn.summary}" if fn.summary else ""
             lines.append(f"- [`{fn.qualname}{fn.signature}`]({link}){dep}{summary}")
         for const in mod.constants:
@@ -630,7 +808,10 @@ def emit_registry_markdown(pkg: PackageData) -> str:
             link = _src_link(pkg, mod.relpath, cls.line)
             base = f"({', '.join(cls.bases)})" if cls.bases else ""
             summary = f" — {cls.summary}" if cls.summary else ""
-            lines.append(f"- **[`class {cls.name}{base}`]({link})**{summary}")
+            lines.append(
+                f"- **[`class {cls.name}{base}`]({link})**"
+                f"{_deprecated_tag(cls)}{summary}"
+            )
             for member in cls.members:
                 lines.append(member.to_registry_row())
         lines.append("")
@@ -661,7 +842,7 @@ def emit_symbol_index(pkg: PackageData) -> str:
             header += f" — {mod.summary}"
         lines.append(header)
         for fn in mod.functions:
-            dep = " **DEPRECATED**" if fn.deprecated else ""
+            dep = _deprecated_tag(fn)
             lines.append(f"- `{fn.name}{fn.signature}`{dep}")
         if mod.constants:
             lines.append(f"- constants: {', '.join(c.name for c in mod.constants)}")
@@ -695,6 +876,8 @@ def _package_data_from_json(d: dict) -> PackageData:
                     line=c.get("line", 0),
                     bases=c.get("bases", []),
                     members=members,
+                    deprecated=c.get("deprecated", False),
+                    remove_in=c.get("remove_in", ""),
                 )
             )
         modules.append(
@@ -764,8 +947,7 @@ def _baseline_registry_json(pkg_dir: Path) -> tuple[dict | None, str]:
                 prior = None
             if prior is not None:
                 sha = (
-                    _git_output(pkg_dir, "rev-parse", "--short", BASELINE_REF)
-                    or ""
+                    _git_output(pkg_dir, "rev-parse", "--short", BASELINE_REF) or ""
                 ).strip()
                 return prior, f"the last release ({BASELINE_REF} @ {sha or 'unknown'})"
     path = pkg_dir / "API_REGISTRY.json"
@@ -777,9 +959,7 @@ def _baseline_registry_json(pkg_dir: Path) -> tuple[dict | None, str]:
                     "but holds no valid sidecar)"
                 )
             else:
-                reason = (
-                    f"the last refresh (working tree; {BASELINE_REF} unresolvable)"
-                )
+                reason = f"the last refresh (working tree; {BASELINE_REF} unresolvable)"
             return (
                 json.loads(path.read_text(encoding="utf-8")),
                 reason,
@@ -981,12 +1161,45 @@ def _relpaths_losing_symbols(pkg: PackageData, prior_json: dict | None) -> set[s
     }
 
 
+def _deprecation_section(pkg: PackageData, version: str) -> list[str]:
+    """The retirement-debt section: everything deprecated, earliest deadline first.
+
+    It rides in API_CHANGES.md because that is the file a reviewer reads before
+    a release, and a deadline nobody reads is the failure this exists to end.
+    The hard stop is separate (``--check`` exits non-zero on an EXPIRED row);
+    this is what shows the deadline coming BEFORE the release that trips it.
+    """
+    rows = deprecations(pkg)
+    if not rows:
+        return []
+    expired = {
+        (relpath, qualname)
+        for relpath, qualname, _ in expired_deprecations(pkg, version)
+    }
+    lines = [f"## Deprecations ({len(rows)})", ""]
+    lines.append(
+        "_Live retirement debt, earliest deadline first. An **EXPIRED** row has "
+        "outlived its one-release window: delete the alias and its tests rather "
+        "than moving the date._"
+    )
+    lines.append("")
+    for relpath, qualname, remove_in in rows:
+        mark = "**EXPIRED** " if (relpath, qualname) in expired else ""
+        due = (
+            f"remove in {remove_in}" if remove_in else "**no removal version recorded**"
+        )
+        lines.append(f"- {mark}`{relpath}::{qualname}` — {due}")
+    lines.append("")
+    return lines
+
+
 def emit_changes_markdown(
     pkg: PackageData,
     prior_json: dict | None,
     baseline_label: str = "prior baseline",
     foreign_members: dict[str, set[str]] | None = None,
     reexports: dict[str, set[str]] | None = None,
+    version: str = "",
 ) -> str:
     """Render the public-API delta against a prior registry sidecar.
 
@@ -1000,11 +1213,20 @@ def emit_changes_markdown(
     """
     new = _flatten_signatures(pkg)
     if prior_json is None:
-        return (
-            f"# {pkg.name} — API Changes\n\n"
+        # No baseline to diff against, but the retirement debt is a
+        # property of THIS tree, not of the delta -- a package whose first
+        # registry generation is also the release that retires something
+        # would otherwise report none of it.
+        head = [
+            f"# {pkg.name} — API Changes",
+            "",
             "_Initial registry. No prior baseline — diff will appear on next "
-            "regeneration._\n"
-        )
+            "regeneration._",
+        ]
+        debt = _deprecation_section(pkg, version)
+        if debt:
+            head.extend(["", *debt])
+        return "\n".join(head).rstrip() + "\n"
 
     # Reconstruct a flat map from prior JSON (which mirrors PackageData shape).
     prior: dict[str, str] = {}
@@ -1073,8 +1295,15 @@ def emit_changes_markdown(
     lines = [f"# {pkg.name} — API Changes", ""]
     lines.append(f"_Diff vs {baseline_label}._")
     lines.append("")
+    # Built before the early return: retirement debt is reported whether or not
+    # this release changed anything else, which is the point -- an alias runs
+    # out of time during a release that touched nothing near it.
+    deprecation_lines = _deprecation_section(pkg, version)
     if not (added or removed or changed or moved):
         lines.append(f"No public API changes since {baseline_label}.")
+        if deprecation_lines:
+            lines.append("")
+            lines.extend(deprecation_lines)
         return "\n".join(lines) + "\n"
 
     if removed:
@@ -1091,6 +1320,7 @@ def emit_changes_markdown(
             mod, sym = key.split("::", 1)
             lines.append(f"- `{mod}::{sym}{new[key]}`")
         lines.append("")
+    lines.extend(deprecation_lines)
     if moved:
         lines.append(f"## Moved ({len(moved)})")
         lines.append("")
@@ -1211,8 +1441,33 @@ def emit_shadow_report(packages: list[PackageData]) -> str:
 # ---------- Driver ------------------------------------------------------------
 
 
+def _prune_empty_remove_in(node):
+    """Drop ``remove_in``/``deprecated`` keys that carry no information.
+
+    ``asdict`` would write ``"remove_in": ""`` against every symbol in the
+    ecosystem -- tens of thousands of lines of committed machine file saying
+    nothing, and a one-time diff big enough to bury the surface change it
+    shipped with. Absent reads back as the dataclass default, so the sidecar
+    grows only where a retirement was actually recorded. ``deprecated`` is
+    pruned on CLASSES only: it is new there, whereas every symbol row has
+    carried it since the sidecar was first written and dropping it now would
+    churn exactly what this avoids.
+    """
+    if isinstance(node, dict):
+        if not node.get("remove_in", None):
+            node.pop("remove_in", None)
+        if "members" in node and not node.get("deprecated", False):
+            node.pop("deprecated", None)
+        for value in node.values():
+            _prune_empty_remove_in(value)
+    elif isinstance(node, list):
+        for value in node:
+            _prune_empty_remove_in(value)
+    return node
+
+
 def _to_jsonable(pkg: PackageData) -> dict:
-    return asdict(pkg)
+    return _prune_empty_remove_in(asdict(pkg))
 
 
 class StalenessGate:
@@ -1322,6 +1577,7 @@ def regenerate(
     packages: list[PackageData] = []
     stale: list[str] = []
     unwalkable: list[str] = []
+    overdue: list[str] = []
 
     for name in package_names:
         pkg_dir = repo_root / name
@@ -1337,6 +1593,25 @@ def regenerate(
             continue
         packages.append(data)
 
+        # The one-release alias window, enforced rather than remembered: a
+        # retirement that named ``remove_in`` and then shipped past it is caught
+        # by comparing it against the package's own ``__version__``.
+        pkg_version = package_version(pkg_dir, name)
+        dated = [row for row in deprecations(data) if row[2]]
+        if dated and not pkg_version:
+            # A gate that passes because it compared against NOTHING is worse
+            # than no gate (the same rule the unwalkable-package check exists
+            # for). Without a readable __version__ nothing here can expire, so
+            # say so rather than reporting a clean bill of health.
+            print(
+                f"warning: {name} has {len(dated)} dated deprecation(s) but no "
+                f"readable __version__ in {name}/{name}/__init__.py -- the "
+                "one-release window is UNCHECKED for this package",
+                file=sys.stderr,
+            )
+        for relpath, qualname, remove_in in expired_deprecations(data, pkg_version):
+            overdue.append(f"{name}/{relpath}::{qualname} (was due in {remove_in})")
+
         targets = {
             pkg_dir / "API_INDEX.md": emit_symbol_index(data),
             pkg_dir / "API_REGISTRY.md": emit_registry_markdown(data),
@@ -1347,9 +1622,7 @@ def regenerate(
             # the release baseline, so skipping it keeps ``--check`` fast and
             # independent of a shallow CI checkout's missing origin/main.
             prior, baseline_label = _baseline_registry_json(pkg_dir)
-            registry_json = json.dumps(
-                _to_jsonable(data), indent=2, ensure_ascii=False
-            )
+            registry_json = json.dumps(_to_jsonable(data), indent=2, ensure_ascii=False)
             targets[pkg_dir / "API_REGISTRY.json"] = registry_json + "\n"
             targets[pkg_dir / "API_CHANGES.md"] = emit_changes_markdown(
                 data,
@@ -1360,6 +1633,7 @@ def regenerate(
                     repo_root / data.source_root,
                     _relpaths_losing_symbols(data, prior),
                 ),
+                version=pkg_version,
             )
 
         for path, content in targets.items():
@@ -1421,7 +1695,9 @@ def regenerate(
         shadow_md = emit_shadow_report(
             [shadow_inputs[n] for n in sorted(shadow_inputs)]
         )
-        existing = shadow_path.read_text(encoding="utf-8") if shadow_path.exists() else None
+        existing = (
+            shadow_path.read_text(encoding="utf-8") if shadow_path.exists() else None
+        )
         if check_only:
             if StalenessGate.is_stale(existing, shadow_md):
                 stale.append(shadow_path.relative_to(repo_root).as_posix())
@@ -1438,11 +1714,29 @@ def regenerate(
     scoped_run = set(package_names) != set(ECOSYSTEM_PACKAGES)
     if check_only and unwalkable and (scoped_run or not packages):
         print(
-            "Nothing to check for: " + ", ".join(unwalkable)
+            "Nothing to check for: "
+            + ", ".join(unwalkable)
             + " (wrong package name, or checked out at the wrong path?)",
             file=sys.stderr,
         )
         return 1
+
+    if overdue:
+        # Printed on every run, fatal only under --check. A plain regeneration is
+        # also what the registry refresh bot runs, and failing that would block
+        # the very commit carrying this report; CI is where a red gate reaches a
+        # person who can delete the alias.
+        stream = sys.stderr if check_only else sys.stdout
+        print(
+            f"{len(overdue)} deprecation(s) outlived the one-release window. "
+            "Delete the alias and its tests, or -- if it genuinely must stay -- "
+            "raise remove_in deliberately and say why in CHANGELOG.md:",
+            file=stream,
+        )
+        for entry in overdue:
+            print(f"  expired: {entry}", file=stream)
+        if check_only:
+            return 1
 
     if check_only and stale:
         print("Stale - regenerate with:", file=sys.stderr)

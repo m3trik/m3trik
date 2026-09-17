@@ -37,17 +37,32 @@ class TestShadowBucketing(unittest.TestCase):
     def test_parity_vs_genuine_split(self):
         # Bevel: mayatk + blendertk only -> intentional port parity.
         # CoreUtils: pythontk + mayatk    -> genuine cross-layer collision.
-        mayatk = _pkg("mayatk", [_mod("edit_utils/_edit_utils.py", [_cls("Bevel"), _cls("CoreUtils")])])
-        blendertk = _pkg("blendertk", [_mod("edit_utils/_edit_utils.py", [_cls("Bevel")])])
-        pythontk = _pkg("pythontk", [_mod("core_utils/_core_utils.py", [_cls("CoreUtils")])])
+        mayatk = _pkg(
+            "mayatk",
+            [_mod("edit_utils/_edit_utils.py", [_cls("Bevel"), _cls("CoreUtils")])],
+        )
+        blendertk = _pkg(
+            "blendertk", [_mod("edit_utils/_edit_utils.py", [_cls("Bevel")])]
+        )
+        pythontk = _pkg(
+            "pythontk", [_mod("core_utils/_core_utils.py", [_cls("CoreUtils")])]
+        )
 
         md = g.emit_shadow_report([pythontk, mayatk, blendertk])
         self.assertIn("Intentional mayatk", md, "parity bucket header missing")
         genuine, parity = md.split("Intentional mayatk", 1)
 
-        self.assertIn("CoreUtils", genuine, "genuine cross-layer collision should be in the top section")
-        self.assertNotIn("Bevel", genuine, "intentional parity must NOT pollute the genuine section")
-        self.assertIn("Bevel", parity, "mayatk<->blendertk parity should be bucketed separately")
+        self.assertIn(
+            "CoreUtils",
+            genuine,
+            "genuine cross-layer collision should be in the top section",
+        )
+        self.assertNotIn(
+            "Bevel", genuine, "intentional parity must NOT pollute the genuine section"
+        )
+        self.assertIn(
+            "Bevel", parity, "mayatk<->blendertk parity should be bucketed separately"
+        )
 
     def test_no_collisions_message(self):
         md = g.emit_shadow_report([_pkg("pythontk", [_mod("m.py", [_cls("Solo")])])])
@@ -65,7 +80,9 @@ class TestJsonReconstruction(unittest.TestCase):
     def test_reconstructed_package_feeds_shadow_report(self):
         # A package reconstructed from JSON must collide like a walked one.
         walked = _pkg("mayatk", [_mod("m.py", [_cls("CoreUtils")])])
-        from_json = g._package_data_from_json(asdict(_pkg("pythontk", [_mod("m.py", [_cls("CoreUtils")])])))
+        from_json = g._package_data_from_json(
+            asdict(_pkg("pythontk", [_mod("m.py", [_cls("CoreUtils")])]))
+        )
         md = g.emit_shadow_report([walked, from_json])
         self.assertIn("CoreUtils", md)
         self.assertIn("pythontk", md)
@@ -81,13 +98,19 @@ class TestPropertyAccessorSkip(unittest.TestCase):
         return ast.parse(src).body[0]
 
     def test_setter_is_accessor(self):
-        self.assertTrue(g._is_property_accessor(self._func("@x.setter\ndef x(self, v): ...")))
+        self.assertTrue(
+            g._is_property_accessor(self._func("@x.setter\ndef x(self, v): ..."))
+        )
 
     def test_deleter_is_accessor(self):
-        self.assertTrue(g._is_property_accessor(self._func("@x.deleter\ndef x(self): ...")))
+        self.assertTrue(
+            g._is_property_accessor(self._func("@x.deleter\ndef x(self): ..."))
+        )
 
     def test_getter_is_not_accessor(self):
-        self.assertFalse(g._is_property_accessor(self._func("@property\ndef x(self): ...")))
+        self.assertFalse(
+            g._is_property_accessor(self._func("@property\ndef x(self): ..."))
+        )
 
     def test_plain_method_is_not_accessor(self):
         self.assertFalse(g._is_property_accessor(self._func("def x(self): ...")))
@@ -187,9 +210,7 @@ class TestPrivateBaseMembersResolved(unittest.TestCase):
             "class Public(_Mid):\n"
             "    def own(self): pass\n"
         )
-        self.assertEqual(
-            {"own", "mid", "deep"}, {n for n, _ in members}
-        )
+        self.assertEqual({"own", "mid", "deep"}, {n for n, _ in members})
 
     def test_self_referential_base_does_not_recurse(self):
         """A looping base graph must not crash the whole registry build.
@@ -237,8 +258,7 @@ class TestPrivateBaseMembersResolved(unittest.TestCase):
     def test_cross_module_base_is_ignored(self):
         """An unresolvable base name must not crash or invent members."""
         members = self._members(
-            "class Public(_NotInThisFile, ptk.HelpMixin):\n"
-            "    def own(self): pass\n"
+            "class Public(_NotInThisFile, ptk.HelpMixin):\n    def own(self): pass\n"
         )
         self.assertEqual({("own", "method")}, members)
 
@@ -321,9 +341,7 @@ class TestImportedPrivateBasesResolve(unittest.TestCase):
                     "    def a(self): pass\n"
                 ),
                 "_b.py": (
-                    "from ._a import _AMixin\n"
-                    "class _BBase:\n"
-                    "    def b(self): pass\n"
+                    "from ._a import _AMixin\nclass _BBase:\n    def b(self): pass\n"
                 ),
             }
         )
@@ -342,8 +360,13 @@ class TestChangesBaseline(unittest.TestCase):
     def _git(repo: Path, *args: str) -> None:
         subprocess.run(
             [
-                "git", "-C", str(repo),
-                "-c", "user.email=test@test", "-c", "user.name=test",
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.email=test@test",
+                "-c",
+                "user.name=test",
                 *args,
             ],
             check=True,
@@ -367,9 +390,7 @@ class TestChangesBaseline(unittest.TestCase):
             "source_root": f"{pkg.name}/{pkg.name}",
             "modules": [],
         }
-        (pkg / "API_REGISTRY.json").write_text(
-            json.dumps(baseline), encoding="utf-8"
-        )
+        (pkg / "API_REGISTRY.json").write_text(json.dumps(baseline), encoding="utf-8")
         self._git(pkg, "init")
         self._git(pkg, "add", "API_REGISTRY.json")
         self._git(pkg, "commit", "-m", "release baseline")
@@ -387,7 +408,8 @@ class TestChangesBaseline(unittest.TestCase):
                         encoding="utf-8"
                     )
                     self.assertIn(
-                        "Added", changes,
+                        "Added",
+                        changes,
                         f"{name} run {run}: the delta was absorbed",
                     )
                     self.assertIn("Widget", changes)
@@ -640,9 +662,7 @@ class TestCheckGateOnFixtureTree(unittest.TestCase):
             '"""Mod."""\n\n\nclass Other:\n    """Different surface."""\n',
             encoding="utf-8",
         )
-        before = {
-            p.name: p.read_bytes() for p in pkg.glob("API_*") if p.is_file()
-        }
+        before = {p.name: p.read_bytes() for p in pkg.glob("API_*") if p.is_file()}
         rc, _ = self._check(["pythontk"])
         self.assertEqual(1, rc)
         after = {p.name: p.read_bytes() for p in pkg.glob("API_*") if p.is_file()}
@@ -1116,6 +1136,309 @@ class TestModuleConstantsAreTracked(unittest.TestCase):
         self.assertIn("Gone", md)
         self.assertIn("## Added", md, f"suppression swallowed an addition:\n{md}")
         self.assertIn("Fresh", md)
+
+
+class TestDeprecationRecognition(unittest.TestCase):
+    """The static half of the deprecation clock: which decorators retire a
+    symbol, and the removal version read off the call.
+
+    The reader this replaces took only ``dec.id``/``dec.attr``, so it matched a
+    bare ``@deprecated`` and nothing else -- while every deprecation in the
+    ecosystem is written through a class namespace, because the encapsulation
+    rule leaves no other spelling. Nothing in seven packages was ever marked.
+    """
+
+    def _walk(self, source: str) -> "g.ModuleEntry":
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            pkg = root / "pythontk"
+            (pkg / "pythontk").mkdir(parents=True)
+            (pkg / "pythontk" / "mod.py").write_text(source, encoding="utf-8")
+            data = g.walk_package(pkg, root)
+        return data.modules[0]
+
+    def test_decorator_path_renders_the_dotted_spelling(self):
+        for source, expected in (
+            ("@deprecated\ndef f(): pass", "deprecated"),
+            ("@Deprecation.symbol('x')\ndef f(): pass", "Deprecation.symbol"),
+            ("@ptk.Deprecation.symbol('x')\ndef f(): pass", "ptk.Deprecation.symbol"),
+        ):
+            with self.subTest(source=source):
+                node = ast.parse(source).body[0]
+                self.assertEqual(g._decorator_path(node.decorator_list[0]), expected)
+
+    def test_symbol_decorator_marks_a_method_with_its_deadline(self):
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "class Widget:\n"
+            '    """A widget."""\n'
+            "\n"
+            "    @classmethod\n"
+            "    @Deprecation.symbol('Widget.spin', remove_in='0.11.0')\n"
+            "    def whirl(cls):\n"
+            '        """Old."""\n'
+        )
+        member = mod.classes[0].members[0]
+        self.assertTrue(member.deprecated)
+        self.assertEqual(member.remove_in, "0.11.0")
+        self.assertEqual(member.kind, "classmethod")
+
+    def test_a_namespaced_spelling_is_recognised(self):
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "@ptk.Deprecation.symbol('NewThing', remove_in='1.2.3')\n"
+            "def old_fn():\n"
+            '    """Old."""\n'
+        )
+        self.assertTrue(mod.functions[0].deprecated)
+        self.assertEqual(mod.functions[0].remove_in, "1.2.3")
+
+    def test_the_bare_legacy_marker_still_counts(self):
+        """A symbol retired with PEP 702's own decorator reads the same, just
+        without a deadline this walker can check."""
+        mod = self._walk('"""Mod."""\n\n\n@deprecated\ndef old_fn():\n    """Old."""\n')
+        self.assertTrue(mod.functions[0].deprecated)
+        self.assertEqual(mod.functions[0].remove_in, "")
+
+    def test_a_retired_parameter_does_not_retire_its_owner(self):
+        """The method stays; only the keyword goes. Marking the owner would
+        have the registry announce the removal of a live method -- the same
+        false positive the Removed/Moved split exists to prevent."""
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "@Deprecation.parameter('old_kw', new='new_kw', remove_in='0.11.0')\n"
+            "def live_fn(new_kw=None):\n"
+            '    """Live."""\n'
+        )
+        self.assertFalse(mod.functions[0].deprecated)
+        self.assertEqual(mod.functions[0].remove_in, "")
+
+    def test_a_retired_class_is_marked(self):
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "@Deprecation.symbol('NewThing', remove_in='0.11.0')\n"
+            "class OldThing:\n"
+            '    """Old."""\n'
+        )
+        self.assertTrue(mod.classes[0].deprecated)
+        self.assertEqual(mod.classes[0].remove_in, "0.11.0")
+
+    def test_a_live_class_is_not(self):
+        mod = self._walk('"""Mod."""\n\n\nclass Live:\n    """Live."""\n')
+        self.assertFalse(mod.classes[0].deprecated)
+
+    def test_the_registry_row_states_the_deadline(self):
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "class Widget:\n"
+            '    """A widget."""\n'
+            "\n"
+            "    @Deprecation.symbol('Widget.spin', remove_in='0.11.0')\n"
+            "    def whirl(self):\n"
+            '        """Old."""\n'
+        )
+        row = mod.classes[0].members[0].to_registry_row()
+        self.assertIn("**DEPRECATED (remove in 0.11.0)**", row)
+
+
+class TestDeprecationExpiryGate(unittest.TestCase):
+    """The one-release alias window, enforced instead of remembered.
+
+    ``UvUtils.flip_uvs`` was deprecated on 2025-12-17 and shipped in 50
+    releases afterwards. Nothing was broken: "removed in the next release" was
+    a sentence, and no tool could compare a sentence to a version.
+    """
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name)
+
+    def _make_pkg(self, version: str, remove_in: str, name: str = "pythontk") -> Path:
+        pkg = self.root / name
+        (pkg / name).mkdir(parents=True)
+        (pkg / name / "__init__.py").write_text(
+            f'"""Root."""\n\n__version__ = "{version}"\n', encoding="utf-8"
+        )
+        (pkg / name / "mod.py").write_text(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "class Widget:\n"
+            '    """A widget."""\n'
+            "\n"
+            f"    @Deprecation.symbol('Widget.spin', remove_in='{remove_in}')\n"
+            "    def whirl(self):\n"
+            '        """Old."""\n',
+            encoding="utf-8",
+        )
+        return pkg
+
+    def _run(self, check_only: bool) -> tuple[int, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = g.regenerate(["pythontk"], repo_root=self.root, check_only=check_only)
+        return rc, out.getvalue() + err.getvalue()
+
+    def test_debt_is_reported_on_a_first_generation(self):
+        """The first run has no baseline to diff, but the debt is a property of
+        the tree rather than of the delta."""
+        pkg = self._make_pkg("0.12.0", "0.11.0")
+        self._run(check_only=False)
+        changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
+        self.assertIn("Initial registry", changes)
+        self.assertIn("- **EXPIRED** `mod.py::Widget.whirl`", changes)
+
+    def test_package_version_is_read_without_importing(self):
+        """The generator runs on a CI box where the package it walks is not
+        installed and its dependencies are absent."""
+        self._make_pkg("0.10.0", "0.11.0")
+        self.assertEqual(
+            g.package_version(self.root / "pythontk", "pythontk"), "0.10.0"
+        )
+
+    def test_an_annotated_version_is_read(self):
+        """``__version__: str = "1.2.3"`` is valid Python and was invisible to
+        the first regex, which silently left that package's window unchecked."""
+        pkg = self._make_pkg("0.10.0", "0.11.0")
+        (pkg / "pythontk" / "__init__.py").write_text(
+            '"""Root."""\n\n__version__: str = "0.12.0"\n', encoding="utf-8"
+        )
+        self.assertEqual(g.package_version(pkg, "pythontk"), "0.12.0")
+
+    def test_a_commented_out_version_is_not_read(self):
+        pkg = self._make_pkg("0.10.0", "0.11.0")
+        (pkg / "pythontk" / "__init__.py").write_text(
+            '"""Root."""\n\n# __version__ = "9.9.9"\n', encoding="utf-8"
+        )
+        self.assertEqual(g.package_version(pkg, "pythontk"), "")
+
+    def test_an_unreadable_version_says_the_window_is_unchecked(self):
+        """A gate that passes because it compared against NOTHING is worse than
+        no gate. Without a version nothing can expire, so the run must not read
+        as a clean bill of health."""
+        pkg = self._make_pkg("0.10.0", "0.11.0")
+        (pkg / "pythontk" / "__init__.py").write_text('"""Root."""\n', encoding="utf-8")
+        rc, text = self._run(check_only=False)
+        self.assertEqual(0, rc)
+        self.assertIn("UNCHECKED", text)
+        self.assertIn("1 dated deprecation(s)", text)
+
+    def test_a_package_with_no_dated_deprecations_is_quiet(self):
+        """The warning is about unchecked DEBT, not about a missing version."""
+        pkg = self.root / "pythontk"
+        (pkg / "pythontk").mkdir(parents=True)
+        (pkg / "pythontk" / "mod.py").write_text(
+            '"""Mod."""\n\n\nclass Live:\n    """Live."""\n', encoding="utf-8"
+        )
+        rc, text = self._run(check_only=False)
+        self.assertEqual(0, rc)
+        self.assertNotIn("UNCHECKED", text)
+
+    def test_a_missing_version_is_not_an_error(self):
+        pkg = self.root / "nover"
+        (pkg / "nover").mkdir(parents=True)
+        self.assertEqual(g.package_version(pkg, "nover"), "")
+
+    def test_a_future_deadline_passes(self):
+        self._make_pkg("0.10.0", "0.11.0")
+        self._run(check_only=False)
+        rc, text = self._run(check_only=True)
+        self.assertEqual(0, rc)
+        self.assertNotIn("expired:", text)
+
+    def test_a_reached_deadline_fails_the_check(self):
+        self._make_pkg("0.11.0", "0.11.0")
+        self._run(check_only=False)
+        rc, text = self._run(check_only=True)
+        self.assertEqual(1, rc)
+        self.assertIn("Widget.whirl", text)
+        self.assertIn("was due in 0.11.0", text)
+
+    def test_a_passed_deadline_fails_the_check(self):
+        self._make_pkg("0.12.0", "0.11.0")
+        self._run(check_only=False)
+        rc, _ = self._run(check_only=True)
+        self.assertEqual(1, rc)
+
+    def test_the_comparison_is_numeric_not_lexical(self):
+        """``"0.9.40" > "0.10.0"`` as strings, and the reverse as releases."""
+        self._make_pkg("0.9.40", "0.10.0")
+        self._run(check_only=False)
+        rc, _ = self._run(check_only=True)
+        self.assertEqual(0, rc)
+
+    def test_a_plain_regeneration_reports_but_does_not_fail(self):
+        """The registry refresh bot runs the plain form; failing it would block
+        the very commit that carries the report. CI is where the red gate
+        reaches someone who can delete the alias."""
+        self._make_pkg("0.12.0", "0.11.0")
+        rc, text = self._run(check_only=False)
+        self.assertEqual(0, rc)
+        self.assertIn("expired:", text)
+
+    def test_api_changes_lists_the_debt_and_marks_the_overdue(self):
+        pkg = self._make_pkg("0.12.0", "0.11.0")
+        self._run(check_only=False)
+        self._run(check_only=False)  # second pass: a baseline now exists
+        changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
+        self.assertIn("## Deprecations (1)", changes)
+        self.assertIn("- **EXPIRED** `mod.py::Widget.whirl`", changes)
+
+    def test_debt_is_listed_even_when_nothing_else_changed(self):
+        """An alias runs out of time during a release that touched nothing
+        near it, so the section cannot sit behind the has-changes guard."""
+        pkg = self._make_pkg("0.10.0", "0.11.0")
+        self._run(check_only=False)
+        self._run(check_only=False)  # second pass: no surface delta
+        changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
+        self.assertIn("No public API changes", changes)
+        self.assertIn("## Deprecations (1)", changes)
+        # The legend names EXPIRED whether or not anything is; only a ROW
+        # carrying the marker means a deadline has actually passed.
+        self.assertIn("- `mod.py::Widget.whirl`", changes)
+        self.assertNotIn("- **EXPIRED**", changes)
+
+    def test_the_sidecar_does_not_grow_a_key_for_live_symbols(self):
+        """``asdict`` would write ``"remove_in": ""`` against every symbol in
+        the ecosystem: tens of thousands of lines of committed machine file
+        saying nothing, burying the surface change it shipped with."""
+        pkg = self._make_pkg("0.10.0", "0.11.0")
+        (pkg / "pythontk" / "live.py").write_text(
+            '"""Live."""\n\n\nclass Live:\n    """Live."""\n\n'
+            "    def go(self):\n"
+            '        """Go."""\n',
+            encoding="utf-8",
+        )
+        self._run(check_only=False)
+        sidecar = json.loads((pkg / "API_REGISTRY.json").read_text(encoding="utf-8"))
+        rows = {
+            member["qualname"]: member
+            for mod in sidecar["modules"]
+            for cls in mod["classes"]
+            for member in cls["members"]
+        }
+        self.assertNotIn("remove_in", rows["Live.go"])
+        self.assertEqual(rows["Widget.whirl"]["remove_in"], "0.11.0")
+
+    def test_a_reconstructed_sidecar_round_trips(self):
+        pkg = self._make_pkg("0.10.0", "0.11.0")
+        self._run(check_only=False)
+        sidecar = json.loads((pkg / "API_REGISTRY.json").read_text(encoding="utf-8"))
+        rebuilt = g._package_data_from_json(sidecar)
+        member = rebuilt.modules[0].classes[0].members[0]
+        self.assertTrue(member.deprecated)
+        self.assertEqual(member.remove_in, "0.11.0")
 
 
 if __name__ == "__main__":

@@ -144,6 +144,74 @@ ROOT_SENTINELS = {
 # above -- if this grows, the file probably wants declaring, not excusing.
 STRAY_ALLOWLIST: Dict[str, str] = {}
 
+# --------------------------------------------------------------- workspace root
+#
+# The workspace root is not itself a git repo, so no repo's .gitignore covers it
+# and no CI checkout can ever contain it -- it is the one place in the tree with
+# no gate at all. Measured 2026-09-16 it held 132 MB of residue: a
+# ``pythontk.zip`` full repo snapshot (including .git, every commit of which was
+# already in the live checkout) and a 66 KB copy of mayatk's ``mat_updater.py``
+# that had drifted 179 lines behind its source.
+#
+# Opt-in via ``--workspace-root`` rather than on by default: this scan is
+# meaningful only where the whole monorepo is checked out side by side, which is
+# a developer machine and push.ps1's Prepare phase, never a CI runner. Left on
+# by default it would fail every CI invocation for the wrong reason.
+#
+# The directory rule is POSITIVE and self-maintaining: a directory holding a
+# ``.git`` is a repo checkout and belongs, so adding a repo needs no edit here.
+# The alternative -- a hardcoded roster of the twelve current repos -- is
+# precisely the stable-path edit the ecosystem's own design rules exist to
+# avoid.
+WORKSPACE_DIRS_ALLOWED = {
+    ".git",
+    ".claude",  # agent ledgers, hooks, settings
+    ".github",  # workspace-level agent/skill config (not a repo's CI)
+    ".vscode",
+    ".archive",  # DOCS_STANDARD.md: completed one-shot reports are parked here
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+}
+
+WORKSPACE_FILES_ALLOWED: Dict[str, str] = {
+    "CLAUDE.md": "monorepo instruction file; root of the dispatch table",
+    "_residue_archive_2026-09-16.zip": (
+        "one-time recoverable holding the 34 files removed by the 2026-09-16 "
+        "residue sweep. DELETE it once the contents are confirmed unwanted, "
+        "and drop this entry with it -- it is a receipt, not a fixture."
+    ),
+}
+
+
+def scan_workspace_root() -> List[str]:
+    """Flag anything at the workspace root that is neither a repo nor allowed.
+
+    Returns:
+        A list of human-readable violation strings, empty when clean.
+    """
+    violations: List[str] = []
+    try:
+        entries = sorted(os.listdir(REPO))
+    except OSError:
+        return violations
+    for name in entries:
+        full = os.path.join(REPO, name)
+        if os.path.isdir(full):
+            if name in WORKSPACE_DIRS_ALLOWED or os.path.isdir(
+                os.path.join(full, ".git")
+            ):
+                continue
+            violations.append(f"{name}/  (workspace root; not a repo checkout)")
+        elif os.path.isfile(full):
+            if name in WORKSPACE_FILES_ALLOWED:
+                continue
+            size = os.path.getsize(full)
+            violations.append(
+                f"{name}  (workspace root; {size:,} B, outside every repo)"
+            )
+    return violations
+
 
 class _Visitor(ast.NodeVisitor):
     """Collect flagged allocation calls with their enclosing function name.
@@ -376,6 +444,14 @@ def main() -> int:
         help=f"packages to scan (default: all of {list(PACKAGES)})",
     )
     parser.add_argument("--list", action="store_true", help="print the allowlist")
+    parser.add_argument(
+        "--workspace-root",
+        action="store_true",
+        help=(
+            "also sweep the workspace root for files and non-repo directories "
+            "(local / push.ps1 only -- a CI runner has no workspace root)"
+        ),
+    )
     args = parser.parse_args()
 
     unknown = [p for p in args.packages if p not in PACKAGES]
@@ -398,11 +474,13 @@ def main() -> int:
     packages = args.packages or list(PACKAGES)
     violations = scan(packages)
     strays = scan_strays(packages)
+    root_strays = scan_workspace_root() if args.workspace_root else []
 
-    if not violations and not strays:
+    if not violations and not strays and not root_strays:
         print(
             f"OK: no unmanaged temp allocations or stray artifacts in "
             f"{len(packages)} package(s)."
+            + (" Workspace root clean." if args.workspace_root else "")
         )
         return 0
 
@@ -439,6 +517,23 @@ wrote it an explicit destination there rather than a bare -o:
 If a file genuinely belongs, DECLARE it (pyproject package-data / MANIFEST.in)
 so the wheel actually ships it -- an undeclared data file is simply missing at
 runtime for every installed user. Last resort: STRAY_ALLOWLIST."""
+        )
+
+    if root_strays:
+        if violations or strays:
+            print("")
+        print(f"FAIL: {len(root_strays)} workspace-root artifact(s):")
+        print("")
+        for s in root_strays:
+            print(f"  {s}")
+        print(
+            """
+The workspace root sits outside every git repo, so nothing else sees these --
+not a .gitignore, not a repo's CI, not `git status`. That is exactly how a 132 MB
+snapshot and a drifted module copy survived there unnoticed until 2026-09-16.
+Delete them, or move them into the repo that owns them. A directory belongs here
+only if it is a repo checkout (it holds a .git); a file belongs only if it is in
+WORKSPACE_FILES_ALLOWED with a reason."""
         )
     return 1
 

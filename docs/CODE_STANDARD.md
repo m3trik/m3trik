@@ -23,7 +23,8 @@ ignore = ["E402"]                 # house pattern: try-guarded DCC imports prece
 
 - `E402` is off because the DCC layers deliberately guard `import maya.cmds` in a `try:` block at the top of the module (§4) and import `pythontk` after it.
 - `**/templates/**` is exempt from undefined-name checks because those files are *not* importable modules: they are handed to a host interpreter (Toolbag, Blender, Maya) after token substitution. This mirrors what `mayatk/test/test_static_analysis.py` already excludes.
-- **Interim rule until the CI gate is wired**: run `ruff check` on the files you touch and fix what you introduced; `ruff format` new files, and existing files only when you are already rewriting most of them — never a drive-by reformat (it buries the real change and invites merge conflicts with concurrent work). The one-time whole-tree reformat and the CI gate are a tree-idle pass per repo, tracked in [`.claude/FUTURE.md`](../../.claude/FUTURE.md) — not `BACKLOG.md`, whose bar drops S3 hygiene work, which is why the entry cycled into the archive twice before landing there.
+- **`ruff check` is CI-gated in 5 of 7 repos** (2026-09-16): pythontk and extapps at whole-repo scope (`ruff check .`), uitk / blendertk / unitytk at **package** scope, because their `test/` trees still carry findings (27 / 326 / 29, re-measured 2026-09-17) and gating on `.` would have made the job red on arrival. mayatk (25 in-package, 119 repo-wide) and tentacle (36 in-package, 89 repo-wide) are not gated yet — both are auto-fixable, so the burn-down is `ruff check --fix` plus review in an isolated commit with a `.git-blame-ignore-revs` entry, then widen the gate. The version is pinned (`ruff==0.15.17`): an unpinned ruff turns an upstream rule addition into a red PR nobody changed.
+- **Everywhere, gated or not**: run `ruff check` on the files you touch and fix what you introduced; `ruff format` new files, and existing files only when you are already rewriting most of them — never a drive-by reformat (it buries the real change and invites merge conflicts with concurrent work). The one-time whole-tree *format* pass (`ruff format`, a separate question from `check` — 114 files predate the current ruff) stays a tree-idle job per repo, tracked in [`.claude/FUTURE.md`](../../.claude/FUTURE.md) — not `BACKLOG.md`, whose bar drops S3 hygiene work, which is why the entry cycled into the archive twice before landing there.
 
 ## 2. Docstrings and type hints
 
@@ -67,9 +68,18 @@ Type-hint public signatures (essential for OpenMaya interop and for the API regi
 
 Public APIs are contracts; `blendertk` mirrors `mayatk`'s at the name + behavior level so the tentacle slots stay branch-free. When a public name must be renamed, moved or removed:
 
-1. Keep the old name working as an **alias for one release** (a module attribute, a `@classmethod` shim, or a `LEGACY_ALIASES` map — the unitytk fixture precedent), pointing at the new home.
-2. Add a `CHANGELOG.md` line naming both; `API_CHANGES.md` records the delta automatically.
-3. Bump **minor**; remove the alias in the release after.
+1. Keep the old name working as an **alias for one release**, through `ptk.Deprecation` — never a hand-rolled `warnings.warn`, a silent binding alias, or a docstring line. Pick the shape that matches what is being retired:
+   - `@Deprecation.symbol(replacement, remove_in=...)` — a function, method or class (on a class it wraps `__new__`, so a subclass warns too).
+   - `@Deprecation.parameter(old, new=..., transform=..., remove_in=...)` — one keyword of a function that stays, including a rename-and-remap. It does **not** mark the owner deprecated; the method is live.
+   - `Deprecation.attributes(globals(), {...}, remove_in=...)` — module attributes that moved. Chains onto an existing `__getattr__`, so it is safe on a module that already fronts a lazy loader.
+   - `Deprecation.values({...}, what=..., remove_in=...)` — a retired member of a value vocabulary (a mode string that now builds as something else).
+
+   For a shape none of the four reach — a deprecated branch inside a live function, say — call `Deprecation.warn(what, replacement, remove_in=...)` from the body. It is the only sanctioned alternative; reaching for `warnings.warn` yourself is what produced the seven spellings, and the two hand-derived `stacklevel`s that six call sites disagreed over, this replaced. `warn`'s `stacklevel` counts out from the first frame outside the machinery, so a consumer that wraps it in a helper of its own raises it by one per hop.
+2. **`remove_in` is mandatory and is a version, not a sentence.** "Removed in the next release" is what every hand-rolled notice said and is exactly what nothing could check — `UvUtils.flip_uvs` shipped in 50 releases after its notice, the `FileManager` aliases in 34. An unparseable version raises at import. A replacement is mandatory too: a notice the caller cannot act on is noise.
+3. Add a `CHANGELOG.md` line naming both; `API_CHANGES.md` records the delta automatically and lists the live retirement debt with its deadlines.
+4. Bump **minor**; remove the alias in the release after. You do not have to remember: `generate_api_registry.py --check` fails once the package's `__version__` reaches a recorded `remove_in`, and `Deprecation.expired(__version__)` answers the same question at runtime for the shapes a static walk cannot see. When one fires, delete the alias and its tests — raising the date is a deliberate act that belongs in `CHANGELOG.md`, not a default.
+
+In a DCC, set `Deprecation.sink` once at startup (`cmds.warning`, or a logger): `DeprecationWarning` is hidden outside `__main__`, so otherwise no user ever sees one. It is additive — `warnings.warn` still fires, so `assertWarns` and `-W error` keep working.
 
 Registry ownership: regenerate the **full** set (`python m3trik/scripts/generate_api_registry.py`) before committing a public-API change so `API_CHANGES.md` and `API_SHADOWS.md` are right at review; after publish the CI bot's refresh is authoritative — take theirs on any conflict rather than fighting it commit by commit.
 
@@ -77,8 +87,10 @@ Registry ownership: regenerate the **full** set (`python m3trik/scripts/generate
 
 "Unify over duplicate" has exactly one exception: a copy vendored across layers that **cannot import each other** (mayatk ↔ blendertk; a DCC engine ↔ the extapps panel that also needs it; an in-app plugin folder where no `pythontk` is importable). Rules:
 
-- The copies are **byte-identical** (or token-identical where DCC names differ) and **drift-guarded** by a test or a `--check` script that CI runs — `extapps/test/test_vendor_sync.py` (Marmoset engine ×3, Substance, curtain-drape ×2), `sync_rpc_core.py --check` (`_rpc_core.py` ×4), `sync_shared_bat.py --check` (`package-manager.bat` ×2).
+- The copies are **byte-identical** (or token-identical where DCC names differ) and **drift-guarded** by a `--check` script that CI runs. All of them run in `m3trik`'s `tests.yml`, which is the only CI with every sibling checked out: `sync_rpc_core.py` (`_rpc_core.py` ×4), `sync_shadow_shaders.py` (×2), `sync_shared_bat.py` (`package-manager.bat` ×2), and `check_dcc_twins.py` (the mayatk↔blendertk controller mixins). `extapps/test/test_vendor_sync.py` (Marmoset engine ×3, Substance, curtain-drape ×2) covers the extapps half and shares one normalizer with `check_dcc_twins.py`, which owns it.
+  *This bullet was aspirational until 2026-09-16.* Every guard named here existed and passed, and **none of them ran in any CI** — three `skipTest` without siblings, the fourth was collected by no workflow. Wiring them was the fix; the lesson is that "drift-guarded" is a claim about a *scheduled run*, not about a file existing.
 - The SSoT is named in the copy's header, and only the SSoT is hand-edited.
+- **A family with no SSoT is not a sanctioned duplicate.** N hand-written copies of one shape — 11 `launcher.py` shells, a per-tool settings block — are not vendored copies; there is no source to guard against. Either give the family a base, or derive its guard from the roster that already lists it (an entry-point group, `DEFAULT_INCLUDE`, a pyproject table) — **never a hand-listed subset**, which is how the frameless-window fix landed in 3 of 11 launchers and the other 8 kept the bug for a release.
 - Extract the general primitive to `pythontk` first (`geo_utils.RailSurface` stayed; only `CurtainDrape` was vendored) — a growing vendored file means a primitive is missing upstream.
 
 ## 7. Performance — DCC layers

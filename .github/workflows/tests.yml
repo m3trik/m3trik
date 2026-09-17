@@ -1,0 +1,269 @@
+name: Tests
+
+# m3trik had no test workflow: 13 test files and ~264 cases ran only when a
+# human remembered, in the one repo whose scripts propagate into five other
+# repos' CI the moment they reach main. A gate generator nobody gates is the
+# highest-leverage blind spot in the ecosystem, so this runs the suite plus the
+# three vendored-copy drift checks that CODE_STANDARD.md §6 names as the
+# condition on the ONLY sanctioned duplication in the codebase.
+#
+# `push: main` + `workflow_dispatch`, deliberately NOT `pull_request`: work
+# lands in this repo by direct push (no PR merges in 297 commits), and
+# refresh-api-registry.yml's ordering rule requires m3trik/scripts to reach
+# main BEFORE the packages land their side of a cross-repo change.
+#
+# The suite is NOT self-contained -- it needs the monorepo layout. Measured
+# 2026-09-16 against an isolated `git archive` checkout: with no siblings,
+# test_generate_api_registry ERRORS AT COLLECTION (the generator loads
+# pythontk's SymbolRecord from source at module import, so the whole run
+# aborts); with pythontk stubbed to that one file, 7 cases still fail across
+# test_sync_shared_bat, test_build_stingray_ao_presets and
+# test_verify_runtime_surface, which read the mayatk / blendertk / pythontk
+# working trees. Hence the full seven-sibling clone below.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One run per ref. A push train onto main would otherwise burn a runner per
+# commit re-cloning seven repos to produce the same answer.
+concurrency:
+  group: m3trik-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: Gate scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out m3trik
+        uses: actions/checkout@v4
+        with:
+          path: m3trik
+
+      - name: Clone ecosystem siblings
+        env:
+          # Needed to read the private sibling (unitytk); the public ones would
+          # clone without it. Same secret refresh-api-registry.yml uses.
+          TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
+        run: |
+          for repo in pythontk uitk mayatk blendertk tentacle unitytk extapps; do
+            url="https://m3trik:${TOKEN}@github.com/m3trik/${repo}.git"
+            if ! git clone --branch dev "${url}" "${repo}" 2>/dev/null \
+               && ! git clone "${url}" "${repo}"; then
+              echo "::error::Failed to clone ${repo}"
+            fi
+          done
+          # HARD count check, unlike refresh-api-registry.yml's loop, which
+          # warns and continues. Best-effort is right for a report that degrades
+          # gracefully; it is wrong for a gate. An expired token there would
+          # leave this job with nothing to check and report GREEN -- which is
+          # precisely the "a job that ran nothing is not green" failure the
+          # sibling workflows already guard against on test counts.
+          missing=""
+          for repo in pythontk uitk mayatk blendertk tentacle unitytk extapps; do
+            [ -d "${repo}" ] || missing="${missing} ${repo}"
+          done
+          if [ -n "${missing}" ]; then
+            echo "::error::missing sibling checkout(s):${missing}"
+            exit 1
+          fi
+          echo "7/7 siblings present"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # The gates are NOT stdlib-only, and the siblings are cloned rather
+          # than pip-installed (each script sys.path-inserts its sibling), so
+          # their transitive deps have to come from here. Measured 2026-09-16 by
+          # importing each entry point and inspecting sys.modules:
+          #   check_tooltips        -> uitk -> qtpy, PySide6, shiboken6 (+ numpy, PIL)
+          #   sync_shadow_shaders   -> pythontk -> numpy, PIL
+          #   verify_runtime_surface-> pythontk -> numpy, PIL
+          # Without these the job is red on arrival, which is the one thing a
+          # new gate must not be.
+          pip install pytest pytest-subtests numpy Pillow
+          # PySide6 pinned <6.11 for the reason every sibling workflow pins it:
+          # 6.11 segfaults during pytest cleanup on the offscreen QPA.
+          pip install qtpy "PySide6<6.11"
+
+      - name: Run gate-script suite
+        working-directory: m3trik
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set +e
+          # test_push.py is excluded here and runs in its own Windows job: it
+          # makes 16 unguarded `subprocess.run(["powershell", ...])` calls with
+          # no platform skip, so on ubuntu it fails for the wrong reason.
+          # Stream via tee, not a capture: a buffered capture shows nothing in
+          # the log while a suite is hung.
+          pytest --tb=short -v test/ --ignore=test/test_push.py 2>&1 | tee pytest_out.txt
+          # PIPESTATUS, not $?: tee always exits 0 and would turn every failure
+          # green.
+          RC=${PIPESTATUS[0]}
+          # Read the counts off pytest's FINAL summary line only: a test that
+          # prints "0 failed" in its own output would otherwise decide the gate.
+          SUMMARY=$(grep -E '^=+ .* in [0-9.]+s.*=+$' pytest_out.txt | tail -1)
+          FAILED=$(echo "$SUMMARY" | grep -oE '[0-9]+ failed' | head -1 | cut -d' ' -f1)
+          PASSED=$(echo "$SUMMARY" | grep -oE '[0-9]+ passed' | head -1 | cut -d' ' -f1)
+          # errors, NOT just failures: a collection error reports as "N errors"
+          # and leaves the failed count at 0. That is not hypothetical here --
+          # a missing pythontk sibling aborts collection in exactly that shape.
+          ERRORS=$(echo "$SUMMARY" | grep -oE '[0-9]+ errors?' | head -1 | cut -d' ' -f1)
+          FAILED=${FAILED:-0}
+          PASSED=${PASSED:-0}
+          ERRORS=${ERRORS:-0}
+          if [ "$FAILED" -gt 0 ] || [ "$ERRORS" -gt 0 ]; then
+            echo "::error::$FAILED test(s) failed, $ERRORS error(s)"
+            exit 1
+          fi
+          if [ "$PASSED" -eq 0 ]; then
+            echo "::error::0 tests collected - a job that ran nothing is not green"
+            exit 1
+          fi
+          if [ "$RC" -ne 0 ]; then
+            echo "::error::pytest exited $RC after $PASSED passing tests"
+            exit 1
+          fi
+          echo "$PASSED passed, $FAILED failed, $ERRORS errors"
+
+      # The three drift guards run as DIRECT steps, not by trusting the suite.
+      # CODE_STANDARD.md §6 licenses the ecosystem's only sanctioned duplication
+      # on the condition that the copies are "drift-guarded by a test or a
+      # --check script that CI runs" -- and until now none of them ran in any
+      # CI. The pythontk-side tests that pin sync_rpc_core and
+      # sync_shadow_shaders DO get collected by pythontk's CI, but they
+      # skipTest when the sibling DCC repos are absent, which they always are
+      # there. A named-in-a-test gate is not a wired gate.
+      #
+      # sync_shared_bat in particular CANNOT live in a package repo:
+      # out_of_sync() counts a MISSING mirror as drift and MIRRORS spans both
+      # DCCs, so a single-sibling checkout makes it permanently red. The
+      # seven-sibling layout this job already needs is the only place it runs
+      # honestly.
+      #
+      # Measured green 2026-09-16: 4 rpc payloads, 2 shadow-shader mirrors, and
+      # the package-manager.bat pair all in sync.
+      - name: Vendored copies in sync - RPC core (4 payloads)
+        run: python m3trik/scripts/sync_rpc_core.py --check
+
+      - name: Vendored copies in sync - shadow shaders (2 mirrors)
+        run: python m3trik/scripts/sync_shadow_shaders.py --check
+
+      - name: Vendored copies in sync - package-manager.bat
+        run: python m3trik/scripts/sync_shared_bat.py --check
+
+      # The DCC controller twins -- the half of the sanctioned duplication that
+      # the three sync_* scripts do NOT cover. They guard byte-identical vendored
+      # payloads; this guards helper mixins that were COPIED between mayatk and
+      # blendertk because there is nowhere shared for them to live (uitk hosts no
+      # DCC-agnostic panel tier, pythontk cannot host Qt), and which therefore
+      # drift silently.
+      #
+      # --check, not report-only: the ledger was seeded 2026-09-16 from a
+      # measured pass and every one of its 16 symbols across 3 files was
+      # confirmed identical-after-fold before being added, so this lands GREEN.
+      # Report-only exists for a guard that cannot land green; this one can.
+      - name: DCC controller twins in sync
+        run: python m3trik/scripts/check_dcc_twins.py --check
+
+      # The workspace-wide gates. Each of these is a rule the root CLAUDE.md
+      # states as a requirement -- check_docs is named there verbatim ("must
+      # exit 0") -- and each ran in no workflow, no push.ps1 step and no
+      # scheduled task: they fired only when a human remembered. They scan the
+      # sibling trees, so this job's seven-sibling layout is the only CI that
+      # can host them.
+      #
+      # Measured green 2026-09-16 against the full workspace: check_docs 13
+      # ledgered docs / 0 DOC-TODOs, check_temp_artifacts 9 packages clean,
+      # check_tooltips 590 call sites / 0 malformed, check_ui_spacers 4 trees.
+      #
+      # `--workspace .` is the runner root (m3trik + the seven siblings).
+      # That is a narrower workspace than a developer's checkout, which also
+      # holds androidtk/comfyui/server/www -- links escaping the workspace are
+      # ignored by design, so the narrower set checks a strict subset and
+      # cannot go red on a repo this job did not clone.
+      - name: Docs wired and links resolve
+        run: python m3trik/scripts/check_docs.py --workspace .
+
+      - name: No unmanaged temp allocations or stray artifacts
+        run: python m3trik/scripts/check_temp_artifacts.py
+
+      - name: Tooltips well-formed
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python m3trik/scripts/check_tooltips.py
+
+      - name: No oversized fixed vertical spacers
+        run: python m3trik/scripts/check_ui_spacers.py
+
+  release-tooling:
+    # push.ps1's own suite, split out because it needs Windows: test_push.py
+    # drives 16 `subprocess.run(["powershell", ...])` calls with no platform
+    # skip.
+    #
+    # Runs on push, NOT dispatch-only. Measured 2026-09-16: 68 passed in 15m28s
+    # on a synced network drive, which is the slow case -- a runner's local disk
+    # should beat it. The 45-minute cap is ~3x that, generous enough to absorb a
+    # slow runner and still far under GitHub's 6h default, which is the real
+    # hazard (a wedged job burning six hours on the repo's only CI path).
+    #
+    # It earns a Windows runner because push.ps1 IS the release driver for five
+    # packages: a break here does not fail a test, it fails a cascade halfway
+    # through, which is how a release ends up merged-but-unpublished.
+    name: Release tooling (push.ps1)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out m3trik
+        uses: actions/checkout@v4
+        with:
+          path: m3trik
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-subtests
+
+      - name: Run push.ps1 suite
+        working-directory: m3trik
+        shell: bash
+        run: |
+          set +e
+          pytest --tb=short -v test/test_push.py 2>&1 | tee push_out.txt
+          RC=${PIPESTATUS[0]}
+          SUMMARY=$(grep -E '^=+ .* in [0-9.]+s.*=+$' push_out.txt | tail -1)
+          FAILED=$(echo "$SUMMARY" | grep -oE '[0-9]+ failed' | head -1 | cut -d' ' -f1)
+          PASSED=$(echo "$SUMMARY" | grep -oE '[0-9]+ passed' | head -1 | cut -d' ' -f1)
+          ERRORS=$(echo "$SUMMARY" | grep -oE '[0-9]+ errors?' | head -1 | cut -d' ' -f1)
+          FAILED=${FAILED:-0}
+          PASSED=${PASSED:-0}
+          ERRORS=${ERRORS:-0}
+          if [ "$FAILED" -gt 0 ] || [ "$ERRORS" -gt 0 ]; then
+            echo "::error::$FAILED test(s) failed, $ERRORS error(s)"
+            exit 1
+          fi
+          if [ "$PASSED" -eq 0 ]; then
+            echo "::error::0 tests collected - a job that ran nothing is not green"
+            exit 1
+          fi
+          if [ "$RC" -ne 0 ]; then
+            echo "::error::pytest exited $RC after $PASSED passing tests"
+            exit 1
+          fi
+          echo "$PASSED passed, $FAILED failed, $ERRORS errors"

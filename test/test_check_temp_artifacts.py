@@ -249,6 +249,69 @@ class StrayArtifactTest(_ScanCase):
             gate.STRAY_ALLOWLIST.pop("fakepkg/prof", None)
 
 
+class WorkspaceRootTest(unittest.TestCase):
+    """The workspace root: the one place no repo's .gitignore or CI can see.
+
+    Scanned against a synthetic root, never the developer's real one -- the real
+    tree has a .venv the size of a small OS, and a test that walks it is a test
+    nobody runs twice.
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="wsroot_test_")
+        self._saved = gate.REPO
+        gate.REPO = self.root
+
+    def tearDown(self):
+        gate.REPO = self._saved
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def repo(self, name):
+        """Create a directory that looks like a repo checkout (it has a .git)."""
+        os.makedirs(os.path.join(self.root, name, ".git"))
+
+    def touch(self, name, body="x"):
+        with open(os.path.join(self.root, name), "w", encoding="utf-8") as fh:
+            fh.write(body)
+
+    def test_repo_checkouts_are_allowed_without_being_named(self):
+        """Adding a repo must not require editing this gate."""
+        for name in ("pythontk", "uitk", "a_repo_invented_next_year"):
+            self.repo(name)
+        self.assertEqual(gate.scan_workspace_root(), [])
+
+    def test_a_loose_file_is_flagged(self):
+        self.repo("pythontk")
+        self.touch("mat_updater.py", "# a drifted copy\n")
+        found = gate.scan_workspace_root()
+        self.assertEqual(len(found), 1)
+        self.assertIn("mat_updater.py", found[0])
+
+    def test_a_non_repo_directory_is_flagged(self):
+        self.repo("pythontk")
+        os.makedirs(os.path.join(self.root, "leftover_output"))
+        found = gate.scan_workspace_root()
+        self.assertEqual(len(found), 1)
+        self.assertIn("leftover_output/", found[0])
+
+    def test_allowed_dirs_and_files_pass(self):
+        self.repo("pythontk")
+        for name in gate.WORKSPACE_DIRS_ALLOWED:
+            os.makedirs(os.path.join(self.root, name), exist_ok=True)
+        for name in gate.WORKSPACE_FILES_ALLOWED:
+            self.touch(name)
+        self.assertEqual(gate.scan_workspace_root(), [])
+
+    def test_every_file_exemption_carries_a_reason(self):
+        """An exemption without a reason is just a hole with a name in it."""
+        for name, reason in gate.WORKSPACE_FILES_ALLOWED.items():
+            with self.subTest(entry=name):
+                self.assertTrue(
+                    reason and len(reason.split()) >= 5,
+                    "WORKSPACE_FILES_ALLOWED[%r] needs a real reason" % name,
+                )
+
+
 class RealRepoTest(unittest.TestCase):
     def test_the_repo_is_currently_clean(self):
         """The gate must pass on the tree that ships."""
@@ -256,6 +319,12 @@ class RealRepoTest(unittest.TestCase):
 
     def test_the_repo_has_no_stray_artifacts(self):
         self.assertEqual(gate.scan_strays(list(gate.PACKAGES)), [])
+
+    def test_the_workspace_root_is_currently_clean(self):
+        """Skipped in CI: a runner checkout has no workspace root to sweep."""
+        if not os.path.isdir(os.path.join(gate.REPO, "pythontk", ".git")):
+            self.skipTest("not a full monorepo checkout")
+        self.assertEqual(gate.scan_workspace_root(), [])
 
 
 if __name__ == "__main__":

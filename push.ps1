@@ -1895,10 +1895,43 @@ function Invoke-FinalizePhase {
     return "noop"
 }
 
+function Test-WorkspaceRootHygiene {
+    # Non-fatal notice for residue sitting at the WORKSPACE ROOT -- the one
+    # place in the tree no repo's .gitignore, `git status` or CI checkout can
+    # see. Measured 2026-09-16 it held 132 MB: a full pythontk repo snapshot
+    # (every commit of which was already in the live checkout) and a copy of
+    # mayatk's mat_updater.py that had drifted 179 lines behind its source.
+    #
+    # A NOTICE, not a gate, and deliberately so. Root residue cannot change
+    # what a release publishes, so failing the release over it would block a
+    # correct publish for an unrelated reason -- which is how a gate earns the
+    # reputation that gets it disabled. It runs here because Prepare is the
+    # moment the maintainer is already looking at the tree.
+    #
+    # Once per invocation, not once per package: a five-package cascade would
+    # otherwise print the same list five times.
+    if ($script:WorkspaceRootChecked) { return }
+    $script:WorkspaceRootChecked = $true
+
+    $gate = Join-Path $PSScriptRoot "scripts\check_temp_artifacts.py"
+    if (-not (Test-Path $gate)) { return }
+
+    $out = python $gate --workspace-root
+    if ($LASTEXITCODE -eq 0) { return }
+
+    Write-Step "Workspace-root hygiene: residue found outside every repo (not blocking this release)"
+    $out | Where-Object { $_ -match '\(workspace root;' } | ForEach-Object {
+        Write-Host "    $_" -ForegroundColor DarkGray
+    }
+    Write-Host "    Clear it, or allowlist it in check_temp_artifacts.py with a reason." -ForegroundColor DarkGray
+}
+
 function Invoke-PreparePhase {
     # Turn an ARTIFACT delta into exactly one `Release X.Y.Z` commit on dev.
     # Returns a hashtable: @{ Class; Version; Committed } or $null on failure.
     param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+
+    Test-WorkspaceRootHygiene
 
     if ($Merge -and -not $DryRun) {
         # Sync local dev with origin BEFORE deciding anything. Absorbs uncommitted

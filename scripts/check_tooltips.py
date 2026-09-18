@@ -36,8 +36,20 @@ import xml.etree.ElementTree as ET
 
 #: Directories that never hold hand-written tooltips (mirrors check_docs.py's set).
 SKIP_DIRS = {
-    "build", "dist", "__pycache__", ".git", "archive", ".archive", "node_modules",
-    ".venv", "venv", "site-packages", ".pytest_cache", ".tox", ".idea", ".vscode",
+    "build",
+    "dist",
+    "__pycache__",
+    ".git",
+    "archive",
+    ".archive",
+    "node_modules",
+    ".venv",
+    "venv",
+    "site-packages",
+    ".pytest_cache",
+    ".tox",
+    ".idea",
+    ".vscode",
     "temp_tests",
 }
 #: repo-relative posix prefixes holding vendored/third-party trees (as check_docs.py).
@@ -47,9 +59,7 @@ SKIP_SUFFIX = ("_ui.py",)
 
 #: XML predefines only these five; Qt's rich text accepts the whole HTML set.
 _XML_ENTITIES = ("amp", "lt", "gt", "quot", "apos")
-_NAMED_ENTITY = re.compile(
-    r"&(?!(?:%s);)[a-zA-Z#0-9]+;" % "|".join(_XML_ENTITIES)
-)
+_NAMED_ENTITY = re.compile(r"&(?!(?:%s);)[a-zA-Z#0-9]+;" % "|".join(_XML_ENTITIES))
 #: HTML void elements are written unclosed (``<br>``); XML demands ``<br/>``.
 _VOID = re.compile(r"<(br|hr|img|meta|link|input)\b([^>/]*)/?>", re.I)
 
@@ -57,8 +67,22 @@ _TOOLTIP_BUILDERS = ("fmt", "placeholder_preview")
 
 
 def _load_dsl(workspace):
-    """Import uitk's TooltipFormat from the workspace copy (not an installed one)."""
-    sys.path.insert(0, os.path.join(workspace, "uitk"))
+    """Import uitk's TooltipFormat from the workspace copy (not an installed one).
+
+    pythontk goes on the path too, not just uitk: ``uitk/__init__.py`` imports
+    ``pythontk.core_utils.module_resolver`` at module scope, so importing
+    anything from uitk imports pythontk. On a developer box that resolves
+    because pythontk is installed in the workspace venv, which is exactly why
+    this went unnoticed -- on a bare CI runner the siblings are CLONED, never
+    installed, and the gate died with ``ModuleNotFoundError: No module named
+    'pythontk'`` (measured 2026-09-17, m3trik tests.yml). Inserting the
+    workspace copy is also what the rest of this sentence promises: an
+    installed pythontk would be the wrong one to check against.
+    """
+    for name in ("pythontk", "uitk"):
+        root = os.path.join(workspace, name)
+        if os.path.isdir(root) and root not in sys.path:
+            sys.path.insert(0, root)
     from uitk.widgets.mixins.tooltip_mixin import TooltipFormat
 
     return TooltipFormat

@@ -111,6 +111,22 @@ class TestPushScriptRegressions(unittest.TestCase):
         except FileNotFoundError:
             return False
 
+    @staticmethod
+    def _have_gh_auth() -> bool:
+        """True when `gh` is installed AND logged in.
+
+        A capability probe, not a preference: push.ps1 checks gh auth BEFORE it
+        validates the origin URL, so a test that wants the origin-URL error has
+        to get past the auth gate first. Unauthenticated, push.ps1 stops at
+        "gh is not authenticated" and the assertion reads as a regression when
+        it is only a missing credential -- which is every CI runner.
+        """
+        try:
+            r = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+            return r.returncode == 0
+        except FileNotFoundError:
+            return False
+
     def _run(self, args, cwd: Path, timeout=120, env=None):
         return subprocess.run(
             args,
@@ -360,9 +376,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             # The operator's own commit already IS the release state (version
             # set, no floors to ratchet), so no extra Release commit is made.
             self.assertIn("dev already carries Release 0.2.0", out)
-            main_init = self._git(
-                origin, "show", "main:pythontk/__init__.py"
-            ).stdout
+            main_init = self._git(origin, "show", "main:pythontk/__init__.py").stdout
             self.assertIn('__version__ = "0.2.0"', main_init, out)
             tags = self._git(origin, "tag", "--list").stdout
             self.assertIn("v0.2.0", tags, out)
@@ -469,7 +483,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertEqual(result.returncode, 0, out)
             self.assertIn("Committed 'Release 0.1.1'", out)
 
-            subjects = self._git(origin, "log", "--pretty=%s", "main").stdout.splitlines()
+            subjects = self._git(
+                origin, "log", "--pretty=%s", "main"
+            ).stdout.splitlines()
             releases = [s for s in subjects if s.startswith("Release ")]
             self.assertEqual(releases, ["Release 0.1.1"], out)
             # The registry was regenerated for THIS package only, without the
@@ -485,7 +501,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("v0.1.1", self._git(origin, "tag", "--list").stdout, out)
 
             # Re-run: dev == main, nothing to do, no version consumed.
-            again = self._run(self._release_cmd(root, "pythontk"), cwd=root, timeout=180)
+            again = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=180
+            )
             out2 = again.stdout + again.stderr
             self.assertEqual(again.returncode, 0, out2)
             self.assertIn("No changes to push and fully merged", out2)
@@ -548,9 +566,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                 ],
             )
 
-            result = self._run(
-                self._release_cmd(root, "uitk"), cwd=root, timeout=300
-            )
+            result = self._run(self._release_cmd(root, "uitk"), cwd=root, timeout=300)
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
             self.assertIn("Pinned pythontk>=0.7.51", out)
@@ -559,7 +575,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             toml = (root / "uitk" / "pyproject.toml").read_text(encoding="utf-8")
             self.assertIn('"pythontk>=0.7.51"', toml)
             # The cascade synced the parallel blendertk branch to uitk's NEW version.
-            btk_toml = (root / "blendertk" / "pyproject.toml").read_text(encoding="utf-8")
+            btk_toml = (root / "blendertk" / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
             self.assertIn('"pythontk>=0.7.51"', btk_toml)
             self.assertIn('"uitk>=1.0.52"', btk_toml)
             # A pin-only delta is an artifact delta: blendertk got its own release.
@@ -580,9 +598,7 @@ class TestPushScriptRegressions(unittest.TestCase):
                 root, "uitk", "1.0.51", ["qtpy", "pythontk==0.0.1"]
             )
 
-            result = self._run(
-                self._release_cmd(root, "uitk"), cwd=root, timeout=180
-            )
+            result = self._run(self._release_cmd(root, "uitk"), cwd=root, timeout=180)
             out = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, out)
 
@@ -848,6 +864,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("Conflict markers found in origin/dev:pyproject.toml", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    @unittest.skipUnless(
+        _have_gh_auth.__func__(), "gh must be authenticated to reach the origin check"
+    )
     def test_pr_mode_fails_for_non_github_origin(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -1004,9 +1023,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             recorded = self._run(
                 base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120
             )
-            self.assertEqual(
-                recorded.returncode, 0, recorded.stdout + recorded.stderr
-            )
+            self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
 
             passed = self._run(release, cwd=root, timeout=180)
             out2 = passed.stdout + passed.stderr
@@ -1272,7 +1289,6 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             self.assertNotIn("m3trik/scripts differs from origin/main", out2)
             self.assertIn("No review receipt", out2)
-
 
     # ------------------------------------------------------------------
     # Release-gate / PR-gate helpers
@@ -1961,7 +1977,9 @@ class TestPushScriptRegressions(unittest.TestCase):
                 '{"name":"api-registry","conclusion":"SUCCESS"}]}',
             )
             b = root / "_bin"
-            (b / "pr_merged.json").write_text('{"state":"OPEN","mergedAt":null}', encoding="ascii")
+            (b / "pr_merged.json").write_text(
+                '{"state":"OPEN","mergedAt":null}', encoding="ascii"
+            )
             # Gate probe #1 is the arm-time check (still running); from #2 on the
             # rollup is settled and red.
             (b / "pr_gates.2.json").write_text(
@@ -1985,7 +2003,11 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("cannot merge: branch protection is holding it", out)
             self.assertIn("x test", out)
             self.assertIn("PR cannot merge", out)  # summary line
-            self.assertLess(elapsed, 120, f"took {elapsed:.0f}s -- the dead PR was waited out\n{out}")
+            self.assertLess(
+                elapsed,
+                120,
+                f"took {elapsed:.0f}s -- the dead PR was waited out\n{out}",
+            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_red_non_required_check_is_named_but_does_not_abort(self):
@@ -2054,7 +2076,9 @@ class TestPushScriptRegressions(unittest.TestCase):
                 encoding="ascii",
             )
             for n in (1, 2, 3):
-                (b / f"pr_merged.{n}.json").write_text('{"state":"OPEN","mergedAt":null}', encoding="ascii")
+                (b / f"pr_merged.{n}.json").write_text(
+                    '{"state":"OPEN","mergedAt":null}', encoding="ascii"
+                )
 
             result = self._run(
                 self._pr_release_cmd(root), cwd=root, timeout=300, env=env
@@ -2106,7 +2130,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn(entry, notes)
 
             # Idempotent: nothing left to do.
-            again = self._run(self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env)
+            again = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env
+            )
             out2 = again.stdout + again.stderr
             self.assertEqual(again.returncode, 0, out2)
             self.assertNotIn("Tagged", out2)
@@ -2158,7 +2184,8 @@ class TestPushScriptRegressions(unittest.TestCase):
             self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
             self._git(repo, "checkout", "dev")
             (repo / "CHANGELOG.md").write_text(
-                "# log\n\n- **2026-01-05 -- old entry naming a client.**\n", encoding="utf-8"
+                "# log\n\n- **2026-01-05 -- old entry naming a client.**\n",
+                encoding="utf-8",
             )
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-m", "old notes")
@@ -2250,7 +2277,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             out = result.stdout + result.stderr
             self.assertTrue(notes.exists(), out)
-            self.assertEqual(notes.read_text(encoding="utf-8").splitlines(), expected, out)
+            self.assertEqual(
+                notes.read_text(encoding="utf-8").splitlines(), expected, out
+            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_the_public_hygiene_gate_stops_a_leak_and_passes_a_clean_tree(self):
@@ -2291,7 +2320,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             root = Path(td)
             self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
             private, _ = self._init_dummy_repo(root, "unitytk", "0.1.0", [])
-            (private / "notes.md").write_text("see Zork_Widget here\n", encoding="utf-8")
+            (private / "notes.md").write_text(
+                "see Zork_Widget here\n", encoding="utf-8"
+            )
             denylist = root / "denylist.txt"
             denylist.write_text("ZORK_?WIDGET\n", encoding="utf-8")
             script = M3TRIK_DIR / "scripts" / "check_public_hygiene.py"
@@ -2371,7 +2402,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             out = result.stdout + result.stderr
             self.assertTrue(notes.exists(), out)
-            self.assertEqual(notes.read_text(encoding="utf-8").splitlines(), [entry], out)
+            self.assertEqual(
+                notes.read_text(encoding="utf-8").splitlines(), [entry], out
+            )
 
     def test_release_note_selection_on_a_synthetic_diff(self):
         """`Select-ReleaseNotes` over one crafted diff holding every CHANGELOG shape.
@@ -2450,7 +2483,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             out = result.stdout + result.stderr
             self.assertTrue(notes.exists(), out)
-            self.assertEqual(notes.read_text(encoding="utf-8").splitlines(), expected, out)
+            self.assertEqual(
+                notes.read_text(encoding="utf-8").splitlines(), expected, out
+            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_release_asset_is_uploaded_as_committed_at_the_tag(self):
@@ -2562,14 +2597,20 @@ class TestPushScriptRegressions(unittest.TestCase):
             complete = self._run_push_functions(root, body, env=env)
             out = complete.stdout + complete.stderr
             self.assertIn("FINALIZE=noop", out)
-            self.assertFalse(pypi_log.exists(), f"the fast exit still read PyPI:\n{out}")
-            views = [c for c in self._gh_calls(root).splitlines() if c.startswith("release")]
+            self.assertFalse(
+                pypi_log.exists(), f"the fast exit still read PyPI:\n{out}"
+            )
+            views = [
+                c for c in self._gh_calls(root).splitlines() if c.startswith("release")
+            ]
             self.assertEqual(len(views), 1, f"{views}\n{out}")
             self.assertIn("--json assets", views[0])
 
             # The same Release without the asset: an aborted upload to complete.
             (bin_dir / "gh_calls.log").unlink()
-            (bin_dir / "release_assets.json").write_text('{"assets":[]}', encoding="ascii")
+            (bin_dir / "release_assets.json").write_text(
+                '{"assets":[]}', encoding="ascii"
+            )
             partial = self._run_push_functions(root, body, env=env)
             out = partial.stdout + partial.stderr
             self.assertIn("FINALIZE=finalized", out)
@@ -2586,7 +2627,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             self._git(repo, "checkout", "dev")
             base = self._push_cmd(root, "-Packages", "pythontk")
 
-            recorded = self._run(base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120)
+            recorded = self._run(
+                base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120
+            )
             self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
 
             def shown():
@@ -2599,10 +2642,16 @@ class TestPushScriptRegressions(unittest.TestCase):
             (repo / "API_CHANGES.md").write_text("# regenerated\n", encoding="utf-8")
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-m", "chore: refresh API registry")
-            self.assertIn("review=VALID", shown(), "a sidecar-only commit voided the receipt")
+            self.assertIn(
+                "review=VALID", shown(), "a sidecar-only commit voided the receipt"
+            )
 
             (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
-            self.assertIn("no receipts for current tree", shown(), "a source edit did NOT void the receipt")
+            self.assertIn(
+                "no receipts for current tree",
+                shown(),
+                "a source edit did NOT void the receipt",
+            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_workflow_change_merges_but_does_not_release(self):
@@ -2614,10 +2663,14 @@ class TestPushScriptRegressions(unittest.TestCase):
             self._git(repo, "checkout", "dev")
             wf = repo / ".github" / "workflows"
             wf.mkdir(parents=True)
-            (wf / "tests.yml").write_text("name: Tests\non: [pull_request]\n", encoding="utf-8")
+            (wf / "tests.yml").write_text(
+                "name: Tests\non: [pull_request]\n", encoding="utf-8"
+            )
             # test/ and docs/ (other than the wheel's readme) never ship either.
             (repo / "test").mkdir()
-            (repo / "test" / "test_x.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
+            (repo / "test" / "test_x.py").write_text(
+                "def test_x():\n    pass\n", encoding="utf-8"
+            )
             (repo / "docs").mkdir()
             (repo / "docs" / "GUIDE.md").write_text("# guide\n", encoding="utf-8")
             self._git(repo, "add", "-A")
@@ -2652,15 +2705,26 @@ class TestPushScriptRegressions(unittest.TestCase):
             self._git(repo, "commit", "-m", "feature")
             self._git(repo, "push", "origin", "dev")
             base = self._push_cmd(root, "-Packages", "pythontk")
-            recorded = self._run(base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120)
+            recorded = self._run(
+                base + ["-RecordReceipt", "review,tests"], cwd=root, timeout=120
+            )
             self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
 
             # Abort AFTER the Release commit: PR creation fails.
             env = self._install_fake_gh(root, "{}")
             (root / "_bin" / "pr_create_fails").write_text("1", encoding="ascii")
             gated = self._push_cmd(
-                root, "-Packages", "pythontk", "-Strict", "-Merge", "-SkipBuild",
-                "-SkipWorkflowWait", "-SkipPypiCheck", "-UsePR", "-PRGateTimeoutSeconds", "0",
+                root,
+                "-Packages",
+                "pythontk",
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+                "-SkipPypiCheck",
+                "-UsePR",
+                "-PRGateTimeoutSeconds",
+                "0",
             )
             first = self._run(gated, cwd=root, timeout=240, env=env)
             out = first.stdout + first.stderr
@@ -2694,13 +2758,17 @@ class TestPushScriptRegressions(unittest.TestCase):
 
             env = self._install_fake_gh(root, "{}")
             (root / "_bin" / "pr_create_fails").write_text("1", encoding="ascii")
-            first = self._run(self._pr_release_cmd(root), cwd=root, timeout=240, env=env)
+            first = self._run(
+                self._pr_release_cmd(root), cwd=root, timeout=240, env=env
+            )
             out = first.stdout + first.stderr
             self.assertNotEqual(first.returncode, 0, out)
             self.assertIn("Committed 'Release 0.1.1'", out)
 
             shown = self._run(
-                self._push_cmd(root, "-Packages", "pythontk", "-ShowReceipts"), cwd=root, timeout=120
+                self._push_cmd(root, "-Packages", "pythontk", "-ShowReceipts"),
+                cwd=root,
+                timeout=120,
             )
             self.assertIn("no receipts for current tree", shown.stdout + shown.stderr)
 
@@ -2737,8 +2805,17 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
             (root / "_bin" / "pr_create_fails").write_text("1", encoding="ascii")
             cmd = self._push_cmd(
-                root, "-Packages", "uitk", "-Strict", "-Merge", "-SkipBuild",
-                "-SkipWorkflowWait", "-SkipPypiCheck", "-UsePR", "-PRGateTimeoutSeconds", "0",
+                root,
+                "-Packages",
+                "uitk",
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+                "-SkipPypiCheck",
+                "-UsePR",
+                "-PRGateTimeoutSeconds",
+                "0",
             )
             first = self._run(cmd, cwd=root, timeout=240, env=env)
             out = first.stdout + first.stderr
@@ -3050,6 +3127,10 @@ class TestGitHubWorkflows(unittest.TestCase):
         for pkg in PACKAGES:
             workflows = ROOT / pkg / ".github" / "workflows"
             content = (workflows / "publish.yml").read_text(encoding="utf-8")
-            self.assertNotIn("bump_dev", content, f"{pkg} publish.yml still dispatches bump_dev")
+            self.assertNotIn(
+                "bump_dev", content, f"{pkg} publish.yml still dispatches bump_dev"
+            )
             self.assertNotIn("Trigger dev bump", content, pkg)
-            self.assertFalse((workflows / "bump-dev.yml").exists(), f"{pkg} still ships bump-dev.yml")
+            self.assertFalse(
+                (workflows / "bump-dev.yml").exists(), f"{pkg} still ships bump-dev.yml"
+            )

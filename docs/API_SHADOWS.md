@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (27)
+## Genuine cross-layer collisions (28)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -33,6 +33,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L82)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L39)
+
+### `HierarchyBaseline` — mayatk, pythontk
+
+- `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L36)
+- `pythontk` — [`HierarchyBaseline`](pythontk/core_utils/hierarchy_baseline.py#L33)
 
 ### `KeyStash` — blendertk, mayatk, pythontk
 
@@ -69,7 +74,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
-- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L381)
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L398)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
@@ -170,12 +175,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/metashape_workflow/run_combined.py#L271)
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L219)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L538)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L826)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L154)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L162)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L710)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1093)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L117)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L563)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L225)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L119)
 - `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L35)
@@ -203,7 +208,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (204)
+## Intentional mayatk↔blendertk port parity (199)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -382,9 +387,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `WheelRigSlots`
 - `XformUtils`
 - `apply_instances`
-- `apply_manifest`
 - `apply_mesh_maps`
-- `apply_scene`
 - `autostart`
 - `collect_instance_groups`
 - `eval_python`
@@ -392,7 +395,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `find_shadows`
 - `import_payload`
 - `import_source`
-- `import_usd`
 - `is_running`
 - `js_evaluate`
 - `list_materials`
@@ -400,14 +402,12 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `mesh_reload_status`
 - `pending_setup`
 - `project_info`
-- `restore_empty_groups`
 - `restore_usd_locators`
 - `scene_settings`
 - `set_high_poly`
 - `start_server`
 - `stop_server`
 - `summary`
-- `tag_node_types`
 - `teardown`
 - `version`
 - `write_manifest`

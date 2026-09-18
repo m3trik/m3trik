@@ -34,8 +34,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L82)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L39)
 
-### `HierarchyBaseline` — mayatk, pythontk
+### `HierarchyBaseline` — blendertk, mayatk, pythontk
 
+- `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L35)
 - `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L36)
 - `pythontk` — [`HierarchyBaseline`](pythontk/core_utils/hierarchy_baseline.py#L33)
 
@@ -69,7 +70,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Parameters` — blendertk, mayatk, uitk
 
-- `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L114)
+- `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L131)
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L165)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
@@ -158,12 +159,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `main` — blendertk, extapps, mayatk, pythontk
 
-- `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L30)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L235)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L775)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L672)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L217)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L274)
+- `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L31)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L54)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1229)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1028)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L237)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L306)
 - `blendertk` — [`main`](blendertk/env_utils/pm_doctor.py#L56)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
@@ -208,7 +209,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (199)
+## Intentional mayatk↔blendertk port parity (200)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -321,6 +322,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `RenderEffects`
 - `RenderEffectsSlots`
 - `RestoreResult`
+- `RigGraphBuilder`
+- `RigGraphExtractor`
 - `RigUtils`
 - `RizomBridgeSlots`
 - `RizomUVBridge`
@@ -386,7 +389,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `WheelRig`
 - `WheelRigSlots`
 - `XformUtils`
-- `apply_instances`
 - `apply_mesh_maps`
 - `autostart`
 - `collect_instance_groups`
@@ -394,7 +396,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `export_usd`
 - `find_shadows`
 - `import_payload`
-- `import_source`
 - `is_running`
 - `js_evaluate`
 - `list_materials`
@@ -405,6 +406,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `restore_usd_locators`
 - `scene_settings`
 - `set_high_poly`
+- `shots_section`
 - `start_server`
 - `stop_server`
 - `summary`

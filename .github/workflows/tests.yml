@@ -191,6 +191,15 @@ jobs:
       - name: DCC controller twins in sync
         run: python m3trik/scripts/check_dcc_twins.py --check
 
+      # Scene records: ONE declaration (pythontk SceneRecords) and two things
+      # derived from it outside pythontk -- the records table in mayatk's
+      # owner doc, and the channel list unitytk's importers read. Both were
+      # hand-kept before 2026-09-18 and the doc table was seven records short
+      # when measured. Needs pythontk + mayatk + unitytk side by side, which
+      # only this job has. Landed GREEN (15 records, 5 read by Unity).
+      - name: Scene records derived surfaces in sync
+        run: python m3trik/scripts/sync_scene_records.py --check
+
       # The workspace-wide gates. Each of these is a rule the root CLAUDE.md
       # states as a requirement -- check_docs is named there verbatim ("must
       # exit 0") -- and each ran in no workflow, no push.ps1 step and no

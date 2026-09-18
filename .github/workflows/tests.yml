@@ -198,17 +198,31 @@ jobs:
       # sibling trees, so this job's seven-sibling layout is the only CI that
       # can host them.
       #
-      # Measured green 2026-09-16 against the full workspace: check_docs 13
-      # ledgered docs / 0 DOC-TODOs, check_temp_artifacts 9 packages clean,
-      # check_tooltips 590 call sites / 0 malformed, check_ui_spacers 4 trees.
+      # Measured green 2026-09-16 against a DEVELOPER's full workspace:
+      # check_temp_artifacts 9 packages clean, check_tooltips 590 call sites /
+      # 0 malformed, check_ui_spacers 4 trees. That measurement is what misled
+      # the check_docs decision below -- passing locally says nothing about a
+      # gate whose inputs only exist locally.
       #
-      # `--workspace .` is the runner root (m3trik + the seven siblings).
-      # That is a narrower workspace than a developer's checkout, which also
-      # holds androidtk/comfyui/server/www -- links escaping the workspace are
-      # ignored by design, so the narrower set checks a strict subset and
-      # cannot go red on a repo this job did not clone.
-      - name: Docs wired and links resolve
-        run: python m3trik/scripts/check_docs.py --workspace .
+      # check_docs is NOT here, and cannot be. It was added 2026-09-16 on the
+      # reasoning that `--workspace .` (the runner root) is a strict subset of a
+      # developer's checkout, so it could only ever check less. That was wrong,
+      # and measured wrong on the first dispatch run: 20 [FAIL] links, every one
+      # of them a package pointing at the MONOREPO ROOT -- `../CLAUDE.md` from
+      # each package, `../../.claude/FUTURE.md` from CODE_STANDARD.md,
+      # `../server/CLAUDE.md`, `../../.archive/...`.
+      #
+      # Those targets live in the workspace root, which is not a git repository
+      # and never has been (`.claude/BACKLOG.md` says so of itself: "this file
+      # is not version controlled"). There is no repo to clone them from, so the
+      # links resolve INSIDE the runner workspace and find nothing -- they do not
+      # "escape" it and are not ignored. No amount of sibling cloning fixes that.
+      #
+      # So this one stays a developer-workspace gate, which is where the root
+      # CLAUDE.md already puts it ("`check_docs.py --workspace .` must exit 0").
+      # The three below scan the package trees themselves and are genuinely
+      # runnable here. Re-adding check_docs needs the workspace root to become a
+      # real repo first -- not another attempt at the flag.
 
       - name: No unmanaged temp allocations or stray artifacts
         run: python m3trik/scripts/check_temp_artifacts.py

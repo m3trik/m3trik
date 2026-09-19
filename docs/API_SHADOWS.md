@@ -43,7 +43,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `KeyStash` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L213)
-- `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L242)
+- `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L236)
 - `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L194)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
@@ -120,7 +120,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L364)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L389)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L300)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -178,7 +178,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L162)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L710)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1093)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1134)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L117)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L563)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L119)

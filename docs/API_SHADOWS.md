@@ -42,7 +42,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `KeyStash` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L213)
+- `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L214)
 - `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L236)
 - `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L194)
 
@@ -161,7 +161,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L31)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L54)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1229)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1235)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1028)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L237)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L306)

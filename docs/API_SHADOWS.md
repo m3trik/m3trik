@@ -70,7 +70,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Parameters` — blendertk, mayatk, uitk
 
-- `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L131)
+- `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L134)
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L165)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
@@ -161,10 +161,10 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L31)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L54)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1235)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1028)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L237)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L306)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1149)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L942)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L240)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L257)
 - `blendertk` — [`main`](blendertk/env_utils/pm_doctor.py#L56)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
@@ -209,7 +209,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (199)
+## Intentional mayatk↔blendertk port parity (200)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -404,6 +404,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `pending_setup`
 - `project_info`
 - `restore_usd_locators`
+- `scene_data_sections`
 - `scene_settings`
 - `set_high_poly`
 - `start_server`

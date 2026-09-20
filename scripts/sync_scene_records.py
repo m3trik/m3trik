@@ -65,20 +65,38 @@ def _records():
     return SceneRecords
 
 
+#: How a record's ``Merge`` rule reads in the table's *Crosses* column.
+MERGE_LABELS = {
+    "derive": "re-derived",
+    "own": "keeps its own",
+    "union": "unites",
+    "codec": "domain merge",
+}
+
+
 def render_table(records=None) -> str:
-    """The generated region's body: one row per declared record."""
+    """The generated region's body: one row per declared record.  *Crosses*
+    is what another scene's copy becomes beside this one's (the record's
+    ``Merge`` rule) and whether it rides a DCC hand-off (``portable``)."""
     records = records or _records()
     lines = [
-        "| Record | Carrier | Version | Kind | Owner | Reads | Read by | Holds |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Record | Carrier | Version | Kind | Owner | Reads | Read by | Crosses | Holds |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     names = {"private": "`data_internal`", "deliverable": "`data_export`"}
     for row in records.describe():
         holds = row["description"]
         if row["deprecated_by"]:
             holds += f" -- *legacy: superseded by `{row['deprecated_by']}`*"
+        # `.get`: a pythontk that predates the crossing columns (the CI gate
+        # runs against the siblings' pushed branches) must read as drift in
+        # the rendered table, not as a traceback.
+        merge = row.get("merge", "")
+        crosses = MERGE_LABELS.get(merge, merge)
+        if row.get("portable"):
+            crosses += ", hand-off"
         lines.append(
-            "| `{key}` | {carrier} | {version} | {kind} | {owner} | {reads} | {consumers} | {holds} |".format(
+            "| `{key}` | {carrier} | {version} | {kind} | {owner} | {reads} | {consumers} | {crosses} | {holds} |".format(
                 key=row["key"],
                 carrier=names[row["scope"]],
                 version=row["version"]
@@ -88,6 +106,7 @@ def render_table(records=None) -> str:
                 owner=row["owner"],
                 reads=", ".join(f"`{k}`" for k in row["after"]) or "--",
                 consumers=", ".join(row["consumers"]) or "--",
+                crosses=crosses,
                 holds=holds.replace("|", "/"),
             )
         )

@@ -213,25 +213,29 @@ jobs:
       # the check_docs decision below -- passing locally says nothing about a
       # gate whose inputs only exist locally.
       #
-      # check_docs is NOT here, and cannot be. It was added 2026-09-16 on the
-      # reasoning that `--workspace .` (the runner root) is a strict subset of a
-      # developer's checkout, so it could only ever check less. That was wrong,
-      # and measured wrong on the first dispatch run: 20 [FAIL] links, every one
-      # of them a package pointing at the MONOREPO ROOT -- `../CLAUDE.md` from
-      # each package, `../../.claude/FUTURE.md` from CODE_STANDARD.md,
-      # `../server/CLAUDE.md`, `../../.archive/...`.
+      # check_docs runs with --skip-unversioned, and only with it. Its first
+      # attempt here (2026-09-16, plain `--workspace .`) measured 20 [FAIL]
+      # links, every one a package pointing at the MONOREPO ROOT --
+      # `../CLAUDE.md` from each package, `../../.claude/FUTURE.md` from
+      # CODE_STANDARD.md, `../server/CLAUDE.md`, `../../.archive/...`. Those
+      # targets live in the workspace root, which is not a git repository, so
+      # no runner can clone them: they resolve INSIDE the runner workspace and
+      # find nothing.
       #
-      # Those targets live in the workspace root, which is not a git repository
-      # and never has been (`.claude/BACKLOG.md` says so of itself: "this file
-      # is not version controlled"). There is no repo to clone them from, so the
-      # links resolve INSIDE the runner workspace and find nothing -- they do not
-      # "escape" it and are not ignored. No amount of sibling cloning fixes that.
-      #
-      # So this one stays a developer-workspace gate, which is where the root
-      # CLAUDE.md already puts it ("`check_docs.py --workspace .` must exit 0").
-      # The three below scan the package trees themselves and are genuinely
-      # runnable here. Re-adding check_docs needs the workspace root to become a
-      # real repo first -- not another attempt at the flag.
+      # The flag records exactly that class -- a MISSING target outside every
+      # checked-out repo -- as a named SKIP, printed one by one and counted in
+      # the verdict line, while every link INSIDE a repo is still checked:
+      # the blind spot this job exists to close (a broken link committed in a
+      # package's docs reaching main unchallenged). Measured 2026-09-19 on a
+      # local reconstruction of this job's layout (m3trik@main + the seven
+      # siblings @dev): without the flag 22 FAIL, all root links; with it exit
+      # 0 and 22 SKIP, all root links; the same run against a stale m3trik
+      # branch FAILED 5 real in-repo breaks, so the step is not vacuous. The
+      # developer workspace keeps running it WITHOUT the flag (root CLAUDE.md:
+      # "`check_docs.py --workspace .` must exit 0"), which is where the root's
+      # own links are checked.
+      - name: Docs links and orphans (repos only)
+        run: python m3trik/scripts/check_docs.py --workspace . --skip-unversioned
 
       - name: No unmanaged temp allocations or stray artifacts
         run: python m3trik/scripts/check_temp_artifacts.py

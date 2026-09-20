@@ -43,7 +43,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `KeyStash` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L214)
-- `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L236)
+- `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L237)
 - `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L194)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
@@ -70,12 +70,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Parameters` — blendertk, mayatk, uitk
 
-- `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L131)
+- `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L134)
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L165)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
-- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L398)
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L401)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
@@ -110,7 +110,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotApply` — mayatk, pythontk
 
-- `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L232)
+- `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L318)
 - `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L55)
 
 ### `ShotManifest` — mayatk, pythontk
@@ -121,7 +121,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotStore` — mayatk, pythontk
 
 - `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L389)
-- `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L300)
+- `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L301)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
 
@@ -161,10 +161,10 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L31)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L54)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1235)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1028)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L237)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L306)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1149)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L942)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L240)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L257)
 - `blendertk` — [`main`](blendertk/env_utils/pm_doctor.py#L56)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
@@ -177,11 +177,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L162)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L710)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1134)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L768)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1135)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L117)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L563)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L119)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L120)
 - `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/import.py#L35)
@@ -404,9 +404,9 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `pending_setup`
 - `project_info`
 - `restore_usd_locators`
+- `scene_data_sections`
 - `scene_settings`
 - `set_high_poly`
-- `shots_section`
 - `start_server`
 - `stop_server`
 - `summary`

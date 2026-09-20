@@ -27,6 +27,11 @@ Usage:
     python generate_api_registry.py uitk --check   # one package (the CI gate)
     python generate_api_registry.py uitk --no-shadows  # a release commit: the
                                                # package's own files only
+    python generate_api_registry.py mayatk --semver    # JSON: the smallest
+                                               # release this delta may ship as
+                                               # ('minor' when it removes a
+                                               # public symbol), for push.ps1's
+                                               # semver gate. Writes nothing.
 
 Outputs carry no generation date — git history is the clock. Regenerating an
 unchanged source tree is byte-identical, so nothing downstream (the registry
@@ -182,6 +187,16 @@ def deprecations(pkg: PackageData) -> list[tuple[str, str, str]]:
                     found.append((mod.relpath, member.qualname, member.remove_in))
 
     def order(row: tuple[str, str, str]) -> tuple:
+        # Deadline first. Under the degraded stand-in (a pythontk sibling that
+        # predates ``Deprecation``: ``_load_version_key``, which says so on
+        # stderr) every row takes the except branch and sorts by NAME instead --
+        # accepted, not fixed (decided 2026-09-19): it cannot fire today, since a
+        # dated deprecation needs ``remove_in=`` and only ``Deprecation.symbol``
+        # (from the very module whose absence degrades) takes one, measured as
+        # byte-identical output both ways; a second, sort-only parser is the drift
+        # ``_load_version_key`` refuses; and post-release every CI clone of
+        # pythontk@dev carries the module, so the branch is dead outside a stale
+        # local checkout.
         try:
             return (0, _version_key(row[2]), row[1])
         except ValueError:
@@ -199,6 +214,13 @@ def expired_deprecations(pkg: PackageData, version: str) -> list[tuple[str, str,
     both are reported by :func:`deprecations` instead, where they read as debt
     rather than as a passing gate.
     """
+    return _expired(deprecations(pkg), version)
+
+
+def _expired(rows, version: str) -> list[tuple[str, str, str]]:
+    """The ``(relpath, what, remove_in)`` *rows* whose ``remove_in`` *version*
+    has reached; nothing when *version* (or a row's ``remove_in``) is absent or
+    unparseable -- see :func:`_load_version_key` for why that stays quiet."""
     if not version:
         return []
     try:
@@ -206,7 +228,7 @@ def expired_deprecations(pkg: PackageData, version: str) -> list[tuple[str, str,
     except ValueError:
         return []
     out = []
-    for row in deprecations(pkg):
+    for row in rows:
         if not row[2]:
             continue
         try:
@@ -214,6 +236,120 @@ def expired_deprecations(pkg: PackageData, version: str) -> list[tuple[str, str,
                 out.append(row)
         except ValueError:
             continue
+    return out
+
+
+#: The ``Deprecation`` calls that retire something smaller than a symbol -- a
+#: keyword, a value, a code path, a moved module attribute.  The registry never
+#: marks a symbol for them (:data:`_DEPRECATION_DECORATORS` says why), but their
+#: ``remove_in`` is the same one-release promise, so the expiry gate reads them
+#: too: blendertk's ``smart_bake=`` keyword (``remove_in="0.7.0"``) shipped in
+#: 0.8.0 because nothing did.
+_RETIREMENT_CALLS = ("parameter", "values", "warn", "attributes")
+
+
+def _string_constants(tree: ast.AST) -> dict[str, str | None]:
+    """``{name: value}`` for every ``NAME = "literal"`` assignment in *tree*,
+    at module or class scope -- the shared ``_REMOVE_IN = "0.19.0"`` a module
+    hands each of its retirements.  A name bound to two DIFFERENT strings maps
+    to ``None``: which one a call means is not readable statically."""
+    found: dict[str, str | None] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                prior = found.get(target.id, value.value)
+                found[target.id] = value.value if prior == value.value else None
+    return found
+
+
+def _merge_string_constants(
+    dst: dict[str, str | None], src: dict[str, str | None]
+) -> None:
+    """Fold *src* into *dst* under :func:`_string_constants`' own rule: a name
+    the two bind to DIFFERENT strings becomes ``None`` (unreadable), so merging
+    a module's constants with those of the modules it takes private bases from
+    can never resolve a ``remove_in`` to a version its own file never said."""
+    for name, value in src.items():
+        if name in dst and dst[name] != value:
+            dst[name] = None
+        else:
+            dst.setdefault(name, value)
+
+
+def _string_value(node: ast.AST, constants: dict[str, str | None]) -> str:
+    """The string *node* stands for: a literal, or a name / attribute
+    (``_REMOVE_IN``, ``cls._REMOVE_IN``, ``Owner._REMOVE_IN``) bound to one in
+    the same module (:func:`_string_constants`); ``""`` when unreadable."""
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else ""
+    if isinstance(node, ast.Name):
+        return constants.get(node.id) or ""
+    if isinstance(node, ast.Attribute):
+        return constants.get(node.attr) or ""
+    return ""
+
+
+def retired_forms(pkg_dir: Path, name: str) -> list[tuple[str, str, str]]:
+    """Every sub-symbol retirement in the package source, as ``(relpath, what,
+    remove_in)``: a ``Deprecation.<parameter|values|warn|attributes>(...)`` call
+    with a literal ``remove_in`` anywhere in a module -- a decorator, a helper
+    that builds one, a module-scope ``values`` resolver -- read statically, like
+    the symbol walk, so an unimported module is covered too."""
+    source_root = pkg_dir / name
+    out: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    unreadable: list[str] = []
+    for path in _iter_py_files(source_root):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        relpath = path.relative_to(source_root).as_posix()
+        constants = _string_constants(tree)
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in _RETIREMENT_CALLS
+            ):
+                continue
+            owner = _decorator_path(node.func.value)
+            if owner != "Deprecation" and not owner.endswith(".Deprecation"):
+                continue
+            given = next((kw.value for kw in node.keywords if kw.arg == "remove_in"), None)
+            if given is None:
+                continue
+            what = ast.unparse(node.args[0]) if node.args else ""
+            remove_in = _string_value(given, constants)
+            if not remove_in:
+                # A `remove_in` this walk cannot read (a helper's result, a
+                # name bound to two different strings) cannot expire here: say
+                # so, as the missing-__version__ case does, rather than let the
+                # retirement ship past its window.
+                unreadable.append(f"{relpath}: Deprecation.{node.func.attr}({what[:60]})")
+                continue
+            row = (relpath, f"Deprecation.{node.func.attr}({what[:60]})", remove_in)
+            # One row per distinct retirement: two of the same shape in one
+            # module (mayatk's and blendertk's importers each retire `shots`
+            # twice) would print the same overdue line twice.
+            if row not in seen:
+                seen.add(row)
+                out.append(row)
+    if unreadable:
+        print(
+            f"warning: {name} has {len(unreadable)} retirement(s) whose remove_in is "
+            "not a literal -- their one-release window is UNCHECKED: "
+            + "; ".join(unreadable),
+            file=sys.stderr,
+        )
     return out
 
 
@@ -393,13 +529,24 @@ def _decorator_path(dec: ast.expr) -> str:
     return ".".join(reversed(parts))
 
 
-def _deprecation_of(decorators: list) -> tuple[bool, str]:
+def _deprecation_of(
+    decorators: list, constants: dict[str, str | None] | None = None
+) -> tuple[bool, str]:
     """``(deprecated, remove_in)`` read off a decorator list.
 
-    ``remove_in`` is a literal keyword on the decorator call, so it survives
-    the static walk -- which is the point: the runtime roster only sees modules
-    something imported, while this sees every decorated symbol in the package
-    and is therefore what the expiry gate can be built on.
+    ``remove_in`` is a keyword on the decorator call, so it survives the static
+    walk -- which is the point: the runtime roster only sees modules something
+    imported, while this sees every decorated symbol in the package and is
+    therefore what the expiry gate can be built on.
+
+    *constants* (:func:`_string_constants` for the defining module and any
+    module it takes private bases from) resolves the DRY spelling a module with
+    many retirements uses -- ``_REMOVE_IN = "0.18.0"`` once, then
+    ``remove_in=_REMOVE_IN`` / ``cls._REMOVE_IN`` on each.  Reading only a
+    literal recorded ``""`` for all of them, and a symbol with no ``remove_in``
+    can never expire (:func:`expired_deprecations`), so mayatk's ``FbxUtils``
+    and ``DataNodes`` retirements were invisible to the gate.  A name bound to
+    two different strings stays unreadable rather than resolving to a guess.
     """
     for dec in decorators:
         path = _decorator_path(dec)
@@ -411,18 +558,15 @@ def _deprecation_of(decorators: list) -> tuple[bool, str]:
         remove_in = ""
         if isinstance(dec, ast.Call):
             for keyword in dec.keywords:
-                if (
-                    keyword.arg == "remove_in"
-                    and isinstance(keyword.value, ast.Constant)
-                    and isinstance(keyword.value.value, str)
-                ):
-                    remove_in = keyword.value.value
+                if keyword.arg == "remove_in":
+                    remove_in = _string_value(keyword.value, constants or {})
         return True, remove_in
     return False, ""
 
 
 def _decorator_kinds(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
+    constants: dict[str, str | None] | None = None,
 ) -> tuple[str, bool, str]:
     """Return (kind, deprecated, remove_in). kind is method/staticmethod/classmethod/property."""
     kind = "method"
@@ -444,7 +588,7 @@ def _decorator_kinds(
             kind = "classmethod"
         elif name == "property":
             kind = "property"
-    deprecated, remove_in = _deprecation_of(node.decorator_list)
+    deprecated, remove_in = _deprecation_of(node.decorator_list, constants)
     return kind, deprecated, remove_in
 
 
@@ -465,7 +609,9 @@ def _is_property_accessor(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
-def _own_members(node: ast.ClassDef, owner: str) -> list[SymbolRecord]:
+def _own_members(
+    node: ast.ClassDef, owner: str, constants: dict[str, str | None] | None = None
+) -> list[SymbolRecord]:
     """Public methods declared directly in *node*'s body."""
     out: list[SymbolRecord] = []
     for member in node.body:
@@ -473,7 +619,7 @@ def _own_members(node: ast.ClassDef, owner: str) -> list[SymbolRecord]:
             continue
         if not _is_public(member.name) or _is_property_accessor(member):
             continue
-        kind, deprecated, remove_in = _decorator_kinds(member)
+        kind, deprecated, remove_in = _decorator_kinds(member, constants)
         out.append(
             SymbolRecord(
                 name=member.name,
@@ -495,6 +641,7 @@ def _class_members(
     local_classes: dict[str, ast.ClassDef],
     _seen: set[str] | None = None,
     _visited: set[str] | None = None,
+    constants: dict[str, str | None] | None = None,
 ) -> list[SymbolRecord]:
     """Public members of *node*, including those inherited from PRIVATE bases
     declared in the same module or imported from a sibling module of the
@@ -532,7 +679,7 @@ def _class_members(
     visited.add(node.name)
 
     out: list[SymbolRecord] = []
-    for rec in _own_members(node, owner):
+    for rec in _own_members(node, owner, constants):
         if rec.name not in seen:
             seen.add(rec.name)
             out.append(rec)
@@ -543,7 +690,9 @@ def _class_members(
         if name in visited:
             continue
         out.extend(
-            _class_members(local_classes[name], owner, local_classes, seen, visited)
+            _class_members(
+                local_classes[name], owner, local_classes, seen, visited, constants
+            )
         )
     return out
 
@@ -586,6 +735,7 @@ def _imported_private_classes(
     path: Path,
     pkg_source_root: Path,
     _visiting: set[Path] | None = None,
+    _constants: dict[str, str | None] | None = None,
 ) -> dict[str, ast.ClassDef]:
     """Private classes *tree* imports from sibling modules of its own package,
     keyed by the name they are bound to here.
@@ -600,6 +750,10 @@ def _imported_private_classes(
     module reached by two routes (two mixins importing their bases from one
     module, a diamond) is walked on each, so neither route loses its bases;
     :func:`_parse_cached` still parses it once.
+
+    ``_constants``, when given, collects the :func:`_string_constants` of every
+    module walked, so a retirement inherited from a base in another file can
+    resolve the ``_REMOVE_IN`` that file declares (:func:`_deprecation_of`).
     """
     visiting = {path} if _visiting is None else _visiting
     found: dict[str, ast.ClassDef] = {}
@@ -620,14 +774,19 @@ def _imported_private_classes(
         if module is None:
             continue
         classes = {n.name: n for n in module.body if isinstance(n, ast.ClassDef)}
+        adopted = {b: classes[s] for b, s in wanted.items() if s in classes}
+        # Only a module that actually CONTRIBUTES a base lends its constants:
+        # folding in every module merely imported from would let an unrelated
+        # ``_REMOVE_IN`` collide with this one's and read as ambiguous, costing
+        # a deadline the source states plainly.
+        if adopted and _constants is not None:
+            _merge_string_constants(_constants, _string_constants(module))
         # The target's own imported private bases first, so its classes'
         # bases resolve too; its own definitions then win over those.
         transitive = _imported_private_classes(
-            module, target, pkg_source_root, visiting | {target}
+            module, target, pkg_source_root, visiting | {target}, _constants
         )
-        for bound, source in wanted.items():
-            if source in classes:
-                found[bound] = classes[source]
+        found.update(adopted)
         for name, cls in transitive.items():
             found.setdefault(name, cls)
     return found
@@ -654,14 +813,24 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     # Every class in the module -- plus the private ones it imports from
     # sibling modules -- so a public class can resolve members it inherits
     # from a private base declared alongside it or in its own file.
-    local_classes = _imported_private_classes(tree, path, pkg_source_root)
+    # The string constants a retirement's ``remove_in=`` may name, from this
+    # module and from every module it takes a private base from -- a base's
+    # ``_REMOVE_IN`` lives in ITS file, and resolving it against the importer's
+    # would print a version the source never said. A name the merged view binds
+    # to two different strings collapses to unreadable (``_string_constants``),
+    # so an ambiguity reports no deadline rather than the wrong one.
+    string_constants: dict[str, str | None] = {}
+    local_classes = _imported_private_classes(
+        tree, path, pkg_source_root, _constants=string_constants
+    )
     local_classes.update({n.name: n for n in tree.body if isinstance(n, ast.ClassDef)})
+    _merge_string_constants(string_constants, _string_constants(tree))
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if not _is_public(node.name):
                 continue
-            deprecated, remove_in = _deprecation_of(node.decorator_list)
+            deprecated, remove_in = _deprecation_of(node.decorator_list, string_constants)
             funcs.append(
                 SymbolRecord(
                     name=node.name,
@@ -703,12 +872,16 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                 continue
             if any(node.name.startswith(p) for p in GENERATED_CLASS_PREFIXES):
                 continue
-            members = _class_members(node, node.name, local_classes)
+            members = _class_members(
+                node, node.name, local_classes, constants=string_constants
+            )
             bases = [
                 ast.unparse(b) if not isinstance(b, ast.Name) else b.id
                 for b in node.bases
             ]
-            cls_deprecated, cls_remove_in = _deprecation_of(node.decorator_list)
+            cls_deprecated, cls_remove_in = _deprecation_of(
+                node.decorator_list, string_constants
+            )
             classes.append(
                 ClassEntry(
                     name=node.name,
@@ -1226,15 +1399,78 @@ def _deprecation_section(pkg: PackageData, version: str) -> list[str]:
     return lines
 
 
-def emit_changes_markdown(
+#: Directory names whose modules are exec PAYLOAD, not an import contract. A
+#: template is read as source and run inside ANOTHER application (Blender,
+#: Marmoset, Substance Painter), so nothing imports its names and renaming one
+#: breaks no consumer -- the root CLAUDE.md exempts "exec-templates" from the
+#: encapsulation rule for the same reason. Every ``templates/`` directory in
+#: the ecosystem is of this kind (the two bridge template sets, both marmoset
+#: sets, both substance sets, extapps' marmoset workflow). They stay IN the
+#: registry, which documents them; they simply never owe a version bump.
+SEMVER_EXEMPT_DIRS = ("templates",)
+
+
+def _is_semver_exempt(key: str) -> bool:
+    """Whether ``relpath::symbol`` lives under a :data:`SEMVER_EXEMPT_DIRS` dir."""
+    relpath = key.split("::", 1)[0]
+    return any(part in SEMVER_EXEMPT_DIRS for part in relpath.split("/")[:-1])
+
+
+@dataclass(frozen=True)
+class ApiDelta:
+    """One package's public-API delta against a prior registry sidecar.
+
+    The DATA behind ``API_CHANGES.md``. Rendering it is one consumer
+    (:func:`emit_changes_markdown`); deciding what version it owes is another
+    (:func:`required_bump`), which is why the computation stopped living
+    inside the renderer: the release tool needs the verdict, and re-parsing
+    generated prose to recover it would be a second, drifting source of truth.
+    """
+
+    added: list[str]
+    removed: list[str]
+    changed: list[str]
+    moved: list[str]
+    #: Flat ``relpath::symbol -> signature`` maps, kept so a renderer can show
+    #: what a symbol WAS as well as what it is.
+    prior: dict[str, str]
+    new: dict[str, str]
+
+    def is_empty(self) -> bool:
+        return not (self.added or self.removed or self.changed or self.moved)
+
+
+def required_bump(delta: ApiDelta | None) -> tuple[str, list[str]]:
+    """``(bump, reasons)`` -- the smallest release this delta may ship as.
+
+    ``"minor"`` when the delta REMOVES a public symbol, naming each removal;
+    ``"patch"`` otherwise. The rule is the root CLAUDE.md's ("public APIs are
+    contracts (break -> ``ptk.Deprecation`` alias + real ``remove_in`` +
+    ``CHANGELOG.md`` line + minor bump)"), which until now nothing enforced --
+    the cascade stepped a patch from PyPI whatever the delta said, so a removal
+    could ship under a floor that resolves it as a bugfix.
+
+    Only ``removed`` counts. A ``moved`` symbol still resolves at the same call
+    site, and a ``changed`` signature is ambiguous on its face -- dropping a
+    parameter breaks, adding an optional one does not -- so neither is read as
+    a break here; a genuine signature break is the author's call to declare by
+    hand-raising ``__version__``. Symbols under :data:`SEMVER_EXEMPT_DIRS` are
+    not contract and are skipped.
+    """
+    if delta is None:
+        return "patch", []
+    reasons = [k for k in delta.removed if not _is_semver_exempt(k)]
+    return ("minor" if reasons else "patch"), reasons
+
+
+def compute_api_delta(
     pkg: PackageData,
     prior_json: dict | None,
-    baseline_label: str = "prior baseline",
     foreign_members: dict[str, set[str]] | None = None,
     reexports: dict[str, set[str]] | None = None,
-    version: str = "",
-) -> str:
-    """Render the public-API delta against a prior registry sidecar.
+) -> ApiDelta | None:
+    """The public-API delta of *pkg* against *prior_json*, or None when there
+    is no baseline to diff against.
 
     Parameters:
         foreign_members: ``{class name: members it resolves}`` for bases that
@@ -1244,22 +1480,9 @@ def emit_changes_markdown(
             (`module_reexports`). Both are passed IN rather than read off disk
             so that diffing a synthetic package cannot reach the real tree.
     """
-    new = _flatten_signatures(pkg)
     if prior_json is None:
-        # No baseline to diff against, but the retirement debt is a
-        # property of THIS tree, not of the delta -- a package whose first
-        # registry generation is also the release that retires something
-        # would otherwise report none of it.
-        head = [
-            f"# {pkg.name} — API Changes",
-            "",
-            "_Initial registry. No prior baseline — diff will appear on next "
-            "regeneration._",
-        ]
-        debt = _deprecation_section(pkg, version)
-        if debt:
-            head.extend(["", *debt])
-        return "\n".join(head).rstrip() + "\n"
+        return None
+    new = _flatten_signatures(pkg)
 
     # Reconstruct a flat map from prior JSON (which mirrors PackageData shape).
     prior: dict[str, str] = {}
@@ -1289,7 +1512,7 @@ def emit_changes_markdown(
     # a member the class still resolves through a base, or a class that turns
     # up ADDED in another module, is reported as moved instead. Anything
     # unresolved stays in Removed, so a real removal still fires the
-    # alias-plus-minor-bump rule.
+    # alias-plus-minor-bump rule (:func:`required_bump`).
     foreign_members = foreign_members or {}
     reexports = reexports or {}
     resolved, by_name = _class_index(_pkg_class_entries(pkg), foreign_members)
@@ -1323,7 +1546,46 @@ def emit_changes_markdown(
                 and (symbol in reappeared or symbol in reexports.get(relpath, ()))
             )
         (still_removed if gone else moved).append(key)
-    removed = still_removed
+
+    return ApiDelta(
+        added=added,
+        removed=still_removed,
+        changed=changed,
+        moved=moved,
+        prior=prior,
+        new=new,
+    )
+
+
+def emit_changes_markdown(
+    pkg: PackageData,
+    prior_json: dict | None,
+    baseline_label: str = "prior baseline",
+    foreign_members: dict[str, set[str]] | None = None,
+    reexports: dict[str, set[str]] | None = None,
+    version: str = "",
+) -> str:
+    """Render :func:`compute_api_delta`'s result as ``API_CHANGES.md``."""
+    delta = compute_api_delta(pkg, prior_json, foreign_members, reexports)
+    if delta is None:
+        # No baseline to diff against, but the retirement debt is a
+        # property of THIS tree, not of the delta -- a package whose first
+        # registry generation is also the release that retires something
+        # would otherwise report none of it.
+        head = [
+            f"# {pkg.name} — API Changes",
+            "",
+            "_Initial registry. No prior baseline — diff will appear on next "
+            "regeneration._",
+        ]
+        debt = _deprecation_section(pkg, version)
+        if debt:
+            head.extend(["", *debt])
+        return "\n".join(head).rstrip() + "\n"
+
+    added, removed = delta.added, delta.removed
+    changed, moved = delta.changed, delta.moved
+    prior, new = delta.prior, delta.new
 
     lines = [f"# {pkg.name} — API Changes", ""]
     lines.append(f"_Diff vs {baseline_label}._")
@@ -1332,7 +1594,7 @@ def emit_changes_markdown(
     # this release changed anything else, which is the point -- an alias runs
     # out of time during a release that touched nothing near it.
     deprecation_lines = _deprecation_section(pkg, version)
-    if not (added or removed or changed or moved):
+    if delta.is_empty():
         lines.append(f"No public API changes since {baseline_label}.")
         if deprecation_lines:
             lines.append("")
@@ -1642,7 +1904,9 @@ def regenerate(
                 "one-release window is UNCHECKED for this package",
                 file=sys.stderr,
             )
-        for relpath, qualname, remove_in in expired_deprecations(data, pkg_version):
+        for relpath, qualname, remove_in in expired_deprecations(
+            data, pkg_version
+        ) + _expired(retired_forms(pkg_dir, name), pkg_version):
             overdue.append(f"{name}/{relpath}::{qualname} (was due in {remove_in})")
 
         targets = {
@@ -1798,12 +2062,53 @@ def regenerate(
     return 0
 
 
+def semver_verdict(name: str, repo_root: Path = REPO_ROOT) -> dict:
+    """``{package, bump, reasons}`` -- the smallest release *name* may ship as.
+
+    The release tool's view of :func:`required_bump`, computed from the SAME
+    walk and baseline the ``API_CHANGES.md`` narrative is built from, so the
+    verdict cannot drift from the document that explains it. Emitted as JSON
+    (``--semver``) rather than read out of the rendered markdown: parsing
+    generated prose to recover a decision the generator already made would be
+    a second source of truth, and a brittle one.
+
+    ``bump`` is ``"patch"`` for an unwalkable package or one with no baseline
+    -- neither is evidence of a break, and a gate that guessed here would
+    refuse releases it cannot justify.
+    """
+    pkg_dir = repo_root / name
+    try:
+        data = walk_package(pkg_dir, repo_root)
+    except (FileNotFoundError, NotADirectoryError):
+        return {"package": name, "bump": "patch", "reasons": []}
+    prior, _label = _baseline_registry_json(pkg_dir)
+    delta = compute_api_delta(
+        data,
+        prior,
+        foreign_members=sibling_class_members(data.name, repo_root),
+        reexports=module_reexports(
+            repo_root / data.source_root, _relpaths_losing_symbols(data, prior)
+        ),
+    )
+    bump, reasons = required_bump(delta)
+    return {"package": name, "bump": bump, "reasons": reasons}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "packages",
         nargs="*",
         help=f"Packages to walk. Default: {', '.join(ECOSYSTEM_PACKAGES)}.",
+    )
+    parser.add_argument(
+        "--semver",
+        action="store_true",
+        help=(
+            "Print, as JSON, the smallest release each package may ship as "
+            "('minor' when the delta removes a public symbol, else 'patch') "
+            "with the removals that force it. Writes nothing."
+        ),
     )
     parser.add_argument(
         "--check",
@@ -1821,6 +2126,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     names = list(args.packages) or list(ECOSYSTEM_PACKAGES)
+    if args.semver:
+        verdicts = [semver_verdict(n, REPO_ROOT) for n in names]
+        print(json.dumps(verdicts, indent=2))
+        return 0
     return regenerate(names, check_only=args.check, shadows=not args.no_shadows)
 
 

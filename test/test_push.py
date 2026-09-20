@@ -40,6 +40,120 @@ def version_in(text):
     return match.group(1) if match else None
 
 
+class TestSemverGate(unittest.TestCase):
+    """A release that REMOVES public API may not ship as a patch.
+
+    `Resolve-ReleaseVersion` steps a patch from what PyPI published unless
+    `__version__` was hand-raised, and nothing consulted the change set -- so
+    a removal shipped under a floor that resolves it as a bugfix. Measured
+    2026-09-19: blendertk removed the public `smart_bake=` keyword (a
+    `TypeError` for any caller) and would have cut 0.8.1 from 0.8.0; it was
+    caught by hand and bumped to 0.9.0.
+
+    The gate's decision table is exercised directly, with the verdict stubbed:
+    `Get-RequiredBump` shells out to the generator, which is tested on its own
+    (`test_generate_api_registry.TestSemverVerdict`). What matters here is that
+    push.ps1 acts on the answer -- and keeps releasing when it cannot get one.
+    """
+
+    # `Write-Err` is taken from common.ps1, NOT stubbed: it is `Write-Host`, so
+    # it writes to the host stream and leaves the function's return value a
+    # clean Boolean. Were it ever changed to `Write-Output`, every refusal
+    # message would join the pipeline, `Test-SemverGate` would return an ARRAY,
+    # `-not <non-empty array>` would be $false, and the gate would silently
+    # stop refusing anything -- so the faithful function is part of the test.
+    # Results carry a RESULT: prefix because the refusal text itself contains
+    # `=` (`Set __version__ = "0.18.0"`).
+    HARNESS = r"""
+$ErrorActionPreference = 'Stop'
+$errs = $null; $toks = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile('{script}', [ref]$toks, [ref]$errs)
+if ($errs) {{ throw "push.ps1 does not parse" }}
+$common = [System.Management.Automation.Language.Parser]::ParseFile('{common}', [ref]$toks, [ref]$errs)
+foreach ($pair in @(@($ast, 'Test-SemverGate'), @($ast, 'ConvertTo-VersionOrNull'), @($common, 'Write-Err'))) {{
+    $tree = $pair[0]; $n = $pair[1]
+    $f = $tree.FindAll({{ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $x.Name -eq $n }}, $true)[0]
+    if (-not $f) {{ throw "missing function $n" }}
+    Invoke-Expression $f.Extent.Text
+}}
+function Get-RequiredBump {{ param($p) return $global:verdict }}
+$global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin') }}
+$AllowBreakingPatch = $false
+"RESULT:removal_as_patch=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
+"RESULT:removal_as_minor=$([bool](Test-SemverGate 'p' '0.17.0' '0.18.0'))"
+"RESULT:removal_as_major=$([bool](Test-SemverGate 'p' '0.17.0' '1.0.0'))"
+$AllowBreakingPatch = $true
+"RESULT:override=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
+$AllowBreakingPatch = $false
+$global:verdict = @{{ bump = 'patch'; reasons = @() }}
+"RESULT:clean_as_patch=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
+$global:verdict = $null
+"RESULT:unknown_verdict=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
+$global:verdict = @{{ bump = 'minor'; reasons = @('x') }}
+"RESULT:unparseable_published=$([bool](Test-SemverGate 'p' 'not-a-version' '0.17.1'))"
+"""
+
+    @classmethod
+    def setUpClass(cls):
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                cls.HARNESS.format(
+                    script=(M3TRIK_DIR / "push.ps1").as_posix(),
+                    common=(M3TRIK_DIR / "common.ps1").as_posix(),
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise unittest.SkipTest(
+                f"harness failed: {result.stdout}\n{result.stderr}"
+            )
+        cls.answers = dict(
+            line[len("RESULT:") :].split("=", 1)
+            for line in result.stdout.splitlines()
+            if line.startswith("RESULT:")
+        )
+
+    def _assert(self, key, expected):
+        self.assertIn(key, self.answers, f"harness printed no {key}: {self.answers}")
+        self.assertEqual(
+            self.answers[key].strip(),
+            str(expected),
+            f"{key}: expected {expected}",
+        )
+
+    def test_a_removal_may_not_ship_as_a_patch(self):
+        self._assert("removal_as_patch", False)
+
+    def test_a_removal_ships_as_a_minor_or_major(self):
+        self._assert("removal_as_minor", True)
+        self._assert("removal_as_major", True)
+
+    def test_the_override_is_honoured(self):
+        """A deliberate exception (retiring something provably unreachable)
+        must not need the gate edited out."""
+        self._assert("override", True)
+
+    def test_a_delta_that_removes_nothing_is_unconstrained(self):
+        self._assert("clean_as_patch", True)
+
+    def test_an_unanswerable_verdict_does_not_block_the_release(self):
+        """No generator, or unparseable output: proceed. A gate that invented
+        a verdict would refuse releases it cannot justify, which is how gates
+        get bypassed on reflex."""
+        self._assert("unknown_verdict", True)
+
+    def test_an_unparseable_published_version_does_not_block(self):
+        self._assert("unparseable_published", True)
+
+
 class TestPushScript(unittest.TestCase):
     """Tests for push.ps1"""
 

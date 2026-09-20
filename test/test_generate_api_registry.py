@@ -348,6 +348,96 @@ class TestImportedPrivateBasesResolve(unittest.TestCase):
         self.assertEqual({"own", "a", "b"}, members)
 
 
+class TestSemverVerdict(unittest.TestCase):
+    """What version a delta OWES, derived from the delta itself.
+
+    The release cascade stepped a patch from PyPI whatever the change set
+    said, so a removal could ship under a floor that resolves it as a bugfix
+    -- measured 2026-09-19, when blendertk's removal of the public
+    ``smart_bake=`` keyword would have shipped as 0.8.1 and was caught by
+    hand. The generator already computed the removals AND documented the rule
+    in its own comments ("a real removal still fires the alias-plus-minor-bump
+    rule"); it simply never emitted the conclusion as data.
+    """
+
+    @staticmethod
+    def _walk(root: Path, name: str, files: dict[str, str]):
+        pkg = root / name
+        src = pkg / name
+        for rel, text in files.items():
+            path = src / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        g._PARSED.clear()
+        return g.walk_package(pkg, root)
+
+    def _tree(self, before: dict[str, str], after: dict[str, str]):
+        """``(data, prior)`` -- *after* walked, and *before* as its baseline
+        sidecar. Both walked for real, so the fixtures exercise the same path
+        a release does."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            prior = g._to_jsonable(self._walk(Path(td) / "a", "pkg", before))
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            data = self._walk(Path(td) / "b", "pkg", after)
+        return data, prior
+
+    def _delta(self, before: dict[str, str], after: dict[str, str]):
+        """The delta from *before* to *after*."""
+        return g.compute_api_delta(*self._tree(before, after))
+
+    WIDGET_2 = '"""Mod."""\n\n\nclass Widget:\n    """W."""\n\n    def spin(self):\n        """S."""\n\n    def hop(self):\n        """H."""\n'
+    WIDGET_1 = '"""Mod."""\n\n\nclass Widget:\n    """W."""\n\n    def hop(self):\n        """H."""\n'
+
+    def test_a_removal_owes_a_minor_and_names_what_forces_it(self):
+        delta = self._delta({"mod.py": self.WIDGET_2}, {"mod.py": self.WIDGET_1})
+        bump, reasons = g.required_bump(delta)
+        self.assertEqual(bump, "minor")
+        self.assertEqual(reasons, ["mod.py::Widget.spin"])
+
+    def test_an_addition_alone_is_a_patch(self):
+        delta = self._delta({"mod.py": self.WIDGET_1}, {"mod.py": self.WIDGET_2})
+        self.assertEqual(g.required_bump(delta), ("patch", []))
+
+    def test_an_exec_template_is_not_contract(self):
+        """A ``templates/`` module is read as source and run inside ANOTHER
+        application, so nothing imports its names -- renaming one breaks no
+        consumer. Without this, mayatk's 2026-09-19 delta (18 removed, 2 of
+        them bridge templates) would force a minor for a template rename, and
+        a guard that cries wolf gets bypassed on reflex."""
+        fn2 = '"""T."""\n\n\ndef shots_section(bpy):\n    """S."""\n\n\ndef keep(bpy):\n    """K."""\n'
+        fn1 = '"""T."""\n\n\ndef keep(bpy):\n    """K."""\n'
+        delta = self._delta({"templates/_import.py": fn2}, {"templates/_import.py": fn1})
+        self.assertIn("templates/_import.py::shots_section", delta.removed)
+        self.assertEqual(
+            g.required_bump(delta),
+            ("patch", []),
+            "a template removal is still REPORTED, it just owes nothing",
+        )
+
+    def test_no_baseline_owes_nothing(self):
+        """An initial registry is not evidence of a break."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            data = self._walk(Path(td) / "p", "pkg", {"mod.py": self.WIDGET_1})
+        self.assertIsNone(g.compute_api_delta(data, None))
+        self.assertEqual(g.required_bump(None), ("patch", []))
+
+    def test_the_verdict_cannot_drift_from_the_document_that_explains_it(self):
+        """Both come from one computation -- the point of extracting it. The
+        rendered `## Removed (N)` and the delta must agree on N, or the
+        release tool and the changelog would disagree about the same release."""
+        data, prior = self._tree({"mod.py": self.WIDGET_2}, {"mod.py": self.WIDGET_1})
+        delta = g.compute_api_delta(data, prior)
+        md = g.emit_changes_markdown(data, prior)
+        self.assertIn(f"## Removed ({len(delta.removed)})", md)
+        for key in delta.removed:
+            self.assertIn(key, md)
+
+    def test_an_unwalkable_package_is_not_a_break(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            verdict = g.semver_verdict("nope", Path(td))
+        self.assertEqual(verdict, {"package": "nope", "bump": "patch", "reasons": []})
+
+
 class TestChangesBaseline(unittest.TestCase):
     """API_CHANGES.md must diff against the last RELEASE (origin/main), not
     the working-tree JSON the run is about to rewrite. The working-tree
@@ -1251,6 +1341,160 @@ class TestDeprecationRecognition(unittest.TestCase):
         self.assertIn("**DEPRECATED (remove in 0.11.0)**", row)
 
 
+class TestSymbolRemoveInReadsTheSharedConstant(unittest.TestCase):
+    """A ``remove_in`` handed as the module's shared constant is read, not lost.
+
+    The DRY spelling a module with many retirements uses -- ``_REMOVE_IN =
+    "0.18.0"`` once, then ``remove_in=_REMOVE_IN`` (or ``cls._REMOVE_IN``) on
+    each -- is what mayatk's ``FbxUtils`` and ``DataNodes`` are written in.
+    Reading only a literal recorded ``""`` for all of them, and a symbol with
+    no ``remove_in`` can never expire (:func:`expired_deprecations`), so 23
+    retirements across mayatk and blendertk were invisible to the very gate
+    that exists to catch a retirement shipping past its window -- the failure
+    that let blendertk's ``smart_bake=`` keyword ship two releases late.
+    ``retired_forms`` already resolved the constant for retired KEYWORDS; the
+    symbol walk did not.
+    """
+
+    def _walk(self, source: str, **siblings: str) -> "g.ModuleEntry":
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            pkg = root / "pythontk"
+            (pkg / "pythontk").mkdir(parents=True)
+            (pkg / "pythontk" / "mod.py").write_text(source, encoding="utf-8")
+            for stem, text in siblings.items():
+                (pkg / "pythontk" / f"{stem}.py").write_text(text, encoding="utf-8")
+            g._PARSED.clear()
+            data = g.walk_package(pkg, root)
+        return next(m for m in data.modules if m.relpath.endswith("mod.py"))
+
+    def test_a_module_scope_constant_resolves(self):
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            '_REMOVE_IN = "0.18.0"\n'
+            "\n"
+            "\n"
+            "@ptk.Deprecation.symbol('NewThing', remove_in=_REMOVE_IN)\n"
+            "def old_fn():\n"
+            '    """Old."""\n'
+        )
+        self.assertTrue(mod.functions[0].deprecated)
+        self.assertEqual(mod.functions[0].remove_in, "0.18.0")
+
+    def test_a_class_scope_constant_resolves(self):
+        """The shape mayatk's ``DataNodes`` / ``FbxUtils`` are written in: the
+        constant declared in the class body, named bare on each decorator just
+        below it (a decorator cannot say ``cls.`` -- there is no ``cls`` in a
+        class body; that spelling belongs to ``Deprecation.warn`` inside a
+        method, which ``retired_forms`` reads)."""
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "class Widget:\n"
+            '    """A widget."""\n'
+            "\n"
+            '    _REMOVE_IN = "0.18.0"\n'
+            "\n"
+            "    @classmethod\n"
+            "    @ptk.Deprecation.symbol('Widget.spin', remove_in=_REMOVE_IN)\n"
+            "    def whirl(cls):\n"
+            '        """Old."""\n'
+        )
+        member = mod.classes[0].members[0]
+        self.assertTrue(member.deprecated)
+        self.assertEqual(member.remove_in, "0.18.0")
+        self.assertEqual(member.kind, "classmethod")
+
+    def test_an_owner_attribute_spelling_resolves(self):
+        """``remove_in=Widget._REMOVE_IN`` on a module-scope symbol -- an
+        attribute, and valid Python because the owner is already defined."""
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "class Widget:\n"
+            '    """A widget."""\n'
+            "\n"
+            '    _REMOVE_IN = "0.18.0"\n'
+            "\n"
+            "\n"
+            "@ptk.Deprecation.symbol('Widget.spin', remove_in=Widget._REMOVE_IN)\n"
+            "def old_fn():\n"
+            '    """Old."""\n'
+        )
+        self.assertTrue(mod.functions[0].deprecated)
+        self.assertEqual(mod.functions[0].remove_in, "0.18.0")
+
+    def test_the_resolved_deadline_reaches_the_expiry_gate(self):
+        """The point of reading it: an overdue retirement spelled this way is
+        now caught, where before it reported no deadline and passed."""
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            '_REMOVE_IN = "0.18.0"\n'
+            "\n"
+            "\n"
+            "@ptk.Deprecation.symbol('NewThing', remove_in=_REMOVE_IN)\n"
+            "def old_fn():\n"
+            '    """Old."""\n'
+        )
+        rows = [("mod.py", f.qualname, f.remove_in) for f in mod.functions]
+        self.assertEqual(
+            g._expired(rows, "0.18.0"),
+            [("mod.py", "old_fn", "0.18.0")],
+        )
+        self.assertEqual(g._expired(rows, "0.17.9"), [])
+
+    def test_an_ambiguous_name_stays_unreadable_rather_than_guessing(self):
+        """Bound to two different strings in one module: report no deadline
+        (today's behaviour) rather than pick one and print a wrong version."""
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            '_REMOVE_IN = "0.18.0"\n'
+            '_REMOVE_IN = "0.19.0"\n'
+            "\n"
+            "\n"
+            "@ptk.Deprecation.symbol('NewThing', remove_in=_REMOVE_IN)\n"
+            "def old_fn():\n"
+            '    """Old."""\n'
+        )
+        self.assertTrue(mod.functions[0].deprecated)
+        self.assertEqual(mod.functions[0].remove_in, "")
+
+    def test_a_private_base_keeps_its_own_module_deadline(self):
+        """A member inherited from a private base in ANOTHER file is resolved
+        against a map that includes that file's constants, so the base's own
+        ``_REMOVE_IN`` is not silently read as the importer's."""
+        mod = self._walk(
+            '"""Mod."""\n'
+            "\n"
+            "from pythontk._base import _Mixin\n"
+            "\n"
+            "\n"
+            "class Widget(_Mixin):\n"
+            '    """A widget."""\n',
+            _base=(
+                '"""Base."""\n'
+                "\n"
+                '_BASE_REMOVE_IN = "0.20.0"\n'
+                "\n"
+                "\n"
+                "class _Mixin:\n"
+                '    """Mixin."""\n'
+                "\n"
+                "    @ptk.Deprecation.symbol('x', remove_in=_BASE_REMOVE_IN)\n"
+                "    def whirl(self):\n"
+                '        """Old."""\n'
+            ),
+        )
+        member = next(m for m in mod.classes[0].members if m.name == "whirl")
+        self.assertTrue(member.deprecated)
+        self.assertEqual(member.remove_in, "0.20.0")
+
+
 class TestDeprecationExpiryGate(unittest.TestCase):
     """The one-release alias window, enforced instead of remembered.
 
@@ -1393,6 +1637,81 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         self._run(check_only=False)
         rc, _ = self._run(check_only=True)
         self.assertEqual(0, rc)
+
+    def _add_retired_keyword(self, pkg: Path, remove_in: str) -> None:
+        """A keyword retired through a helper that builds the decorator -- the
+        shape of blendertk's ``_smart_bake_alias`` -- on a function that stays."""
+        (pkg / "pythontk" / "kw.py").write_text(
+            '"""Mod."""\n'
+            "\n"
+            "\n"
+            "def _alias(func):\n"
+            f"    return ptk.Deprecation.parameter('old', new='new', remove_in='{remove_in}')(func)\n"
+            "\n"
+            "\n"
+            "@_alias\n"
+            "def live(new=None):\n"
+            '    """Live."""\n',
+            encoding="utf-8",
+        )
+
+    def test_an_expired_retired_keyword_fails_the_check(self):
+        """``Deprecation.parameter`` / ``values`` / ``warn`` / ``attributes``
+        retire something smaller than a symbol, so the registry marks no symbol
+        for them -- but their ``remove_in`` is the same promise, and blendertk's
+        ``smart_bake=`` (``remove_in="0.7.0"``) shipped in 0.8.0 because the
+        gate read decorators on symbols only."""
+        pkg = self._make_pkg("0.12.0", "0.13.0")  # its symbol is not yet due
+        self._add_retired_keyword(pkg, "0.12.0")
+        self._run(check_only=False)
+        rc, text = self._run(check_only=True)
+        self.assertEqual(1, rc)
+        self.assertIn("kw.py::Deprecation.parameter('old')", text)
+        self.assertIn("was due in 0.12.0", text)
+
+    def test_a_live_retired_keyword_passes(self):
+        pkg = self._make_pkg("0.12.0", "0.13.0")
+        self._add_retired_keyword(pkg, "0.13.0")
+        self._run(check_only=False)
+        rc, text = self._run(check_only=True)
+        self.assertEqual(0, rc, text)
+
+    def test_a_remove_in_bound_to_a_module_constant_still_expires(self):
+        """The DRY form -- mayatk's `remove_in=cls._REMOVE_IN` -- is one
+        string bound once in the module, so the gate reads it as the literal
+        it stands for; the same retirement written twice counts once."""
+        pkg = self._make_pkg("0.12.0", "0.13.0")
+        (pkg / "pythontk" / "kw.py").write_text(
+            '"""Mod."""\n\n_REMOVE_IN = "0.12.0"\n\n\n'
+            "class Owner:\n"
+            "    _REMOVE_IN = _REMOVE_IN\n\n"
+            "    @classmethod\n"
+            "    def go(cls, old=None):\n"
+            "        ptk.Deprecation.warn('Owner.go(old=)', 'new=', remove_in=cls._REMOVE_IN)\n"
+            "        ptk.Deprecation.warn('Owner.go(old=)', 'new=', remove_in=_REMOVE_IN)\n",
+            encoding="utf-8",
+        )
+        self._run(check_only=False)
+        rc, text = self._run(check_only=True)
+        self.assertEqual(1, rc)
+        self.assertEqual(1, text.count("Deprecation.warn('Owner.go(old=)')"), text)
+        self.assertIn("was due in 0.12.0", text)
+
+    def test_an_unreadable_remove_in_warns_instead_of_passing_silently(self):
+        """A `remove_in` this walk cannot read (a helper's result) is named as
+        UNCHECKED on stderr -- never a clean bill of health it did not earn."""
+        pkg = self._make_pkg("0.12.0", "0.13.0")
+        (pkg / "pythontk" / "kw.py").write_text(
+            '"""Mod."""\n\n\ndef _when():\n    return "0.12.0"\n\n\n'
+            "def go(old=None):\n"
+            "    ptk.Deprecation.warn('go(old=)', 'new=', remove_in=_when())\n",
+            encoding="utf-8",
+        )
+        self._run(check_only=False)
+        rc, text = self._run(check_only=True)
+        self.assertEqual(0, rc, text)
+        self.assertIn("UNCHECKED", text)
+        self.assertIn("Deprecation.warn('go(old=)')", text)
 
     def test_a_plain_regeneration_reports_but_does_not_fail(self):
         """The registry refresh bot runs the plain form; failing it would block

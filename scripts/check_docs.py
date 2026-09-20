@@ -31,6 +31,15 @@ tracked   a file that other docs link to but git doesn't track renders 404 on
 empty     near-empty (<20 B) hand-written files → WARN.
 docmaps   any repo shipping ``docs/DOCMAP.md`` also gets the full Mode-1 suite.
 
+``--skip-unversioned`` (CI only) records a MISSING link target that lies
+outside every child git repo -- the unversioned workspace root (its
+``CLAUDE.md``, ``.claude/``, ``.archive/``) or a repo the checkout does not
+have -- as a named SKIP instead of a FAIL. A CI runner clones the repos but
+never the root, which is not a repository, so those links can only fail there;
+every link INSIDE a repo is still checked, and each skip is printed by name so
+a skip cannot hide. A developer workspace runs without it: the root's targets
+exist there and are checked.
+
 Exemptions (constants below): vendored trees (``comfyui/app``,
 ``www/www/assets``), any ``archive``/``.archive`` directory (parked-by-design,
 often deliberately untracked), and generated files (``API_*``, ``PARITY_*``,
@@ -42,6 +51,7 @@ Usage::
 
     python check_docs.py --root uitk            # one package's DOCMAP suite
     python check_docs.py --workspace .          # whole-monorepo sweep
+    python check_docs.py --workspace . --skip-unversioned   # CI: no root checkout
 
 Exit 0 = clean (WARNs allowed), 1 = at least one FAIL, 2 = cannot run.
 """
@@ -145,12 +155,16 @@ class CoverageRule:
 class Report:
     fails: List[str] = field(default_factory=list)
     warns: List[str] = field(default_factory=list)
+    skips: List[str] = field(default_factory=list)
 
     def fail(self, check: str, msg: str) -> None:
         self.fails.append(f"[FAIL] {check}: {msg}")
 
     def warn(self, check: str, msg: str) -> None:
         self.warns.append(f"[WARN] {check}: {msg}")
+
+    def skip(self, check: str, msg: str) -> None:
+        self.skips.append(f"[SKIP] {check}: {msg}")
 
 
 # ---------------------------------------------------------------- md parsing
@@ -213,18 +227,37 @@ def collect_anchors(md_path: Path, cache: Dict[Path, set]) -> set:
 
 # ------------------------------------------------------------- shared checks
 
+def _inside_any(path: Path, roots: Iterable[Path]) -> bool:
+    """Whether *path* lies inside one of *roots* (each an absolute path)."""
+    for root in roots:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 def check_links(
     entries: Iterable[Tuple[str, Path]],
     boundary: Path,
     report: Report,
     anchor_cache: Optional[Dict[Path, set]] = None,
+    versioned: Optional[Iterable[Path]] = None,
 ) -> None:
     """Verify relative links + anchors in each (label, path) entry.
 
     ``boundary`` is the root links may not escape (package repo in DOCMAP
     mode, the whole workspace in workspace mode); links resolving outside it
     are someone else's jurisdiction and skipped.
+
+    ``versioned`` (``--skip-unversioned``) names the repos this checkout has:
+    a MISSING target inside the boundary but outside all of them is recorded as
+    a named SKIP rather than a FAIL -- it lives in the unversioned workspace
+    root (or a repo not checked out), which a CI runner can never have. A
+    target that exists is checked as usual, and so is every link into a repo.
     """
+    roots = None if versioned is None else [Path(r).resolve() for r in versioned]
     cache: Dict[Path, set] = anchor_cache if anchor_cache is not None else {}
     for label, path in entries:
         if not path.exists():
@@ -246,6 +279,13 @@ def check_links(
                     except ValueError:
                         continue  # escapes the boundary — outside our jurisdiction
                     if not dest.exists():
+                        if roots is not None and not _inside_any(dest, roots):
+                            report.skip(
+                                "links",
+                                f"{label}:{line_no} → {target} (outside every checked-out "
+                                "repo -- the unversioned workspace root)",
+                            )
+                            continue
                         report.fail("links", f"{label}:{line_no} → {target} (target not found)")
                         continue
                 if fragment and dest.suffix == ".md" and not re.match(r"^L\d+", fragment):
@@ -494,8 +534,14 @@ def _orphan_exempt(rel_parts: Tuple[str, ...]) -> bool:
     return ".github" in rel_parts
 
 
-def run_workspace(ws_root: Path, report: Report) -> List[str]:
-    """Workspace-wide sweep. Returns per-repo summary lines."""
+def run_workspace(
+    ws_root: Path, report: Report, skip_unversioned: bool = False
+) -> List[str]:
+    """Workspace-wide sweep. Returns per-repo summary lines.
+
+    ``skip_unversioned`` is the CI form (see the module docstring): a missing
+    link target outside every child repo is a named SKIP, not a FAIL.
+    """
     repos: List[Tuple[str, Path]] = [
         (c.name, c) for c in sorted(ws_root.iterdir())
         if c.is_dir() and (c / ".git").exists()
@@ -540,6 +586,7 @@ def run_workspace(ws_root: Path, report: Report) -> List[str]:
         [(l, p) for l, p in hand_written if p.name.lower() not in WS_LINKCHECK_EXEMPT_NAMES],
         ws_root.resolve(),
         report,
+        versioned=[repo for _, repo in repos] if skip_unversioned else None,
     )
 
     # Repo-standard changelog headers: entries live under a year (or version)
@@ -605,13 +652,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Docs sweep (see module docstring).")
     parser.add_argument("--root", type=Path, default=None, help="Package repo root containing docs/DOCMAP.md.")
     parser.add_argument("--workspace", type=Path, default=None, help="Monorepo root: sweep every child git repo.")
+    parser.add_argument(
+        "--skip-unversioned",
+        action="store_true",
+        help=(
+            "CI: a missing link target outside every child git repo (the unversioned "
+            "workspace root, a repo not checked out) is a named SKIP, not a FAIL. "
+            "Never for a developer workspace, where those targets exist."
+        ),
+    )
     args = parser.parse_args(argv)
 
     report = Report()
     summaries: List[str] = []
 
     if args.workspace:
-        summaries = run_workspace(args.workspace.resolve(), report)
+        summaries = run_workspace(
+            args.workspace.resolve(), report, skip_unversioned=args.skip_unversioned
+        )
     else:
         repo_root = (args.root or Path.cwd()).resolve()
         s = run_docmap_suite(repo_root, report)
@@ -620,14 +678,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 2
         summaries = [s]
 
-    for line in report.fails + report.warns:
+    for line in report.fails + report.warns + report.skips:
         print(line)
     for s in summaries:
         print(s)
+    # Skips are counted in the verdict line so a run that skipped everything
+    # can never read as a plain "clean".
+    skipped = f", {len(report.skips)} SKIP" if report.skips else ""
     if report.fails:
-        print(f"Result: {len(report.fails)} FAIL, {len(report.warns)} WARN → exit 1")
+        print(f"Result: {len(report.fails)} FAIL, {len(report.warns)} WARN{skipped} → exit 1")
         return 1
-    print(f"Result: clean ({len(report.warns)} WARN) → exit 0")
+    print(f"Result: clean ({len(report.warns)} WARN{skipped}) → exit 0")
     return 0
 
 

@@ -118,6 +118,14 @@ param(
     [switch]$SkipPypiCheck,
     [switch]$SkipReview,
     [switch]$SkipTestsReceipt,
+    # Ship a version that REMOVES public API as a patch anyway. The semver gate
+    # (Get-RequiredBump) refuses that by default because the root CLAUDE.md makes
+    # a break owe a minor: a consumer floored at `>=0.8.0` resolves a breaking
+    # 0.8.1 as a bugfix. Measured 2026-09-19 -- blendertk's removal of the public
+    # `smart_bake=` keyword would have shipped as 0.8.1. Deliberate exceptions
+    # exist (retiring something provably unreachable), so the gate is a refusal
+    # with a named override, not a wall.
+    [switch]$AllowBreakingPatch,
     [string[]]$RecordReceipt,
     [switch]$ShowReceipts,
     [int]$ReceiptMaxAgeDays = 7,
@@ -184,6 +192,12 @@ $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Definition
 # before tentacle in the release order. (unitytk remains off-chain — floor-pinned, not cascaded.)
 $STRICT_PACKAGES = @("pythontk", "uitk", "mayatk", "blendertk", "tentacle")
 $RELEASE_ORDER = @("pythontk", "uitk", "mayatk", "blendertk", "tentacle")
+
+# The maintenance scripts a release shells out to (registry, semver verdict,
+# parity). Derived from -Root rather than from $SCRIPT_DIR deliberately: a
+# hermetic run (`-Root <temp>`) then finds nothing here and SKIPS them, instead
+# of reaching the real workspace's tooling and regenerating against dummy repos.
+$M3TRIK_SCRIPTS = Join-Path (Join-Path $ROOT "m3trik") "scripts"
 
 # Internal (in-chain) pins each package carries — the SAME set is kept in sync in
 # its pyproject.toml AND checked for availability on PyPI, so it lives in one place.
@@ -654,6 +668,19 @@ function Step-PatchVersion {
     return "$($parts[0]).$($parts[1]).$($parts[2])"
 }
 
+function Resolve-PublishedVersion {
+    # This RUN's view of what is published: the run's version map first (seeded
+    # by Get-PublishedVersions, refreshed by Finalize as packages release, so a
+    # downstream package sees the upstream version this run just cut), falling
+    # back to the index/tag maximum. $null when nothing authoritative is
+    # reachable -- every caller refuses rather than guesses.
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+    if ($Versions -and $Versions.ContainsKey($PackageName) -and $Versions[$PackageName]) {
+        return $Versions[$PackageName]
+    }
+    return (Get-PublishedVersion $PackageName $RepoPath)
+}
+
 function Resolve-ReleaseVersion {
     # The version this release will carry.
     #   published = the run's version map entry (Get-PublishedVersions at start,
@@ -670,9 +697,7 @@ function Resolve-ReleaseVersion {
     # probe then silently skips the upload). Returns $null when nothing
     # authoritative is reachable - the caller refuses rather than guesses.
     param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
-    $published = $null
-    if ($Versions -and $Versions.ContainsKey($PackageName)) { $published = $Versions[$PackageName] }
-    if (-not $published) { $published = Get-PublishedVersion $PackageName $RepoPath }
+    $published = Resolve-PublishedVersion $PackageName $RepoPath $Versions
     if (-not $published) { return $null }
     $localText = Get-PackageVersion (Join-Path $RepoPath $PackageName)
     $local = ConvertTo-VersionOrNull $localText
@@ -685,6 +710,68 @@ function Resolve-ReleaseVersion {
         if (-not $onIndex) { return $localText }
     }
     return (Step-PatchVersion $published)
+}
+
+function Get-RequiredBump {
+    # The smallest release this package's delta may ship as, from the generator
+    # that already computes it: @{ bump = 'minor'|'patch'; reasons = @(...) }.
+    #
+    # Asked of `generate_api_registry.py --semver` rather than re-derived here,
+    # and NOT read out of the rendered API_CHANGES.md: the generator owns what
+    # counts as a removal (it separates a genuine removal from a hoist, and
+    # exempts exec-templates), and a second opinion in PowerShell would drift
+    # from the document that explains the release. It walks SOURCE plus the
+    # origin/main sidecar, so it is safe to ask before anything is mutated.
+    #
+    # $null when the generator cannot answer (absent, unparseable output). The
+    # caller then proceeds: a gate that invented a verdict would block releases
+    # it cannot justify, which is how gates get bypassed on reflex.
+    param([string]$PackageName)
+    $gen = Join-Path $M3TRIK_SCRIPTS "generate_api_registry.py"
+    if (-not (Test-Path $gen)) { return $null }
+    # `2>$null`, not the `2>&1` the other python calls here use: the generator
+    # writes its advisories to stderr (an unreadable `remove_in`, a missing
+    # `__version__`), and folding those into stdout would put prose in front of
+    # the JSON and fail the parse.
+    $raw = python $gen $PackageName --semver 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
+    try { $parsed = ($raw -join "`n") | ConvertFrom-Json } catch { return $null }
+    $row = @($parsed)[0]
+    if (-not $row -or -not $row.bump) { return $null }
+    return @{ bump = [string]$row.bump; reasons = @($row.reasons) }
+}
+
+function Test-SemverGate {
+    # $true when $Release is an acceptable version for $PackageName's delta.
+    # A delta that removes public API owes at least a minor over $Published;
+    # anything else is unconstrained. Prints the refusal itself, naming the
+    # removals and the version to hand-set, because the remedy is one edit.
+    param(
+        [string]$PackageName,
+        [string]$Published,
+        [string]$Release
+    )
+    if ($AllowBreakingPatch) { return $true }
+    $required = Get-RequiredBump $PackageName
+    if (-not $required -or $required.bump -ne 'minor') { return $true }
+    $pub = ConvertTo-VersionOrNull $Published
+    $rel = ConvertTo-VersionOrNull $Release
+    # Unparseable either side: say nothing rather than guess (same rule as the
+    # $null verdict above).
+    if (-not $pub -or -not $rel) { return $true }
+    # "At least the next minor", said once: a major satisfies it too (2.0.0 -ge
+    # 1.10.0), and comparing the [version] objects directly avoids a per-field
+    # test that would accept a LOWER major carrying a higher minor.
+    $wanted = "$($pub.Major).$($pub.Minor + 1).0"
+    if ($rel -ge [version]$wanted) { return $true }
+    Write-Err "$PackageName $Release REMOVES public API, so it owes a minor bump (>= $wanted)."
+    Write-Err "The root CLAUDE.md makes a break owe one: a consumer floored at >=$Published resolves $Release as a bugfix."
+    foreach ($r in ($required.reasons | Select-Object -First 8)) { Write-Host "    - $r" -ForegroundColor DarkGray }
+    if ($required.reasons.Count -gt 8) {
+        Write-Host "    ... and $($required.reasons.Count - 8) more (API_CHANGES.md lists them all)" -ForegroundColor DarkGray
+    }
+    Write-Err "Set __version__ = `"$wanted`" in $PackageName/$PackageName/__init__.py, or re-run with -AllowBreakingPatch."
+    return $false
 }
 
 function Set-PackageVersion {
@@ -1953,6 +2040,14 @@ function Invoke-PreparePhase {
         Write-Err "Come online, or push a tag for the last published version, or use -SkipPypiCheck with tags present."
         return $null
     }
+    # Semver gate, BEFORE anything is written: the verdict comes from source
+    # plus the origin/main sidecar, so it needs no regenerated artifact and can
+    # refuse while the tree is still untouched.
+    $publishedNow = Resolve-PublishedVersion $PackageName $RepoPath $Versions
+    if ($publishedNow -and -not (Test-SemverGate $PackageName $publishedNow $version)) {
+        return $null
+    }
+
     $result.Version = $version
     $pkgSource = Join-Path $RepoPath $PackageName
     $currentVer = Get-PackageVersion $pkgSource
@@ -1992,8 +2087,7 @@ function Invoke-PreparePhase {
         # the PR's `API registry up to date` check is green by construction. Runs
         # under the venv python (AST-only; no DCC import). --no-shadows keeps the
         # cross-package shadow report — which lives in m3trik's tree — untouched.
-        $m3trikScripts = Join-Path (Join-Path $ROOT "m3trik") "scripts"
-        $gen = Join-Path $m3trikScripts "generate_api_registry.py"
+        $gen = Join-Path $M3TRIK_SCRIPTS "generate_api_registry.py"
         if (Test-Path $gen) {
             $genOut = python $gen $PackageName --no-shadows 2>&1
             if ($LASTEXITCODE -ne 0) {
@@ -2036,7 +2130,7 @@ function Invoke-PreparePhase {
             # leaves docs/PARITY_SURFACE.md on disk listing the offending rows --
             # that file IS the work list, which is why the message points at it
             # rather than at stdout (stdout here is the one "Wrote ..." line).
-            $sweep = Join-Path $m3trikScripts "compare_panel_surface.py"
+            $sweep = Join-Path $M3TRIK_SCRIPTS "compare_panel_surface.py"
             if (Test-Path $sweep) {
                 python $sweep --all --write | Out-Null
                 if ($LASTEXITCODE -ne 0) {
@@ -2046,7 +2140,7 @@ function Invoke-PreparePhase {
                     return $null
                 }
             }
-            $audit = Join-Path $m3trikScripts "generate_parity_audit.py"
+            $audit = Join-Path $M3TRIK_SCRIPTS "generate_parity_audit.py"
             if (Test-Path $audit) {
                 $auditOut = python $audit 2>&1
                 if ($LASTEXITCODE -ne 0) {

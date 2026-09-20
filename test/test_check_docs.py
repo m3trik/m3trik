@@ -79,5 +79,69 @@ class TestUnreleasedChangelogGuard(unittest.TestCase):
         self.assertEqual(self._changelog_fails(), [])
 
 
+class TestSkipUnversioned(unittest.TestCase):
+    """``--skip-unversioned``: the CI form, whose workspace holds the repos but
+    never the unversioned root.  A missing link target outside every checked-
+    out repo is a named SKIP; everything inside a repo is still checked."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.ws_root = Path(self._td.name)
+        repo = self.ws_root / "pkg"
+        (repo / ".git").mkdir(parents=True)
+        (repo / "docs").mkdir()
+        (repo / "README.md").write_text("[guide](docs/guide.md)\n", encoding="utf-8")
+        (repo / "docs" / "guide.md").write_text(
+            "# Guide\n\n"
+            "[root](../../CLAUDE.md)\n"  # the unversioned workspace root
+            "[sibling](../../other/CLAUDE.md)\n"  # a repo this checkout lacks
+            "[broken](missing.md)\n"  # inside the repo: a real break
+            "[anchor](../README.md#nope)\n",  # inside the repo: a real break
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def _run(self, skip):
+        report = check_docs.Report()
+        check_docs.run_workspace(self.ws_root, report, skip_unversioned=skip)
+        return report
+
+    def test_without_the_flag_every_missing_target_fails(self):
+        links = [f for f in self._run(False).fails if f.startswith("[FAIL] links")]
+        self.assertEqual(len(links), 4, links)
+
+    def test_the_flag_skips_only_what_no_checkout_can_hold(self):
+        report = self._run(True)
+        links = [f for f in report.fails if f.startswith("[FAIL] links")]
+        self.assertEqual(len(links), 2, links)
+        self.assertTrue(any("missing.md" in f for f in links))
+        self.assertTrue(any("#nope" in f for f in links))
+        # Every skip is named, so a skip cannot hide a break.
+        self.assertEqual(len(report.skips), 2, report.skips)
+        self.assertTrue(any("../../CLAUDE.md" in s for s in report.skips))
+        self.assertTrue(any("../../other/CLAUDE.md" in s for s in report.skips))
+
+    def test_an_existing_root_target_is_still_checked(self):
+        """The flag skips what is MISSING outside the repos; a root file that is
+        there is checked like any other (its anchors included)."""
+        (self.ws_root / "CLAUDE.md").write_text("# Root\n", encoding="utf-8")
+        report = self._run(True)
+        self.assertFalse(any("../../CLAUDE.md" in s for s in report.skips))
+
+    def test_the_verdict_line_counts_the_skips(self):
+        import contextlib
+        import io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = check_docs.main(
+                ["--workspace", str(self.ws_root), "--skip-unversioned"]
+            )
+        self.assertEqual(code, 1)  # the two in-repo breaks
+        self.assertIn("2 SKIP", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

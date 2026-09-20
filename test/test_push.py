@@ -112,9 +112,7 @@ $global:verdict = @{{ bump = 'minor'; reasons = @('x') }}
             timeout=120,
         )
         if result.returncode != 0:
-            raise unittest.SkipTest(
-                f"harness failed: {result.stdout}\n{result.stderr}"
-            )
+            raise unittest.SkipTest(f"harness failed: {result.stdout}\n{result.stderr}")
         cls.answers = dict(
             line[len("RESULT:") :].split("=", 1)
             for line in result.stdout.splitlines()
@@ -3248,3 +3246,222 @@ class TestGitHubWorkflows(unittest.TestCase):
             self.assertFalse(
                 (workflows / "bump-dev.yml").exists(), f"{pkg} still ships bump-dev.yml"
             )
+
+
+class TestAbsorbCommitIsNamed(unittest.TestCase):
+    """The pre-sync absorb-commit carries the CHANGELOG headline, not "Update".
+
+    ``Sync-DevWithOrigin`` folds the whole working tree into ONE commit so the
+    rebase does not refuse on a dirty tree, and named it from -CommitMessage,
+    whose default is "Update". Measured on the 2026-09-20 release: every cascade
+    package's multi-day delta reached history as "Update" -- mayatk's was 57
+    files -- so ``git log --oneline`` for that release says nothing about it. The
+    message now comes from the package's own newest CHANGELOG bullet, which is
+    where the convention already puts the human summary.
+    """
+
+    SUBJECT_MAX = 72
+
+    @staticmethod
+    def _pwsh():
+        return shutil.which("powershell") or shutil.which("pwsh")
+
+    def _message(self, repo: Path) -> str:
+        """``Get-ChangelogCommitMessage`` against *repo*, as the script calls it."""
+        pwsh = self._pwsh()
+        if not pwsh:
+            self.skipTest("no PowerShell host available")
+        common = M3TRIK_DIR / "common.ps1"
+        script = f". '{common}'; Write-Output (Get-ChangelogCommitMessage '{repo}')"
+        r = subprocess.run(
+            [pwsh, "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r.stdout.strip("\r\n")
+
+    def _repo_with_changelog(self, root: Path, body: str) -> Path:
+        repo = root / "pkg"
+        repo.mkdir()
+        (repo / "CHANGELOG.md").write_text(body, encoding="utf-8")
+        return repo
+
+    def test_reads_the_top_bullet_and_drops_the_file_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo_with_changelog(
+                Path(td),
+                "# pkg - Changelog\n\n## 2026\n\n"
+                "- **2026-09-20 -- the exporter stops renaming what it exports "
+                "(`env_utils/exporter.py`, `test/test_exporter.py`).** Body.\n\n"
+                "- **2026-09-19 -- an older entry nobody wants (`x.py`).** Body.\n",
+            )
+            self.assertEqual(
+                self._message(repo),
+                "the exporter stops renaming what it exports",
+            )
+
+    def test_em_dash_and_single_dash_entries_both_parse(self):
+        # Entries written before 2026-09 use an em dash; newer ones use `--`.
+        for sep in ("—", "-", "--", "–"):
+            with tempfile.TemporaryDirectory() as td:
+                repo = self._repo_with_changelog(
+                    Path(td),
+                    f"# pkg\n\n- **2026-09-20 {sep} a headline (`a.py`).** Body.\n",
+                )
+                self.assertEqual(self._message(repo), "a headline", sep)
+
+    def test_every_bullet_marker_the_release_notes_accept_is_accepted_here(self):
+        # $CHANGELOG_BULLET is shared with Select-ReleaseNotes; a marker one
+        # reader takes and the other does not is the drift it exists to prevent.
+        for marker in ("-", "*", "+"):
+            with tempfile.TemporaryDirectory() as td:
+                repo = self._repo_with_changelog(
+                    Path(td),
+                    f"# pkg\n\n{marker} **2026-09-20 -- a headline (`a.py`).** Body.\n",
+                )
+                self.assertEqual(self._message(repo), "a headline", marker)
+
+    def test_an_indented_sub_bullet_is_not_read_as_the_entry(self):
+        # A nested bullet is part of an entry's body, not an entry. Reading one
+        # would name the commit after a detail of the PREVIOUS release.
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo_with_changelog(
+                Path(td),
+                "# pkg\n\n  - **2026-09-20 -- a sub point (`a.py`).** Body.\n",
+            )
+            self.assertEqual(self._message(repo), "")
+
+    def test_a_long_headline_keeps_every_word_in_the_body(self):
+        # Clipped, never truncated: `git log --grep` matches the whole message,
+        # so the tail stays searchable instead of being dropped.
+        head = (
+            "a sectioned record crosses in its section's shape, a merge snaps by "
+            "the receiving scene, and the availability question never raises"
+        )
+        self.assertGreater(len(head), self.SUBJECT_MAX)
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo_with_changelog(
+                Path(td), f"# pkg\n\n- **2026-09-20 -- {head} (`a.py`).** Body.\n"
+            )
+            got = self._message(repo)
+            subject, _, body = got.partition("\n")
+            self.assertLessEqual(len(subject), self.SUBJECT_MAX, subject)
+            self.assertTrue(subject.endswith("..."), subject)
+            # Clipped on a word boundary, so the subject never ends mid-word.
+            stem = subject[:-3]
+            self.assertTrue(head.startswith(stem), subject)
+            self.assertTrue(head[len(stem)] == " ", f"cut mid-word: {subject!r}")
+            self.assertEqual(body.strip(), head, "the full headline must survive")
+
+    def test_a_short_headline_is_the_whole_message(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo_with_changelog(
+                Path(td), "# pkg\n\n- **2026-09-20 -- a short one (`a.py`).** Body.\n"
+            )
+            got = self._message(repo)
+            self.assertEqual(got, "a short one")
+            self.assertNotIn("\n", got)
+
+    def test_an_unreadable_changelog_yields_no_message(self):
+        # Each of these must leave the caller on its own default rather than
+        # inventing a subject: a package that does not follow the convention is
+        # no worse off than it was.
+        cases = {
+            "missing": None,
+            "heading only": "# pkg - Changelog\n\n## 2026\n",
+            "undated bullet": "# pkg\n\n- **a headline (`a.py`).** Body.\n",
+            "plain bullet": "# pkg\n\n- 2026-09-20 a headline.\n",
+        }
+        for name, body in cases.items():
+            with tempfile.TemporaryDirectory() as td:
+                if body is None:
+                    repo = Path(td) / "pkg"
+                    repo.mkdir()
+                else:
+                    repo = self._repo_with_changelog(Path(td), body)
+                self.assertEqual(self._message(repo), "", name)
+
+    def test_every_ecosystem_package_yields_a_message(self):
+        # The fallback is safe, but it firing for a package that DOES follow the
+        # convention would mean the parser drifted from how entries are written.
+        for pkg in ("pythontk", "uitk", "mayatk", "blendertk", "tentacle"):
+            repo = ROOT / pkg
+            if not (repo / "CHANGELOG.md").exists():
+                continue
+            got = self._message(repo)
+            self.assertTrue(got, f"{pkg}: no message read from its CHANGELOG")
+            self.assertNotEqual(got, "Update", pkg)
+            subject = got.partition("\n")[0]
+            self.assertLessEqual(len(subject), self.SUBJECT_MAX, f"{pkg}: {subject}")
+            # The trailing file list belongs to `git log --stat`, not the subject.
+            self.assertNotRegex(subject, r"\(`[^`]+\.(py|ps1|md)`")
+
+    def test_the_absorb_commit_uses_the_message(self):
+        """End to end: the commit Sync-DevWithOrigin makes carries subject+body."""
+        if not shutil.which("git"):
+            self.skipTest("git not available")
+        pwsh = self._pwsh()
+        if not pwsh:
+            self.skipTest("no PowerShell host available")
+
+        def git(cwd, *args):
+            r = subprocess.run(
+                ["git", *args], cwd=str(cwd), capture_output=True, text=True
+            )
+            if r.returncode != 0:
+                raise RuntimeError(f"git {' '.join(args)}: {r.stdout}{r.stderr}")
+            return r
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            origin = root / "origin.git"
+            origin.mkdir()
+            git(origin, "init", "--bare", "--initial-branch=dev")
+
+            repo = root / "pkg"
+            repo.mkdir()
+            git(repo, "init", "--initial-branch=dev")
+            git(repo, "config", "user.email", "ci@example.com")
+            git(repo, "config", "user.name", "CI")
+            # Long enough to exercise the subject/body split end to end: a
+            # multi-line message has to survive PowerShell's argument passing.
+            head = (
+                "the exporter stops renaming what it exports, and the manifest "
+                "records what it actually wrote"
+            )
+            (repo / "CHANGELOG.md").write_text(
+                f"# pkg\n\n- **2026-09-20 -- {head} (`a.py`).** Body.\n",
+                encoding="utf-8",
+            )
+            git(repo, "add", "-A")
+            git(repo, "commit", "-m", "base")
+            git(repo, "remote", "add", "origin", str(origin))
+            git(repo, "push", "-u", "origin", "dev")
+
+            # The dirty tree a release absorbs.
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+
+            common = M3TRIK_DIR / "common.ps1"
+            script = (
+                f". '{common}'; "
+                f"$m = Get-ChangelogCommitMessage '{repo}'; "
+                f"if (Sync-DevWithOrigin '{repo}' -CommitMessage $m) "
+                "{ 'SYNC-OK' } else { 'SYNC-FAILED' }"
+            )
+            r = subprocess.run(
+                [pwsh, "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            out = r.stdout + r.stderr
+            self.assertIn("SYNC-OK", out, out)
+
+            subject = git(repo, "log", "-1", "--format=%s").stdout.strip()
+            body = git(repo, "log", "-1", "--format=%b").stdout.strip()
+            self.assertNotEqual(subject, "Update")
+            self.assertLessEqual(len(subject), self.SUBJECT_MAX, subject)
+            self.assertTrue(subject.endswith("..."), subject)
+            self.assertEqual(body, head, "the body must reach the real commit")

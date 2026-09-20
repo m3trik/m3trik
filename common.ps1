@@ -34,6 +34,17 @@ function Write-Err {
 # `__version__ = "..."` earlier in the file is never read as the version nor clobbered.
 $VERSION_LINE = '(?m)^__version__\s*=\s*["''](?<ver>\d+\.\d+\.\d+)["'']'
 
+# The ONE pattern for a top-level dated CHANGELOG bullet, shared by the two readers
+# that must agree on what counts as an entry: Select-ReleaseNotes (which entries a
+# GitHub Release publishes) and Get-ChangelogCommitMessage (which one names the
+# absorb-commit). No `^\s*`, deliberately -- an indented bullet is a SUB-bullet
+# inside an entry, not an entry. Each reader appends what it alone needs.
+$CHANGELOG_BULLET = '^[-*+]\s+(\*\*)?(?<date>\d{4}-\d{2}-\d{2})'
+
+# Longest commit SUBJECT this writes before it clips and moves the full text to the
+# body. git's own soft limit; the real headlines here run 61-184 characters.
+$COMMIT_SUBJECT_MAX = 72
+
 function Get-PackageVersion {
     param([string]$PackagePath)
     $initFile = Join-Path $PackagePath "__init__.py"
@@ -44,6 +55,57 @@ function Get-PackageVersion {
         }
     }
     return "unknown"
+}
+
+function Get-ChangelogCommitMessage {
+    # A commit message naming what a package's newest CHANGELOG bullet says.
+    #
+    # Sync-DevWithOrigin absorbs the working tree into ONE commit so the rebase
+    # does not refuse on a dirty tree, and named it "Update" -- so a release that
+    # piles up between checkpoints (mayatk 0.18.0: 57 files) reaches history with
+    # no subject anyone can search. The repo convention already writes the human
+    # summary as the bolded lead of the top CHANGELOG bullet; this reads that
+    # rather than inventing a second place to say it.
+    #
+    # A headline over $COMMIT_SUBJECT_MAX is CLIPPED INTO A SUBJECT AND A BODY,
+    # never just cut: `git log --grep` matches the whole message, so moving the
+    # tail to the body keeps every word searchable, which is the entire point --
+    # where a bare truncation would silently drop it (and cut mid-token: uitk's
+    # headline ends in a backtick pair). The subject is clipped on a word
+    # boundary so `--oneline` stays readable.
+    #
+    # Returns "" for anything it cannot read -- no CHANGELOG, an unrecognized
+    # shape, a heading-only file. The caller keeps its own default, so a package
+    # that does not follow the convention is no worse off than before.
+    param([string]$RepoPath)
+    $changelog = Join-Path $RepoPath "CHANGELOG.md"
+    if (-not (Test-Path $changelog)) { return "" }
+    # `- **<date> <dash> <headline> (`a.py`, `b.py`).** <body>`. Both dash
+    # spellings occur (`-`, `--`, and the em/en dashes older entries use).
+    $pattern = $CHANGELOG_BULLET + '\s*[-–—]+\s*(?<head>.+?)\s*\*\*'
+    # Only the head of the file: the newest bullet is at the top, and a
+    # CHANGELOG here runs to thousands of lines. `-Encoding UTF8` is required,
+    # not tidiness: Windows PowerShell 5.1 reads a BOM-less file as the ANSI code
+    # page, so an em dash arrives as two cp1252 characters and the entries that
+    # use one (everything before 2026-09) match nothing. Reading is safe -- it is
+    # the WRITE side of this switch that emits a BOM.
+    foreach ($line in (Get-Content $changelog -TotalCount 40 -Encoding UTF8 -ErrorAction SilentlyContinue)) {
+        if ($line -notmatch $pattern) { continue }
+        # Drop the trailing file list: it is the one part of the headline a
+        # `git log --stat` already shows.
+        $head = $Matches['head'] -replace '\s*\([^()]*`[^()]*\)\s*[.:]?\s*$', ''
+        $head = $head.Trim().TrimEnd('.', ':', ',', ' ')
+        if (-not $head) { continue }
+        if ($head.Length -le $COMMIT_SUBJECT_MAX) { return $head }
+        # Leave room for the ellipsis, then back up to the last word boundary so
+        # the subject never ends mid-word. A headline with no space in its first
+        # $COMMIT_SUBJECT_MAX characters is clipped hard rather than dropped.
+        $cut = $head.Substring(0, $COMMIT_SUBJECT_MAX - 3)
+        $space = $cut.LastIndexOf(' ')
+        if ($space -gt 0) { $cut = $cut.Substring(0, $space) }
+        return "$($cut.TrimEnd())...`n`n$head"
+    }
+    return ""
 }
 
 function Test-RepoOperationSafe {

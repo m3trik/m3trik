@@ -95,7 +95,10 @@ Key flags
 -ShowReceipts         Show receipt validity for -Packages (default: strict set),
                       then exit.
 -CommitMessage        Message for the auto-commit Sync-DevWithOrigin makes when
-                              absorbing local changes (defaults to "Update").
+                      absorbing local changes. Unpassed, it is taken from the
+                      package's newest CHANGELOG bullet (subject + body once the
+                      headline outruns a subject line), falling back to "Update"
+                      for a package whose CHANGELOG cannot be read.
 -WorkflowTimeoutSeconds / -WorkflowPollSeconds
                               Control workflow wait behavior.
 -PypiVisibilityTimeoutSeconds How long to wait for a just-published version to become
@@ -181,6 +184,11 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+# Whether -CommitMessage was PASSED, not whether it differs from the default: a
+# caller who types "Update" means it, and the absorb-commit must not overrule a
+# subject a human chose. Captured here because $PSBoundParameters inside a
+# function is that function's, not the script's.
+$COMMIT_MESSAGE_EXPLICIT = $PSBoundParameters.ContainsKey('CommitMessage')
 $ROOT = $Root
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $SCRIPT_DIR "common.ps1")
@@ -1728,7 +1736,9 @@ function Select-ReleaseNotes {
         $text = $line.Substring(1)
         if ($text.StartsWith("#")) { $keep = $false; continue }
         if ($text -match '^[-*+]\s') {
-            $keep = ($text -match '^[-*+]\s+(\*\*)?(?<date>\d{4}-\d{2}-\d{2})') -and
+            # $CHANGELOG_BULLET (common.ps1): the same spelling of "an entry" that
+            # names the absorb-commit, so the two readers cannot drift apart.
+            $keep = ($text -match $CHANGELOG_BULLET) -and
                 ([string]::CompareOrdinal($Matches['date'], $Since) -ge 0)
         }
         if ($keep) { $notes += $text }
@@ -2023,7 +2033,15 @@ function Invoke-PreparePhase {
     if ($Merge -and -not $DryRun) {
         # Sync local dev with origin BEFORE deciding anything. Absorbs uncommitted
         # work as its own commit (same as before) and rebases onto origin/dev.
-        if (-not (Sync-DevWithOrigin $RepoPath -CommitMessage $CommitMessage)) {
+        # That commit is named from the package's own newest CHANGELOG bullet
+        # unless the caller passed a subject: "Update" over a release's whole
+        # working tree leaves history with nothing to search on.
+        $absorbMessage = $CommitMessage
+        if (-not $COMMIT_MESSAGE_EXPLICIT) {
+            $fromChangelog = Get-ChangelogCommitMessage $RepoPath
+            if ($fromChangelog) { $absorbMessage = $fromChangelog }
+        }
+        if (-not (Sync-DevWithOrigin $RepoPath -CommitMessage $absorbMessage)) {
             Write-Err "Pre-release sync failed"
             return $null
         }

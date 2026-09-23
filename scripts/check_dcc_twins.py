@@ -204,6 +204,20 @@ LEDGER: List[TwinSpec] = [
             "template, executed by that suite's template guards."
         ),
     ),
+    TwinSpec(
+        rel="light_utils/lightmap_baker/lightmap_baker.py",
+        reason=(
+            "What LightmapBaker.bake returns, one shape in both packages so the "
+            "panels and a script read the same result. A lightmap-only type has "
+            "no home in pythontk -- the shared half of this tool there is the "
+            "generic FileDependencies -- so each baker carries the dataclass."
+        ),
+        symbols=("LightmapBakeResult",),
+        note=(
+            "The whole class, fields included. The two engines differ throughout "
+            "(Arnold vs Cycles); only the result they report is shared."
+        ),
+    ),
 ]
 
 
@@ -358,13 +372,14 @@ def _read(path: str) -> List[str]:
 
 
 def extract_symbols(path: str, rel: str) -> Dict[str, List[str]]:
-    """Map symbol name -> normalized source lines for every function in *path*.
+    """Map symbol name -> normalized source lines for every function and class in *path*.
 
     Keys are ``Class.method`` for a method and the bare name for a module-level
-    function. Both, because a ledger entry may legitimately name either and a
-    symbol this cannot see reports as ``missing`` -- which :func:`compare`
-    treats as a FAILURE, so an invisible symbol is a permanently red entry
-    rather than a merely unchecked one.
+    function or a whole class (its decorators, fields and methods). All three,
+    because a ledger entry may legitimately name any of them and a symbol this
+    cannot see reports as ``missing`` -- which :func:`compare` treats as a
+    FAILURE, so an invisible symbol is a permanently red entry rather than a
+    merely unchecked one.
 
     TOP-LEVEL definitions only: a class nested in a class or a function defined
     inside another is not extracted, and a ledger naming one reports ``missing``
@@ -388,6 +403,10 @@ def extract_symbols(path: str, rel: str) -> Dict[str, List[str]]:
 
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
+            # The class as a whole too -- decorators, fields and every method --
+            # for a twin that is one small type (a dataclass both packages
+            # return) rather than a few shared methods of a larger class.
+            _add(node.name, node)
             for fn in node.body:
                 if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     _add(f"{node.name}.{fn.name}", fn)

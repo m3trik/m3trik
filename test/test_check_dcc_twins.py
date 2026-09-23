@@ -175,8 +175,23 @@ def %s():
     def test_extract_symbols_finds_class_methods(self):
         path = os.path.join(self.root, "mayatk", "mayatk", "pkg", "mod.py")
         self.assertEqual(
-            sorted(gate.extract_symbols(path, self.rel)), ["C.diverged", "C.shared"]
+            sorted(gate.extract_symbols(path, self.rel)),
+            ["C", "C.diverged", "C.shared"],
         )
+
+    def test_a_whole_class_is_a_symbol_including_its_fields(self):
+        """A small shared type (a dataclass) is guarded whole: a field added on
+        one side is drift, though no method changed."""
+        body = "@dataclass\nclass R:\n    maps: dict = None\n"
+        for pkg in ("mayatk", "blendertk"):
+            path = os.path.join(self.root, pkg, pkg, "pkg", "mod.py")
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write("\n\n" + body)
+        self.assertEqual(gate.compare(self.spec(symbols=["R"]))[0], "ok")
+        path = os.path.join(self.root, "blendertk", "blendertk", "pkg", "mod.py")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("    rects: dict = None\n")
+        self.assertEqual(gate.compare(self.spec(symbols=["R"]))[0], "drift")
 
 
 class LedgerTest(unittest.TestCase):

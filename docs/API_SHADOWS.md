@@ -74,7 +74,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L165)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
-- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L479)
+- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L497)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L466)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
@@ -162,7 +162,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L31)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L56)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1228)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1058)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1060)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L240)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L257)
 - `blendertk` — [`main`](blendertk/env_utils/pm_doctor.py#L56)
@@ -209,7 +209,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (202)
+## Intentional mayatk↔blendertk port parity (204)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -228,6 +228,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `BakeAnalysis`
 - `BakeResult`
 - `BakeSessionStore`
+- `BakeSet`
 - `BatchJob`
 - `Bevel`
 - `BevelSlots`
@@ -296,6 +297,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `LightmapBakeResult`
 - `LightmapBaker`
 - `LightmapBakerSlots`
+- `LightmapExcludeSet`
 - `LightmapRecords`
 - `MacroManager`
 - `Macros`

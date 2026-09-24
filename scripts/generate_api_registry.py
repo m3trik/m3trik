@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import datetime
 import hashlib
 import importlib.util
 import json
@@ -150,6 +151,32 @@ def _load_version_key():
 
 _version_key = _load_version_key()
 
+
+def _load_window_rule():
+    """``(Deprecation.window_expired, Deprecation.MIN_WINDOW_DAYS)`` from the
+    module :func:`_load_version_key` just loaded -- the calendar half of the
+    expiry rule, from the same source for the same reason: the static gate and
+    the runtime roster must not be able to disagree about when a name is due.
+
+    A pythontk sibling predating the calendar window (``since``) has neither:
+    then a retirement is due by version alone, which is exactly what that
+    sibling's own roster says -- the version comparison is still
+    :func:`_version_key`'s, so this adds no second parser.
+    """
+    module = sys.modules.get("_ptk_deprecation")
+    owner = getattr(module, "Deprecation", None)
+    rule = getattr(owner, "window_expired", None)
+    if rule is not None:
+        return rule, int(getattr(owner, "MIN_WINDOW_DAYS", 0))
+
+    def version_only(remove_in, version, since="", today=None):
+        return _version_key(version) >= _version_key(remove_in)
+
+    return version_only, 0
+
+
+_window_expired, _MIN_WINDOW_DAYS = _load_window_rule()
+
 #: ``__version__ = "1.2.3"`` in a package root, read with a regex rather than an
 #: import: this generator runs on a bare CI box where the package it is walking
 #: is not installed and its dependencies are absent. The optional annotation
@@ -169,24 +196,31 @@ def package_version(pkg_dir: Path, name: str) -> str:
     return match.group(1) if match else ""
 
 
-def deprecations(pkg: PackageData) -> list[tuple[str, str, str]]:
-    """Every retired symbol in *pkg* as ``(relpath, qualname, remove_in)``.
+def deprecations(pkg: PackageData) -> list[tuple[str, str, str, str]]:
+    """Every retired symbol in *pkg* as ``(relpath, qualname, remove_in, since)``.
 
+    *since* is the date the notice first shipped (``""`` when it names none),
+    read off the decorator by the walk (:func:`_stamp_since`) -- carried beside
+    the record rather than in it, so the registry sidecar does not churn.
     Sorted by removal version so the oldest debt reads first.
     """
-    found: list[tuple[str, str, str]] = []
+    found: list[tuple[str, str, str, str]] = []
+
+    def row(relpath: str, qualname: str, symbol) -> tuple[str, str, str, str]:
+        return (relpath, qualname, symbol.remove_in, getattr(symbol, "since", ""))
+
     for mod in pkg.modules:
         for fn in mod.functions:
             if fn.deprecated:
-                found.append((mod.relpath, fn.qualname, fn.remove_in))
+                found.append(row(mod.relpath, fn.qualname, fn))
         for cls in mod.classes:
             if cls.deprecated:
-                found.append((mod.relpath, cls.name, cls.remove_in))
+                found.append(row(mod.relpath, cls.name, cls))
             for member in cls.members:
                 if member.deprecated:
-                    found.append((mod.relpath, member.qualname, member.remove_in))
+                    found.append(row(mod.relpath, member.qualname, member))
 
-    def order(row: tuple[str, str, str]) -> tuple:
+    def order(row: tuple[str, str, str, str]) -> tuple:
         # Deadline first. Under the degraded stand-in (a pythontk sibling that
         # predates ``Deprecation``: ``_load_version_key``, which says so on
         # stderr) every row takes the except branch and sorts by NAME instead --
@@ -207,35 +241,48 @@ def deprecations(pkg: PackageData) -> list[tuple[str, str, str]]:
     return sorted(found, key=order)
 
 
-def expired_deprecations(pkg: PackageData, version: str) -> list[tuple[str, str, str]]:
-    """Retired symbols whose removal release *version* has already reached.
+def expired_deprecations(
+    pkg: PackageData, version: str, today: datetime.date | None = None
+) -> list[tuple[str, str, str, str]]:
+    """Retired symbols past their window: *version* has reached their removal
+    release AND, where they name ``since``, the calendar window has closed.
 
     An empty *version*, or a symbol with no ``remove_in``, can never expire --
     both are reported by :func:`deprecations` instead, where they read as debt
     rather than as a passing gate.
     """
-    return _expired(deprecations(pkg), version)
+    return _expired(deprecations(pkg), version, today)
 
 
-def _expired(rows, version: str) -> list[tuple[str, str, str]]:
-    """The ``(relpath, what, remove_in)`` *rows* whose ``remove_in`` *version*
-    has reached; nothing when *version* (or a row's ``remove_in``) is absent or
-    unparseable -- see :func:`_load_version_key` for why that stays quiet."""
+def _expired(rows, version: str, today: datetime.date | None = None) -> list[tuple]:
+    """The ``(relpath, what, remove_in[, since])`` *rows* past their window
+    (``Deprecation.window_expired``: *version* has reached ``remove_in`` AND a
+    ``since`` is :data:`_MIN_WINDOW_DAYS` old); nothing when *version* (or a
+    row's ``remove_in``) is absent or unparseable -- see
+    :func:`_load_version_key` for why that stays quiet. A ``since`` the rule
+    refuses is judged by version alone, never skipped: the runtime refuses that
+    notice at construction, which a body-level ``Deprecation.warn`` meets only
+    when its branch runs."""
     if not version:
         return []
     try:
-        current = _version_key(version)
+        _version_key(version)
     except ValueError:
         return []
     out = []
     for row in rows:
         if not row[2]:
             continue
+        since = row[3] if len(row) > 3 else ""
         try:
-            if current >= _version_key(row[2]):
-                out.append(row)
+            due = _window_expired(row[2], version, since, today)
         except ValueError:
-            continue
+            try:
+                due = bool(since) and _window_expired(row[2], version, "", today)
+            except ValueError:
+                continue
+        if due:
+            out.append(row)
     return out
 
 
@@ -297,15 +344,15 @@ def _string_value(node: ast.AST, constants: dict[str, str | None]) -> str:
     return ""
 
 
-def retired_forms(pkg_dir: Path, name: str) -> list[tuple[str, str, str]]:
+def retired_forms(pkg_dir: Path, name: str) -> list[tuple[str, str, str, str]]:
     """Every sub-symbol retirement in the package source, as ``(relpath, what,
-    remove_in)``: a ``Deprecation.<parameter|values|warn|attributes>(...)`` call
-    with a literal ``remove_in`` anywhere in a module -- a decorator, a helper
-    that builds one, a module-scope ``values`` resolver -- read statically, like
-    the symbol walk, so an unimported module is covered too."""
+    remove_in, since)``: a ``Deprecation.<parameter|values|warn|attributes>(...)``
+    call with a literal ``remove_in`` anywhere in a module -- a decorator, a
+    helper that builds one, a module-scope ``values`` resolver -- read
+    statically, like the symbol walk, so an unimported module is covered too."""
     source_root = pkg_dir / name
-    out: list[tuple[str, str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
+    out: list[tuple[str, str, str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
     unreadable: list[str] = []
     for path in _iter_py_files(source_root):
         try:
@@ -336,7 +383,20 @@ def retired_forms(pkg_dir: Path, name: str) -> list[tuple[str, str, str]]:
                 # retirement ship past its window.
                 unreadable.append(f"{relpath}: Deprecation.{node.func.attr}({what[:60]})")
                 continue
-            row = (relpath, f"Deprecation.{node.func.attr}({what[:60]})", remove_in)
+            since = next(
+                (
+                    _string_value(kw.value, constants)
+                    for kw in node.keywords
+                    if kw.arg == "since"
+                ),
+                "",
+            )
+            row = (
+                relpath,
+                f"Deprecation.{node.func.attr}({what[:60]})",
+                remove_in,
+                since,
+            )
             # One row per distinct retirement: two of the same shape in one
             # module (mayatk's and blendertk's importers each retire `shots`
             # twice) would print the same overdue line twice.
@@ -564,6 +624,35 @@ def _deprecation_of(
     return False, ""
 
 
+def _since_of(decorators: list, constants: dict[str, str | None] | None = None) -> str:
+    """The ``since`` date on the deprecation decorator in *decorators* (``""``
+    when there is none) -- the calendar half of the window, read like
+    ``remove_in`` (:func:`_deprecation_of`)."""
+    for dec in decorators:
+        path = _decorator_path(dec)
+        if not any(
+            path == name or path.endswith(f".{name}")
+            for name in _DEPRECATION_DECORATORS
+        ):
+            continue
+        if isinstance(dec, ast.Call):
+            for keyword in dec.keywords:
+                if keyword.arg == "since":
+                    return _string_value(keyword.value, constants or {})
+        return ""
+    return ""
+
+
+def _stamp_since(record, decorators: list, constants=None):
+    """*record* with its deprecation's ``since`` as a plain attribute -- NOT a
+    dataclass field: the registry sidecar is ``asdict`` of the fields, and a new
+    one would churn every committed registry for a value only the expiry gate
+    reads (:func:`deprecations`). Returns *record*."""
+    if getattr(record, "deprecated", False):
+        record.since = _since_of(decorators, constants)
+    return record
+
+
 def _decorator_kinds(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     constants: dict[str, str | None] | None = None,
@@ -620,18 +709,17 @@ def _own_members(
         if not _is_public(member.name) or _is_property_accessor(member):
             continue
         kind, deprecated, remove_in = _decorator_kinds(member, constants)
-        out.append(
-            SymbolRecord(
-                name=member.name,
-                qualname=f"{owner}.{member.name}",
-                kind=kind,
-                signature=_format_signature(member),
-                summary=_first_sentence(ast.get_docstring(member)),
-                line=member.lineno,
-                deprecated=deprecated,
-                remove_in=remove_in,
-            )
+        record = SymbolRecord(
+            name=member.name,
+            qualname=f"{owner}.{member.name}",
+            kind=kind,
+            signature=_format_signature(member),
+            summary=_first_sentence(ast.get_docstring(member)),
+            line=member.lineno,
+            deprecated=deprecated,
+            remove_in=remove_in,
         )
+        out.append(_stamp_since(record, member.decorator_list, constants))
     return out
 
 
@@ -831,18 +919,17 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
             if not _is_public(node.name):
                 continue
             deprecated, remove_in = _deprecation_of(node.decorator_list, string_constants)
-            funcs.append(
-                SymbolRecord(
-                    name=node.name,
-                    qualname=node.name,
-                    kind="function",
-                    signature=_format_signature(node),
-                    summary=_first_sentence(ast.get_docstring(node)),
-                    line=node.lineno,
-                    deprecated=deprecated,
-                    remove_in=remove_in,
-                )
+            record = SymbolRecord(
+                name=node.name,
+                qualname=node.name,
+                kind="function",
+                signature=_format_signature(node),
+                summary=_first_sentence(ast.get_docstring(node)),
+                line=node.lineno,
+                deprecated=deprecated,
+                remove_in=remove_in,
             )
+            funcs.append(_stamp_since(record, node.decorator_list, string_constants))
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
             # Only ALL_CAPS names: a module-level lowercase binding is a
             # runtime detail (a logger, a compiled regex, a singleton), and
@@ -882,17 +969,16 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
             cls_deprecated, cls_remove_in = _deprecation_of(
                 node.decorator_list, string_constants
             )
-            classes.append(
-                ClassEntry(
-                    name=node.name,
-                    summary=_first_sentence(ast.get_docstring(node)),
-                    line=node.lineno,
-                    bases=bases,
-                    members=members,
-                    deprecated=cls_deprecated,
-                    remove_in=cls_remove_in,
-                )
+            entry = ClassEntry(
+                name=node.name,
+                summary=_first_sentence(ast.get_docstring(node)),
+                line=node.lineno,
+                bases=bases,
+                members=members,
+                deprecated=cls_deprecated,
+                remove_in=cls_remove_in,
             )
+            classes.append(_stamp_since(entry, node.decorator_list, string_constants))
 
     if not funcs and not classes and not constants:
         return None
@@ -1367,6 +1453,19 @@ def _relpaths_losing_symbols(pkg: PackageData, prior_json: dict | None) -> set[s
     }
 
 
+def _not_before(since: str) -> str:
+    """The earliest removal date a notice first shipped on *since* allows
+    (``since`` + :data:`_MIN_WINDOW_DAYS`), for the debt section; ``""`` when
+    there is no readable date or no window."""
+    if not since or not _MIN_WINDOW_DAYS:
+        return ""
+    try:
+        start = datetime.date.fromisoformat(since)
+    except ValueError:
+        return ""
+    return (start + datetime.timedelta(days=_MIN_WINDOW_DAYS)).isoformat()
+
+
 def _deprecation_section(pkg: PackageData, version: str) -> list[str]:
     """The retirement-debt section: everything deprecated, earliest deadline first.
 
@@ -1378,23 +1477,27 @@ def _deprecation_section(pkg: PackageData, version: str) -> list[str]:
     rows = deprecations(pkg)
     if not rows:
         return []
-    expired = {
-        (relpath, qualname)
-        for relpath, qualname, _ in expired_deprecations(pkg, version)
-    }
+    expired = {(row[0], row[1]) for row in expired_deprecations(pkg, version)}
+    # Due by version, but its calendar window is still open: it stays.
+    due = {(row[0], row[1]) for row in _expired(rows, version, datetime.date.max)}
     lines = [f"## Deprecations ({len(rows)})", ""]
     lines.append(
         "_Live retirement debt, earliest deadline first. An **EXPIRED** row has "
-        "outlived its one-release window: delete the alias and its tests rather "
-        "than moving the date._"
+        "outlived its window: delete the alias and its tests rather than moving "
+        "the date. A **HELD** row is due by version, but its notice has not yet "
+        "had its calendar window._"
     )
     lines.append("")
-    for relpath, qualname, remove_in in rows:
-        mark = "**EXPIRED** " if (relpath, qualname) in expired else ""
-        due = (
+    for relpath, qualname, remove_in, since in rows:
+        key = (relpath, qualname)
+        mark = "**EXPIRED** " if key in expired else "**HELD** " if key in due else ""
+        text = (
             f"remove in {remove_in}" if remove_in else "**no removal version recorded**"
         )
-        lines.append(f"- {mark}`{relpath}::{qualname}` — {due}")
+        not_before = _not_before(since)
+        if remove_in and not_before:
+            text += f", not before {not_before}"
+        lines.append(f"- {mark}`{relpath}::{qualname}` — {text}")
     lines.append("")
     return lines
 
@@ -1904,9 +2007,22 @@ def regenerate(
                 "one-release window is UNCHECKED for this package",
                 file=sys.stderr,
             )
-        for relpath, qualname, remove_in in expired_deprecations(
+        forms = retired_forms(pkg_dir, name)
+        # The calendar half of the window reads ``since``; a retirement naming
+        # none is judged by version alone, the rule under which a run of
+        # releases retired names 15 days after their first warning. pythontk's
+        # own suite requires the date; this says so for every package (silent
+        # on a pythontk sibling predating the window).
+        undated = [f"{row[0]}::{row[1]}" for row in dated + forms if not row[3]]
+        if undated and _MIN_WINDOW_DAYS:
+            print(
+                f"warning: {name} has {len(undated)} retirement(s) naming no "
+                "since= date, judged by version alone: " + "; ".join(undated),
+                file=sys.stderr,
+            )
+        for relpath, qualname, remove_in, *_ in expired_deprecations(
             data, pkg_version
-        ) + _expired(retired_forms(pkg_dir, name), pkg_version):
+        ) + _expired(forms, pkg_version):
             overdue.append(f"{name}/{relpath}::{qualname} (was due in {remove_in})")
 
         targets = {

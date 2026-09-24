@@ -16,7 +16,7 @@
 
 `-UsePR` is the default release form — without it the dev→main merge bypasses branch protection. The PR must be *actually* gated before auto-merge is armed, and while waiting the check rollup is re-read every poll: **a settled red check fails in one poll, by name**, never waited out. Recovery: fix → push dev (auto-merge stays armed) → re-run push.ps1.
 
-**Push THIS repo first when `scripts/` changed.** Each package's PR runs `generate_api_registry.py <pkg> --check` against **m3trik@main**, and `publish.yml` dispatches [`refresh-api-registry.yml`](.github/workflows/refresh-api-registry.yml), which regenerates the cross-package shadow report with the generator at m3trik@main. Since 2026-08-23 that bot writes **only** `docs/API_SHADOWS.md` in this repo — it never pushes into a package repo (Prepare owns the per-package registries). Enforced: the Strict+Merge pre-pass fails when `m3trik/scripts` differs from `origin/main` (bypass: `-SkipReview`).
+**Push THIS repo first when `scripts/` changed.** Each package's PR runs `generate_api_registry.py <pkg> --check` against **m3trik@main**; `publish.yml` dispatches [`refresh-api-registry.yml`](.github/workflows/refresh-api-registry.yml), which regenerates only `docs/API_SHADOWS.md` here (never a package repo: Prepare owns the registries). Enforced: the Strict+Merge pre-pass fails when `m3trik/scripts` differs from `origin/main` (bypass: `-SkipReview`). Expected cost: this repo's CI (siblings' `dev`) reads red until the sibling lands, then clears on a re-run (rationale: push.ps1's guard).
 
 ## Release preflight — release gate
 

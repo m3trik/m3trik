@@ -5,6 +5,7 @@ staleness gate each ecosystem package's CI now runs per package
 
 import ast
 import contextlib
+import datetime
 import io
 import json
 import subprocess
@@ -1280,12 +1281,12 @@ class TestDeprecationRecognition(unittest.TestCase):
             '"""Mod."""\n'
             "\n"
             "\n"
-            "@ptk.Deprecation.symbol('NewThing', remove_in='1.2.3')\n"
+            "@ptk.Deprecation.symbol('NewThing', remove_in='1.3.0')\n"
             "def old_fn():\n"
             '    """Old."""\n'
         )
         self.assertTrue(mod.functions[0].deprecated)
-        self.assertEqual(mod.functions[0].remove_in, "1.2.3")
+        self.assertEqual(mod.functions[0].remove_in, "1.3.0")
 
     def test_the_bare_legacy_marker_still_counts(self):
         """A symbol retired with PEP 702's own decorator reads the same, just
@@ -1495,6 +1496,129 @@ class TestSymbolRemoveInReadsTheSharedConstant(unittest.TestCase):
         self.assertEqual(member.remove_in, "0.20.0")
 
 
+class TestTheStaticGateCountsTheCalendarWindow(unittest.TestCase):
+    """The static gate judges a retirement by the runtime roster's own rule
+    (``Deprecation.window_expired``, BACKLOG 2026-09-19): due once the version
+    reaches ``remove_in`` AND the notice's ``since`` is
+    ``Deprecation.MIN_WINDOW_DAYS`` old. Counted in versions alone, seven
+    releases in two weeks retired names 15 days after their first warning --
+    and a gate that kept the version rule would fail ``--check`` on a name the
+    roster still holds."""
+
+    def setUp(self):
+        if not g._MIN_WINDOW_DAYS:
+            self.skipTest("pythontk sibling predates the calendar window")
+        self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name)
+
+    def _write_pkg(self, version: str, decorator: str, name: str = "pythontk") -> Path:
+        pkg = self.root / name
+        (pkg / name).mkdir(parents=True, exist_ok=True)
+        (pkg / name / "__init__.py").write_text(
+            f'"""Root."""\n\n__version__ = "{version}"\n', encoding="utf-8"
+        )
+        (pkg / name / "mod.py").write_text(
+            '"""Mod."""\n\n\nclass Widget:\n    """A widget."""\n\n'
+            f"    {decorator}\n"
+            "    def whirl(self, **kwargs):\n"
+            '        """Old."""\n',
+            encoding="utf-8",
+        )
+        g._PARSED.clear()
+        return pkg
+
+    def test_a_symbol_due_by_version_is_held_until_its_window_closes(self):
+        pkg = self._write_pkg(
+            "0.18.0",
+            "@Deprecation.symbol('Widget.spin', remove_in='0.18.0', since='2026-09-04')",
+        )
+        rows = g.deprecations(g.walk_package(pkg, self.root))
+        self.assertEqual(rows, [("mod.py", "Widget.whirl", "0.18.0", "2026-09-04")])
+        self.assertEqual(g._expired(rows, "0.18.0", datetime.date(2026, 9, 19)), [])
+        self.assertEqual(g._expired(rows, "0.18.0", datetime.date(2026, 10, 4)), rows)
+        self.assertEqual(g._expired(rows, "0.17.9", datetime.date(2030, 1, 1)), [])
+
+    def test_a_retired_keyword_reads_its_since_too(self):
+        pkg = self._write_pkg(
+            "0.18.0",
+            "@Deprecation.parameter('old', remove_in='0.18.0', since='2026-09-04')",
+        )
+        rows = g.retired_forms(pkg, "pythontk")
+        self.assertEqual([r[2:] for r in rows], [("0.18.0", "2026-09-04")])
+        self.assertEqual(g._expired(rows, "0.18.0", datetime.date(2026, 9, 19)), [])
+
+    def test_the_date_never_reaches_the_registry_sidecar(self):
+        """Carried beside the record, not in it: a new field would churn every
+        committed ``API_REGISTRY.json`` for a value only the gate reads."""
+        pkg = self._write_pkg(
+            "0.18.0",
+            "@Deprecation.symbol('Widget.spin', remove_in='0.18.0', since='2026-09-04')",
+        )
+        member = g.walk_package(pkg, self.root).modules[0].classes[0].members[0]
+        self.assertEqual(member.since, "2026-09-04")
+        self.assertNotIn("since", asdict(member))
+
+    def test_check_passes_a_held_name_and_fails_an_expired_one(self):
+        """End to end through ``--check``: dates relative to today, so the
+        verdicts never flip with the calendar."""
+        today = datetime.date.today()
+        cases = {
+            today.isoformat(): (0, "**HELD**"),
+            (today - datetime.timedelta(days=400)).isoformat(): (1, "**EXPIRED**"),
+        }
+        for since, (want_rc, mark) in cases.items():
+            with self.subTest(since=since):
+                pkg = self._write_pkg(
+                    "0.18.0",
+                    f"@Deprecation.symbol('Widget.spin', remove_in='0.18.0', "
+                    f"since='{since}')",
+                )
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    g.regenerate(["pythontk"], repo_root=self.root, check_only=False)
+                    rc = g.regenerate(["pythontk"], repo_root=self.root, check_only=True)
+                changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
+                self.assertEqual(rc, want_rc, out.getvalue() + err.getvalue())
+                self.assertIn(f"- {mark} `mod.py::Widget.whirl`", changes)
+
+    def test_a_since_the_rule_refuses_is_judged_by_version_not_skipped(self):
+        """A ``since`` the rule cannot read (the runtime refuses that notice at
+        construction) degrades to the version rule. Skipped instead, its row
+        could never be reported, however far past ``remove_in`` the version
+        moved -- and a body-level ``Deprecation.warn`` only meets the runtime
+        check when its branch runs."""
+        rows = [("mod.py", "Widget.whirl", "0.18.0", "2026-9-4")]
+        late = datetime.date(2030, 1, 1)
+        self.assertEqual(g._expired(rows, "0.18.0", late), rows)
+        self.assertEqual(g._expired(rows, "0.17.9", late), [])
+
+    def test_a_retirement_naming_no_since_is_said_on_stderr(self):
+        """pythontk's own suite requires ``since``; for every other package the
+        walk is the one place an undated notice -- judged by version alone, the
+        rule that retired names 15 days after their first warning -- is named.
+        Advisory only: the version half of the gate still holds it."""
+        for decorator, named in (
+            ("@Deprecation.symbol('Widget.spin', remove_in='0.18.0')", True),
+            ("@Deprecation.parameter('old', remove_in='0.18.0')", True),
+            (
+                "@Deprecation.symbol('Widget.spin', remove_in='0.18.0', "
+                "since='2026-09-04')",
+                False,
+            ),
+        ):
+            with self.subTest(decorator=decorator):
+                self._write_pkg("0.17.0", decorator)
+                err = io.StringIO()
+                with contextlib.redirect_stdout(io.StringIO()):
+                    with contextlib.redirect_stderr(err):
+                        g.regenerate(["pythontk"], repo_root=self.root, check_only=True)
+                said = err.getvalue()
+                self.assertEqual("naming no since=" in said, named, said)
+                if named:
+                    self.assertIn("mod.py::", said)
+
+
 class TestDeprecationExpiryGate(unittest.TestCase):
     """The one-release alias window, enforced instead of remembered.
 
@@ -1694,7 +1818,8 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         self._run(check_only=False)
         rc, text = self._run(check_only=True)
         self.assertEqual(1, rc)
-        self.assertEqual(1, text.count("Deprecation.warn('Owner.go(old=)')"), text)
+        overdue = "expired: pythontk/kw.py::Deprecation.warn('Owner.go(old=)')"
+        self.assertEqual(1, text.count(overdue), text)
         self.assertIn("was due in 0.12.0", text)
 
     def test_an_unreadable_remove_in_warns_instead_of_passing_silently(self):

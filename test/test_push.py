@@ -1327,11 +1327,12 @@ class TestPushScriptRegressions(unittest.TestCase):
 
     def test_m3trik_first_guard_blocks_release_on_scripts_drift(self):
         """A Strict+Merge release must refuse to run while m3trik/scripts
-        differs from origin/main. The publish-triggered refresh-api-registry
-        bot regenerates from m3trik@main, so local tooling drift means the
-        bot force-pushes OLD-generator registries over the ones this release
-        just produced (measured 2026-08-01: mayatk -495 / blendertk -234
-        lines and a full re-release cycle)."""
+        differs from origin/main. Each package's release PR checks its
+        registry with m3trik@main's generator (``generate_api_registry.py
+        <pkg> --check``), so a registry built by newer local tooling fails
+        that check until m3trik lands first (before 2026-08-23 the refresh bot
+        also force-pushed OLD-generator registries over the release's own:
+        mayatk -495 / blendertk -234 lines, a full re-release cycle)."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])

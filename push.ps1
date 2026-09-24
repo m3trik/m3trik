@@ -2366,12 +2366,16 @@ if ($reposToProcess.Count -gt 0) {
 }
 
 # ------------------------------------------------------------------------------------------------
-# m3trik-first guard (Strict+Merge releases only). Each package's publish.yml dispatches
-# m3trik's refresh-api-registry.yml, which checks out m3trik@MAIN and force-pushes regenerated
-# registries back to every package's dev. Releasing while local m3trik/scripts differs from
-# origin/main means the bot regenerates with the OLD tooling and silently reverts the
-# registries this release just produced (measured 2026-08-01: mayatk -495 / blendertk -234
-# lines, two failed parity-audit gates, a full re-release cycle). Push m3trik first.
+# m3trik-first guard (Strict+Merge releases only). Each package's release PR runs
+# `generate_api_registry.py <pkg> --check` against m3trik@MAIN, and publish.yml dispatches
+# refresh-api-registry.yml, which regenerates docs/API_SHADOWS.md from m3trik@main (since
+# 2026-08-23 that bot never pushes into a package repo). Releasing while local m3trik/scripts
+# differs from origin/main gates this release with the OLD tooling -- the 2026-08-01 incident
+# the guard was written for (registries reverted: mayatk -495 / blendertk -234 lines, two
+# failed parity-audit gates, a full re-release cycle). Push m3trik first.
+# Accepted cost (maintainer, 2026-09-23): when the same release changes a sibling surface
+# m3trik's OWN gates render, m3trik's CI (it clones the siblings' dev) reads red until the
+# sibling lands, then clears on a re-run -- ~40 min measured 2026-09-20, no repair needed.
 # Runs BEFORE the review gate: it is cheaper, and its remedy (push m3trik) precedes preflight.
 # ------------------------------------------------------------------------------------------------
 if ($Merge -and $Strict -and -not $SkipReview) {
@@ -2402,9 +2406,9 @@ if ($Merge -and $Strict -and -not $SkipReview) {
             Write-Header "m3trik-first guard"
             Write-Err "m3trik/scripts differs from origin/main (uncommitted, unpushed, or untracked changes)."
             Write-Host @"
-  The publish-triggered refresh-api-registry.yml runs the generator and gates from
-  m3trik@main. Releasing now would have the bot regenerate every package's registries
-  with the OLD tooling, force-pushing over what this release just produced.
+  Each package's release PR checks its registry with m3trik@main's generator, and the
+  publish-triggered refresh-api-registry.yml runs from m3trik@main. Releasing now would
+  gate this release with the OLD tooling.
   Fix: sync m3trik main first (pull, or commit and push), then re-run this same command.
   Emergency bypass: -SkipReview.
 "@ -ForegroundColor Yellow

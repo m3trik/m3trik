@@ -31,13 +31,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Finding` — mayatk, pythontk
 
-- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L82)
+- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L113)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L40)
 
 ### `HierarchyBaseline` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L35)
-- `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L36)
+- `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L51)
 - `pythontk` — [`HierarchyBaseline`](pythontk/core_utils/hierarchy_baseline.py#L40)
 
 ### `KeyStash` — blendertk, mayatk, pythontk

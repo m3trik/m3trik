@@ -25,7 +25,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L336)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L323)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L188)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
@@ -36,7 +36,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `HierarchyBaseline` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L35)
+- `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L46)
 - `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L51)
 - `pythontk` — [`HierarchyBaseline`](pythontk/core_utils/hierarchy_baseline.py#L40)
 
@@ -209,7 +209,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (204)
+## Intentional mayatk↔blendertk port parity (206)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -332,9 +332,11 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `RizomBridgeSlots`
 - `RizomUVBridge`
 - `ScaleKeys`
+- `SceneAnalyzer`
 - `SceneDataSidecar`
 - `SceneExporter`
 - `SceneExporterSlots`
+- `SceneInfoSection`
 - `SceneState`
 - `ScriptConsole`
 - `ScriptJobManager`

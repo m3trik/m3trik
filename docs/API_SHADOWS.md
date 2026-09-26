@@ -25,19 +25,19 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L323)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L336)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L188)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
 ### `Finding` — mayatk, pythontk
 
-- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L113)
+- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L82)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L40)
 
 ### `HierarchyBaseline` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L46)
-- `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L51)
+- `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L35)
+- `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L36)
 - `pythontk` — [`HierarchyBaseline`](pythontk/core_utils/hierarchy_baseline.py#L40)
 
 ### `KeyStash` — blendertk, mayatk, pythontk
@@ -192,7 +192,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
 - `tentacle` — [`register`](tentacle/tcl_blender.py#L2196)
-- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1959)
+- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1724)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 
@@ -209,7 +209,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (206)
+## Intentional mayatk↔blendertk port parity (204)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -332,11 +332,9 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `RizomBridgeSlots`
 - `RizomUVBridge`
 - `ScaleKeys`
-- `SceneAnalyzer`
 - `SceneDataSidecar`
 - `SceneExporter`
 - `SceneExporterSlots`
-- `SceneInfoSection`
 - `SceneState`
 - `ScriptConsole`
 - `ScriptJobManager`

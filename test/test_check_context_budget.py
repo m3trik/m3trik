@@ -152,6 +152,15 @@ class TestClaudeAdvisoryCap(unittest.TestCase):
         self.assertGreater(guard.CLAUDE_WARN_ROOT, guard.CLAUDE_WARN)
         self.assertLess(guard.CLAUDE_WARN_ROOT, guard.CLAUDE_FAIL)
 
+    def test_a_crlf_checkout_is_measured_as_its_blob(self):
+        """Regression: with core.autocrlf the working copy gains a CR per line, so
+        the local gate read m3trik/scripts/CLAUDE.md at 6,177 B (over the 6,144 B
+        cap) while CI's LF checkout -- the blob -- read 6,138 B."""
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "CLAUDE.md"
+            path.write_bytes(b"# t\r\n\r\nline\r\n")
+            self.assertEqual(guard._blob_size(path), len(b"# t\n\nline\n"))
+
 
 class TestNavDeps(unittest.TestCase):
     """The hand-written `**Deps**:` Nav segment must name every ecosystem package
@@ -239,6 +248,14 @@ class TestDefaultMemoryDir(unittest.TestCase):
             with patch.object(guard, "REPO_ROOT", Path("o:/Cloud/Code/_scripts")):
                 got = guard._default_memory_dir()
         self.assertEqual(got.parent.name.lower(), "o--cloud-code--scripts")
+
+    def test_every_non_alphanumeric_folds_like_claude_code(self):
+        """Claude Code folds EVERY non-alphanumeric, so a Linux home with a dot
+        or a space in it still lands on the real folder."""
+        with patch.dict(os.environ, {"CLAUDE_MEMORY_DIR": ""}, clear=False):
+            with patch.object(guard, "REPO_ROOT", Path("/home/me/my.code dir/_scripts")):
+                got = guard._default_memory_dir()
+        self.assertEqual(got.parent.name, "-home-me-my-code-dir--scripts")
 
     def test_env_override_wins(self):
         with patch.dict(os.environ, {"CLAUDE_MEMORY_DIR": r"C:\elsewhere\mem"}, clear=False):

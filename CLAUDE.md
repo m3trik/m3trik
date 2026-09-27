@@ -50,7 +50,7 @@ Bypasses: `-SkipTestsReceipt` waives the `tests` half alone, printing a loud ban
 ## Cross-repo standards (this repo owns them)
 
 - [docs/TEST_BADGE_STANDARD.md](docs/TEST_BADGE_STANDARD.md) — README **Tests** badges count *individual test cases* (never suites/modules/categories), skips excluded. One writer: `ptk.StatusBadge`. Read before touching any `test/run_tests.py` or a CI badge step.
-- [docs/CODE_STANDARD.md](docs/CODE_STANDARD.md) — the long form of the root one-line code rules (formatter, docstrings, encapsulation scope, deprecation, vendoring, performance, hygiene).
+- [docs/CODE_STANDARD.md](docs/CODE_STANDARD.md) — the long form of the root one-line code rules (formatter, docstrings, layout + architecture, encapsulation scope, deprecation, vendoring, performance, hygiene).
 - [docs/DOCS_STANDARD.md](docs/DOCS_STANDARD.md) · [docs/CONTEXT_BUDGET.md](docs/CONTEXT_BUDGET.md) — markdown wiring + instruction-surface size caps.
 
 See [CHANGELOG.md](CHANGELOG.md) for history.

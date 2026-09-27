@@ -17,6 +17,10 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+#: Windows PowerShell where it exists (the release runs under 5.1), else PowerShell 7
+#: (`pwsh`) -- how push.ps1 runs off Windows.
+POWERSHELL = shutil.which("powershell") or shutil.which("pwsh") or "powershell"
 M3TRIK_DIR = ROOT / "m3trik"
 PACKAGES = ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"]
 DUMMY_VERSIONS = ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0"]
@@ -97,7 +101,7 @@ $global:verdict = @{{ bump = 'minor'; reasons = @('x') }}
     def setUpClass(cls):
         result = subprocess.run(
             [
-                "powershell",
+                POWERSHELL,
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",
@@ -152,6 +156,61 @@ $global:verdict = @{{ bump = 'minor'; reasons = @('x') }}
         self._assert("unparseable_published", True)
 
 
+@unittest.skipUnless(os.name == "nt", "the stub interpreter is a .cmd")
+class TestBuildJobsReachPython(unittest.TestCase):
+    """`Test-Build` runs `python -m build` and `twine check` in `Start-Job`,
+    another PowerShell process: common.ps1's script-scope `$PYTHON` is not
+    there, so `& $PYTHON` inside the job was `& $null` -- it threw, printed
+    nothing, the empty build output passed the error scan, and every -Strict
+    release then failed at "Twine validation failed" having built nothing
+    (every other test here passes -SkipBuild). The real function runs against
+    a stub interpreter that announces itself; its line must come back."""
+
+    HARNESS = r"""
+$ErrorActionPreference = 'Continue'
+. '{common}'
+$PYTHON = '{stub}'
+$errs = $null; $toks = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile('{script}', [ref]$toks, [ref]$errs)
+if ($errs) {{ throw "push.ps1 does not parse" }}
+$f = $ast.FindAll({{ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $x.Name -eq 'Test-Build' }}, $true)[0]
+Invoke-Expression $f.Extent.Text
+"RESULT:returned=$(Test-Build 'stub_pkg' '{repo}')"
+"""
+
+    def test_the_build_job_runs_the_resolved_interpreter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = Path(tmp) / "stub_python.cmd"
+            stub.write_text(
+                "@echo off\r\necho stub-python error: ran with %*\r\nexit /b 1\r\n",
+                encoding="ascii",
+            )
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            result = subprocess.run(
+                [
+                    POWERSHELL,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    self.HARNESS.format(
+                        script=(M3TRIK_DIR / "push.ps1").as_posix(),
+                        common=(M3TRIK_DIR / "common.ps1").as_posix(),
+                        stub=stub.as_posix(),
+                        repo=repo.as_posix(),
+                    ),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=240,
+            )
+        out = result.stdout + result.stderr
+        self.assertIn("stub-python error: ran with -m build --wheel", out, out)
+        self.assertIn("Build failed!", out, out)
+        self.assertIn("RESULT:returned=False", out, out)
+
+
 class TestPushScript(unittest.TestCase):
     """Tests for push.ps1"""
 
@@ -179,7 +238,7 @@ class TestPushScript(unittest.TestCase):
 
             result = subprocess.run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -325,7 +384,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             # Intentionally scrambled input order
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -388,7 +447,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -434,7 +493,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -752,7 +811,7 @@ class TestPushScriptRegressions(unittest.TestCase):
 
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -804,7 +863,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -855,7 +914,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -904,7 +963,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -952,7 +1011,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -994,7 +1053,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             script = M3TRIK_DIR / "push.ps1"
             result = self._run(
                 [
-                    "powershell",
+                    POWERSHELL,
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -1061,7 +1120,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             ):
                 result = self._run(
                     [
-                        "powershell",
+                        POWERSHELL,
                         "-ExecutionPolicy",
                         "Bypass",
                         "-NoProfile",
@@ -1107,7 +1166,7 @@ class TestPushScriptRegressions(unittest.TestCase):
 
             script = M3TRIK_DIR / "push.ps1"
             base = [
-                "powershell",
+                POWERSHELL,
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
@@ -1366,7 +1425,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             gen.write_text("VERSION = 2\n", encoding="utf-8")
 
             release = [
-                "powershell",
+                POWERSHELL,
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
@@ -1410,7 +1469,7 @@ class TestPushScriptRegressions(unittest.TestCase):
     def _push_cmd(self, root: Path, *extra):
         """The `powershell -File push.ps1 -Root <root>` prefix every run shares."""
         return [
-            "powershell",
+            POWERSHELL,
             "-ExecutionPolicy",
             "Bypass",
             "-File",
@@ -1624,7 +1683,7 @@ class TestPushScriptRegressions(unittest.TestCase):
         )
         return self._run(
             [
-                "powershell",
+                POWERSHELL,
                 "-NoProfile",
                 "-NonInteractive",
                 "-ExecutionPolicy",

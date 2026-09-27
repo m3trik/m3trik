@@ -78,6 +78,43 @@ class TestComputeDrift(unittest.TestCase):
         self.assertEqual(v._member_kinds(surface), {"C": {"a": "method"}})
 
 
+class TestPrivateBaseRecords(unittest.TestCase):
+    """The runtime side follows private bases exactly as the generator does."""
+
+    @staticmethod
+    def _cls(name, module, bases=(), **members):
+        return type(name, bases, dict(members, __module__=module))
+
+    def test_a_private_mixin_in_a_sibling_module_is_own_surface(self):
+        """``MeshConvert(_Fbx2GltfMixin, ...)`` with each mixin in its own
+        ``_<job>.py``: the generator documents the mixin's members on the facade,
+        so the runtime side must too, or every one reads MISSING at runtime."""
+        from pythontk import HelpMixin
+
+        def job(self):
+            """A job."""
+
+        def own(self):
+            """Own."""
+
+        mixin = self._cls("_JobMixin", "pkg.feature._job", job=job)
+        facade = self._cls("Facade", "pkg.feature._facade", (mixin, HelpMixin), own=own)
+        names = {r.name for r in v._own_and_private_base_records(facade)}
+        self.assertEqual(names & {"job", "own"}, {"job", "own"})
+
+    def test_a_private_base_from_another_package_is_not(self):
+        """Another package's class is documented by that package, never pulled up."""
+        from pythontk import HelpMixin
+
+        def foreign(self):
+            """Foreign."""
+
+        mixin = self._cls("_Foreign", "otherpkg.mod", foreign=foreign)
+        facade = self._cls("Facade", "pkg.mod", (mixin, HelpMixin))
+        names = {r.name for r in v._own_and_private_base_records(facade)}
+        self.assertNotIn("foreign", names)
+
+
 class TestPythontkIntegration(unittest.TestCase):
     def test_pythontk_runtime_matches_static(self):
         """The canonical zero-drift case: pythontk has no metaclass magic, so its

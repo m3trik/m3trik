@@ -61,9 +61,9 @@ TOPIC_WARN = 20_480  # advisory: split / compress oversized topic files
 def _default_memory_dir() -> Path:
     """The harness's auto-memory directory for THIS workspace.
 
-    Claude Code names a project directory after the workspace path with the
-    drive colon, the path separators and underscores all folded to ``-``
-    (``c:\\work\\my_repo`` -> ``c--work-my-repo``), so derive it from
+    Claude Code names a project directory after the workspace path with every
+    non-alphanumeric (drive colon, separators, underscores, dots, spaces)
+    folded to ``-`` (``c:\\work\\my_repo`` -> ``c--work-my-repo``), so derive it from
     :data:`REPO_ROOT` instead of hardcoding one machine's path into a public
     repo. ``CLAUDE_MEMORY_DIR`` overrides for a non-standard layout; a directory
     that does not exist is reported by :func:`check_memory` as a WARN, never a
@@ -72,7 +72,7 @@ def _default_memory_dir() -> Path:
     override = os.environ.get("CLAUDE_MEMORY_DIR")
     if override:
         return Path(override)
-    slug = re.sub(r"[:\\/_]", "-", str(REPO_ROOT))
+    slug = re.sub(r"[^A-Za-z0-9]", "-", str(REPO_ROOT))
     return Path.home() / ".claude" / "projects" / slug / "memory"
 
 
@@ -228,10 +228,20 @@ def _claude_advisory_cap(path: Path) -> int:
     return CLAUDE_WARN_ROOT if path.resolve() == (REPO_ROOT / "CLAUDE.md").resolve() else CLAUDE_WARN
 
 
+def _blob_size(path: Path) -> int:
+    """*path*'s size as git stores it (LF), not as a CRLF checkout holds it.
+
+    ``core.autocrlf`` adds a CR per line to the working copy, so a raw size read
+    locally disagrees with CI's LF checkout by the line count -- a file under a
+    cap there warned here.
+    """
+    return len(path.read_bytes().replace(b"\r\n", b"\n"))
+
+
 def check_claude_sizes(report: Report) -> None:
     files = _claude_files()
     for p in files:
-        sz = p.stat().st_size
+        sz = _blob_size(p)
         rel = p.relative_to(REPO_ROOT).as_posix()
         warn_cap = _claude_advisory_cap(p)
         if sz > CLAUDE_FAIL:

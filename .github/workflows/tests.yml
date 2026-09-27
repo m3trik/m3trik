@@ -191,6 +191,34 @@ jobs:
       - name: DCC controller twins in sync
         run: python m3trik/scripts/check_dcc_twins.py --check
 
+      # extapps' vendored-engine guard (Marmoset engine x3 across extapps /
+      # mayatk / blendertk, the mayatk<->blendertk Substance and curtain-drape
+      # pairs). It is a pytest module, and extapps' own CI checks out extapps
+      # alone, so every sibling comparison there skipTests: until 2026-09-26 it
+      # ran in NO workflow -- the gap the comment above describes, left open
+      # for this one guard (the copies drifted 2026-09-09 and only a local run
+      # noticed). `import extapps` is lazy (numpy/PIL only) and extapps'
+      # pyproject puts the package on sys.path, so this job's installs suffice.
+      # A skip HERE can only mean a sibling path broke, so it fails the step.
+      # Measured green 2026-09-26 with this exact invocation, no skips (the count
+      # grows with every guarded copy, so none is pinned here).
+      - name: Vendored copies in sync - extapps engines (test_vendor_sync)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONPATH: pythontk:uitk
+        run: |
+          set +e
+          python -m pytest extapps/test/test_vendor_sync.py -q -rs -p no:cacheprovider 2>&1 | tee vendor_sync_out.txt
+          RC=${PIPESTATUS[0]}
+          if [ "$RC" -ne 0 ]; then
+            echo "::error::test_vendor_sync exited $RC"
+            exit 1
+          fi
+          if grep -qi "skipped" vendor_sync_out.txt; then
+            echo "::error::test_vendor_sync skipped a comparison -- a sibling path is missing"
+            exit 1
+          fi
+
       # Scene records: ONE declaration (pythontk SceneRecords) and two things
       # derived from it outside pythontk -- the records table in mayatk's
       # owner doc, and the channel list unitytk's importers read. Both were

@@ -2,7 +2,7 @@
 # coding=utf-8
 """Derive everything downstream of ``ptk.SceneRecords`` -- and fail when it drifts.
 
-``pythontk.core_utils.scene_records.SceneRecords`` is the one declaration of
+``pythontk.SceneRecords`` is the one declaration of
 every tool-authored scene record (key, scope, version, kind, owner, readers,
 description).  Two things outside pythontk used to restate it by hand and
 drifted within weeks (the owner doc's channel tables were missing seven
@@ -15,10 +15,12 @@ records when measured 2026-09-18):
    refused rather than guessed.
 2. **The Unity importers' channel list.**  ``unitytk``'s
    ``UnitytkSettings.cs`` names one import channel per record it reads
-   (``Audio, // "audio_manifest" channel``).  That set must equal the
-   deliverable records declared with the ``"unity"`` consumer -- a record
-   Unity reads but pythontk does not declare (or the reverse) is a contract
-   nobody owns.
+   (``Audio, // "audio_manifest" channel -> AudioEventController``).  That
+   set must equal the deliverable records declared with the ``"unity"``
+   consumer -- a record Unity reads but pythontk does not declare (or the
+   reverse) is a contract nobody owns -- and each named importer's
+   ``SUPPORTED_*VERSION`` must equal its record's declared version: Unity
+   refuses a newer payload at import, which no DCC-free check would see.
 3. **The two DCC producer tables.**  ``mtk.FbxUtils.PRODUCERS`` and
    ``btk.FbxUtils.PRODUCERS`` must name the same records, except the ones
    :data:`PRODUCER_DIVERGENCES` ledgers with a reason (read from source by
@@ -26,7 +28,7 @@ records when measured 2026-09-18):
 
 Usage:
     python sync_scene_records.py            # rewrite the doc region (idempotent)
-    python sync_scene_records.py --check    # exit 1 on doc drift or a channel mismatch
+    python sync_scene_records.py --check    # exit 1 on doc drift or a channel/version mismatch
 """
 
 import argparse
@@ -52,7 +54,11 @@ PRODUCER_DIVERGENCES = {
 }
 
 #: ``Audio,      // "audio_manifest" channel -> AudioEventController``
-_UNITY_CHANNEL = re.compile(r'//\s*"(?P<key>\w+)"\s+channel\b')
+_UNITY_CHANNEL = re.compile(
+    r'//\s*"(?P<key>\w+)"\s+channel\b(?:[^\w\n]+(?P<reader>\w+))?'
+)
+#: ``const int SUPPORTED_SCHEMA_VERSION = 2;`` -- one per importer.
+_UNITY_SUPPORTED = re.compile(r"\bconst\s+int\s+SUPPORTED_\w*VERSION\s*=\s*(\d+)")
 
 
 def _records():
@@ -60,7 +66,7 @@ def _records():
     checkout = str(REPO_ROOT / "pythontk")
     if checkout not in sys.path:
         sys.path.insert(0, checkout)
-    from pythontk.core_utils.scene_records import SceneRecords
+    from pythontk import SceneRecords
 
     return SceneRecords
 
@@ -121,15 +127,44 @@ def splice(text: str, body: str) -> str:
     return text[: start + len(BEGIN)] + "\n" + body + "\n" + text[end:]
 
 
+def unity_reader_version(reader):
+    """The version *reader*'s importer accepts (its one ``SUPPORTED_*VERSION``
+    in ``templates/<reader>.cs``), or ``None`` when that cannot be read."""
+    path = UNITY_SETTINGS.parent / f"{reader}.cs" if reader else None
+    if path is None or not path.is_file():
+        return None
+    found = _UNITY_SUPPORTED.findall(path.read_text(encoding="utf-8"))
+    return int(found[0]) if len(found) == 1 else None
+
+
 def unity_mismatch(records=None) -> dict:
-    """``{"undeclared": [...], "unread": [...]}`` -- channels Unity reads that no
-    record declares for it, and records declared for Unity it does not read."""
+    """``{"undeclared": [...], "unread": [...], "version": [...]}`` -- channels
+    Unity reads that no record declares for it, records declared for Unity it
+    does not read, and channels whose importer accepts another version than
+    the record declares (as lines)."""
     records = records or _records()
-    read = set(_UNITY_CHANNEL.findall(UNITY_SETTINGS.read_text(encoding="utf-8")))
-    declared = {s.key for s in records.deliverable() if "unity" in s.consumers}
+    readers = {
+        m["key"]: m["reader"]
+        for m in _UNITY_CHANNEL.finditer(UNITY_SETTINGS.read_text(encoding="utf-8"))
+    }
+    specs = {s.key: s for s in records.deliverable() if "unity" in s.consumers}
+    version = []
+    for key in sorted(readers.keys() & specs.keys()):
+        reader, declared = readers[key], specs[key].version
+        accepts = unity_reader_version(reader)
+        if accepts is None:
+            version.append(
+                f"{key}: no single SUPPORTED_*VERSION in the importer its channel"
+                f" line names ({reader or 'none'})"
+            )
+        elif accepts != declared:
+            version.append(
+                f"{key}: declared v{declared}, {reader}.cs accepts v{accepts}"
+            )
     return {
-        "undeclared": sorted(read - declared),
-        "unread": sorted(declared - read),
+        "undeclared": sorted(readers.keys() - specs.keys()),
+        "unread": sorted(specs.keys() - readers.keys()),
+        "version": version,
     }
 
 

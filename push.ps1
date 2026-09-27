@@ -301,7 +301,7 @@ function Test-PublicHygiene {
     }
     # Checked first: a python that cannot start leaves $LASTEXITCODE as the previous native
     # command left it, and a stale 0 would pass a check that never ran.
-    if (-not (Get-Command python -CommandType Application -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command $PYTHON -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-Err "Public hygiene gate cannot run: no python on PATH"
         return $false
     }
@@ -309,7 +309,7 @@ function Test-PublicHygiene {
     # too), and a private repo may name clients.
     $cliArgs = @($Script, "--workspace", $Root, "--public-only")
     if ($Denylist) { $cliArgs += @("--denylist", $Denylist) }
-    $report = & python @cliArgs @Names 2>&1
+    $report = & $PYTHON @cliArgs @Names 2>&1
     $code = $LASTEXITCODE
     foreach ($line in @($report)) { Write-Host "  $line" }
     if ($code -eq 0) { return $true }
@@ -741,7 +741,7 @@ function Get-RequiredBump {
     # writes its advisories to stderr (an unreadable `remove_in`, a missing
     # `__version__`), and folding those into stdout would put prose in front of
     # the JSON and fail the parse.
-    $raw = python $gen $PackageName --semver 2>$null
+    $raw = & $PYTHON $gen $PackageName --semver 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
     try { $parsed = ($raw -join "`n") | ConvertFrom-Json } catch { return $null }
     $row = @($parsed)[0]
@@ -938,11 +938,13 @@ function Test-Build {
             $eggInfo = "$PackageName.egg-info"
             if (Test-Path $eggInfo) { Remove-Item -Recurse -Force $eggInfo -ErrorAction SilentlyContinue }
 
+            # A job is another process: $PYTHON (common.ps1's script scope) is not
+            # there, and `& $null` throws -- it must travel as an argument.
             $buildJob = Start-Job -ScriptBlock {
-                param($path)
+                param($path, $python)
                 Set-Location $path
-                python -m build --wheel 2>&1
-            } -ArgumentList $RepoPath
+                & $python -m build --wheel 2>&1
+            } -ArgumentList $RepoPath, $PYTHON
 
             Wait-Job $buildJob -Timeout 60 | Out-Null
             if ($buildJob.State -eq 'Running') {
@@ -984,10 +986,10 @@ function Test-Build {
         
         # Run twine check with timeout (30 seconds)
         $twineJob = Start-Job -ScriptBlock {
-            param($path)
+            param($path, $python)
             Set-Location $path
-            python -m twine check dist/* 2>&1
-        } -ArgumentList $RepoPath
+            & $python -m twine check dist/* 2>&1
+        } -ArgumentList $RepoPath, $PYTHON
         
         Wait-Job $twineJob -Timeout 30 | Out-Null
         if ($twineJob.State -eq 'Running') {
@@ -2013,7 +2015,7 @@ function Test-WorkspaceRootHygiene {
     $gate = Join-Path $PSScriptRoot "scripts\check_temp_artifacts.py"
     if (-not (Test-Path $gate)) { return }
 
-    $out = python $gate --workspace-root
+    $out = & $PYTHON $gate --workspace-root
     if ($LASTEXITCODE -eq 0) { return }
 
     Write-Step "Workspace-root hygiene: residue found outside every repo (not blocking this release)"
@@ -2107,7 +2109,7 @@ function Invoke-PreparePhase {
         # cross-package shadow report — which lives in m3trik's tree — untouched.
         $gen = Join-Path $M3TRIK_SCRIPTS "generate_api_registry.py"
         if (Test-Path $gen) {
-            $genOut = python $gen $PackageName --no-shadows 2>&1
+            $genOut = & $PYTHON $gen $PackageName --no-shadows 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Write-Err "API registry regeneration failed for $PackageName"
                 if ($genOut) { Write-Host "    $genOut" -ForegroundColor DarkGray }
@@ -2150,7 +2152,7 @@ function Invoke-PreparePhase {
             # rather than at stdout (stdout here is the one "Wrote ..." line).
             $sweep = Join-Path $M3TRIK_SCRIPTS "compare_panel_surface.py"
             if (Test-Path $sweep) {
-                python $sweep --all --write | Out-Null
+                & $PYTHON $sweep --all --write | Out-Null
                 if ($LASTEXITCODE -ne 0) {
                     Write-Err "Parity sweep FAILS for $PackageName (untriaged deltas, or a customwidgets lint)."
                     Write-Err "The rows are under '>> UNTRIAGED' in docs/PARITY_SURFACE.md, just rewritten."
@@ -2160,7 +2162,7 @@ function Invoke-PreparePhase {
             }
             $audit = Join-Path $M3TRIK_SCRIPTS "generate_parity_audit.py"
             if (Test-Path $audit) {
-                $auditOut = python $audit 2>&1
+                $auditOut = & $PYTHON $audit 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     Write-Err "Parity audit regeneration failed for $PackageName"
                     if ($auditOut) { ($auditOut | Select-Object -Last 5) | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray } }

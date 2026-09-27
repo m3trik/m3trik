@@ -162,6 +162,32 @@ class TestPrivateBaseMembersResolved(unittest.TestCase):
         mod = self._walk(src)
         return {(m.name, m.kind) for m in mod.classes[cls_index].members}
 
+    def test_an_aliased_base_is_recorded_under_its_real_name(self):
+        """``from pythontk import ShotSequencer as _Core`` then
+        ``class ShotSequencer(_Core)``: recorded as ``_Core``, the hoisted
+        members could never be matched to the sibling package's class, and every
+        one of them read as a removal."""
+        mod = self._walk(
+            "from pythontk import ShotSequencer as _ShotSequencerCore\n"
+            "from ._local import _Mixin as _Renamed\n"
+            "class ShotSequencer(_ShotSequencerCore, _Renamed):\n"
+            "    def own(self):\n"
+            "        pass\n"
+        )
+        self.assertEqual(mod.classes[0].bases, ["pythontk.ShotSequencer", "_Renamed"])
+
+    def test_a_module_alias_base_is_recorded_under_its_package(self):
+        """``import pythontk as ptk`` + ``class X(ptk.SceneExporterBase)``: the
+        base is recorded package-qualified, so the diff can tell pythontk's
+        class from a same-named one in another sibling."""
+        mod = self._walk(
+            "import pythontk as ptk\n"
+            "class SceneExporter(ptk.SceneExporterBase):\n"
+            "    def own(self):\n"
+            "        pass\n"
+        )
+        self.assertEqual(mod.classes[0].bases, ["pythontk.SceneExporterBase"])
+
     def test_private_base_members_are_pulled_up(self):
         members = self._members(
             "class _Mixin:\n"
@@ -828,6 +854,105 @@ def _member(owner: str, name: str) -> "g.SymbolRecord":
     )
 
 
+class TestModuleReexports(unittest.TestCase):
+    """What an OLD import path still serves, read off the source."""
+
+    def test_a_module_promoted_to_a_package_serves_its_lazy_exports(self):
+        """``rig_utils/tube_rig.py`` -> ``rig_utils/tube_rig/``: the import path
+        is unchanged and the package ``__init__`` publishes the names through
+        ``lazy_exports`` (CODE_STANDARD section 4), never a plain import."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            init = Path(td) / "rig_utils" / "tube_rig" / "__init__.py"
+            init.parent.mkdir(parents=True)
+            init.write_text(
+                "from pythontk.core_utils.module_resolver import lazy_exports\n"
+                "lazy_exports(\n"
+                "    globals(),\n"
+                '    {"_tube_rig": ("TubeRig",), "slots": ["RIG_MODES"], "one": "Single"},\n'
+                ")\n",
+                encoding="utf-8",
+            )
+            out = g.module_reexports(Path(td), ["rig_utils/tube_rig.py"])
+        self.assertLessEqual(
+            {"TubeRig", "RIG_MODES", "Single"}, out.get("rig_utils/tube_rig.py", set())
+        )
+
+    def test_a_deprecation_stub_does_not_hide_a_removal(self):
+        """An aliased move is still the break CODE_STANDARD section 5 prices at a
+        minor bump, and ``required_bump`` reads that off the Removed section: a
+        stub's keys must stay Removed (the alias is listed as retirement debt
+        beside them), in every ``<x>.Deprecation`` spelling. Counting them as
+        served would let an aliased move ship as a patch."""
+        files = {
+            "stub.py": (
+                "from pythontk.core_utils.deprecation import Deprecation\n"
+                "Deprecation.attributes(\n"
+                "    globals(),\n"
+                '    {"SEND_TO": "pkg.new.SEND_TO", "AppSpec": "pkg.new.AppSpec"},\n'
+                '    remove_in="0.13.0",\n'
+                ")\n"
+            ),
+            "aliased.py": (
+                "import pythontk as ptk\n"
+                'ptk.Deprecation.attributes(globals(), {"CHANNELS": "pkg.X.CHANNELS"}, '
+                'remove_in="0.13.0")\n'
+            ),
+            "private.py": (
+                "import pythontk as _ptk\n"
+                '_ptk.Deprecation.attributes(globals(), moved={"LEGACY": "pkg.X.L"}, '
+                'remove_in="0.13.0")\n'
+            ),
+            "elsewhere.py": (
+                "import sys\n"
+                "from pythontk import Deprecation\n"
+                'Deprecation.attributes(sys.modules["pkg.other"].__dict__, '
+                '{"NOT_HERE": "pkg.X.Y"}, remove_in="0.13.0")\n'
+            ),
+        }
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            for name, source in files.items():
+                (Path(td) / name).write_text(source, encoding="utf-8")
+            out = g.module_reexports(Path(td), list(files))
+        served = set().union(*out.values()) if out else set()
+        for name in ("SEND_TO", "AppSpec", "CHANNELS", "LEGACY", "NOT_HERE"):
+            self.assertNotIn(name, served)
+
+
+def _const(name: str) -> "g.SymbolRecord":
+    return g.SymbolRecord(
+        name=name, qualname=name, kind="constant", signature="", summary="", line=1
+    )
+
+
+class TestReexportedConstantIsMoved(unittest.TestCase):
+    """A constant its old module still serves is not a removal."""
+
+    def _prior(self, pkg):
+        return json.loads(json.dumps(asdict(pkg)))
+
+    def test_a_constant_the_module_still_serves_is_moved(self):
+        relpath = "anim_utils/_anim_utils.py"
+        before = _pkg("mayatk", [_mod(relpath, [])])
+        before.modules[0].constants = [_const("TIED_KEYS_ATTR")]
+        after = _pkg("mayatk", [_mod(relpath, [])])
+
+        md = g.emit_changes_markdown(
+            after, self._prior(before), reexports={relpath: {"TIED_KEYS_ATTR"}}
+        )
+        self.assertNotIn(
+            "## Removed", md, f"a re-exported constant read as removed:\n{md}"
+        )
+
+    def test_a_constant_nothing_serves_is_still_removed(self):
+        relpath = "anim_utils/_anim_utils.py"
+        before = _pkg("mayatk", [_mod(relpath, [])])
+        before.modules[0].constants = [_const("TIED_KEYS_ATTR")]
+        after = _pkg("mayatk", [_mod(relpath, [])])
+
+        md = g.emit_changes_markdown(after, self._prior(before), reexports={})
+        self.assertIn("## Removed", md)
+
+
 class TestHoistIsMovedNotRemoved(unittest.TestCase):
     """Hoisting a member onto a base must not read as a removal.
 
@@ -1055,6 +1180,61 @@ class TestACrossPackageHoistIsMoved(unittest.TestCase):
         self.assertIn("## Moved", md)
         self.assertIn("PlayblastExporter.export", md)
 
+    def test_a_same_named_sibling_package_base_resolves_its_members(self):
+        """``class ShotSequencer(pythontk.ShotSequencer)``: the base's bare name
+        is the subclass's own, so a same-module lookup found the class ITSELF,
+        the cycle guard returned nothing, and every hoisted member still read as
+        a removal."""
+        seq = _cls("ShotSequencer")
+        seq.members = [
+            _member("ShotSequencer", "slide_shot"),
+            _member("ShotSequencer", "move_content"),
+        ]
+        before = _pkg("mayatk", [_mod("anim_utils/_shot_sequencer.py", [seq])])
+
+        hoisted = g.ClassEntry(
+            name="ShotSequencer",
+            summary="",
+            line=1,
+            bases=["pythontk.ShotSequencer"],
+            members=[_member("ShotSequencer", "move_content")],
+        )
+        after = _pkg("mayatk", [_mod("anim_utils/_shot_sequencer.py", [hoisted])])
+
+        md = g.emit_changes_markdown(
+            after,
+            self._prior(before),
+            foreign_members={"ShotSequencer": {"slide_shot"}},
+        )
+        self.assertNotIn("## Removed", md, f"a same-named hoist read as removed:\n{md}")
+        self.assertIn("ShotSequencer.slide_shot", md)
+
+    def test_a_base_named_in_two_siblings_resolves_by_its_package(self):
+        """``ShotSequencer`` is defined by pythontk AND by blendertk, so the bare
+        name is ambiguous and dropped; the package-qualified base still resolves
+        mayatk's hoisted members to pythontk's class."""
+        seq = _cls("ShotSequencer")
+        seq.members = [
+            _member("ShotSequencer", "slide_shot"),
+            _member("ShotSequencer", "move_content"),
+        ]
+        before = _pkg("mayatk", [_mod("anim_utils/_shot_sequencer.py", [seq])])
+        hoisted = g.ClassEntry(
+            name="ShotSequencer",
+            summary="",
+            line=1,
+            bases=["pythontk.ShotSequencer"],
+            members=[_member("ShotSequencer", "move_content")],
+        )
+        after = _pkg("mayatk", [_mod("anim_utils/_shot_sequencer.py", [hoisted])])
+
+        md = g.emit_changes_markdown(
+            after,
+            self._prior(before),
+            foreign_members={"pythontk.ShotSequencer": {"slide_shot"}},
+        )
+        self.assertNotIn("## Removed", md, f"a qualified hoist read as removed:\n{md}")
+
     def test_a_class_the_module_still_re_exports_is_moved(self):
         """`from pythontk import ExportTarget` keeps the old path importable."""
         relpath = "anim_utils/playblast_exporter.py"
@@ -1092,6 +1272,47 @@ class TestACrossPackageHoistIsMoved(unittest.TestCase):
             "## Removed", md, f"a re-exported owner's member read as removed:\n{md}"
         )
         self.assertIn("CaptureResult.pattern", md)
+
+    def test_a_re_exported_owner_that_moved_within_the_package_resolves_here(self):
+        """``shot_sequencer_slots.py`` re-exports ``ShotSequencerController``,
+        which now lives in ``shot_sequencer_controller.py`` of the SAME package
+        and inherits ``tangent_from_handle`` from a sibling mixin. A sibling
+        package defines a same-named controller without that member, so asking
+        the foreign map alone read the hoist as a removal."""
+        old = "anim_utils/shots/shot_sequencer/shot_sequencer_slots.py"
+        ctrl = _cls("ShotSequencerController")
+        ctrl.members = [_member("ShotSequencerController", "tangent_from_handle")]
+        before = _pkg("mayatk", [_mod(old, [ctrl])])
+        mixin = _cls("KeyMenuMixin")
+        mixin.members = [_member("KeyMenuMixin", "tangent_from_handle")]
+        moved = g.ClassEntry(
+            name="ShotSequencerController",
+            summary="",
+            line=1,
+            bases=["KeyMenuMixin"],
+            members=[],
+        )
+        after = _pkg(
+            "mayatk",
+            [
+                _mod(old, []),
+                _mod("anim_utils/shots/shot_sequencer/key_menu.py", [mixin]),
+                _mod(
+                    "anim_utils/shots/shot_sequencer/shot_sequencer_controller.py",
+                    [moved],
+                ),
+            ],
+        )
+
+        md = g.emit_changes_markdown(
+            after,
+            self._prior(before),
+            foreign_members={"ShotSequencerController": {"place_dragged_handle"}},
+            reexports={old: {"ShotSequencerController"}},
+        )
+        self.assertNotIn(
+            "## Removed", md, f"an in-package hoist read as removed:\n{md}"
+        )
 
     def test_an_unlisted_sibling_name_is_still_removed(self):
         """The foreign map is a whitelist, not a blanket pardon."""

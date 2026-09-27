@@ -880,6 +880,14 @@ def _imported_private_classes(
     return found
 
 
+def _qualify_attribute_base(base: str, module_aliases: dict[str, str]) -> str:
+    """``ptk.Base`` -> ``pythontk.Base`` when ``ptk`` is an ``import ... as`` alias."""
+    head, sep, rest = base.partition(".")
+    if sep and head in module_aliases:
+        return f"{module_aliases[head]}{sep}{rest}"
+    return base
+
+
 def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
     """Parse one .py file. Return None if it has no public surface."""
     try:
@@ -893,6 +901,26 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
 
     summary = _first_sentence(ast.get_docstring(tree))
     relpath = path.relative_to(pkg_source_root).as_posix()
+    # ``from pythontk import ShotSequencer as _Core`` + ``class ShotSequencer(_Core)``:
+    # a base recorded as ``_Core`` could never be matched to the sibling package's
+    # class, so every member hoisted onto it read as a removal. Absolute imports
+    # only -- a relative alias names this package's own private class.
+    aliased_bases = {
+        alias.asname: f"{imp.module}.{alias.name}"
+        for imp in tree.body
+        if isinstance(imp, ast.ImportFrom) and imp.level == 0 and imp.module
+        for alias in imp.names
+        if alias.asname
+    }
+    # ``import pythontk as ptk`` + ``class X(ptk.Base)``: record ``pythontk.Base``,
+    # so the diff can tell pythontk's class from a same-named one elsewhere.
+    module_aliases = {
+        alias.asname: alias.name
+        for imp in tree.body
+        if isinstance(imp, ast.Import)
+        for alias in imp.names
+        if alias.asname
+    }
 
     funcs: list[SymbolRecord] = []
     classes: list[ClassEntry] = []
@@ -963,7 +991,9 @@ def _walk_module(path: Path, pkg_source_root: Path) -> ModuleEntry | None:
                 node, node.name, local_classes, constants=string_constants
             )
             bases = [
-                ast.unparse(b) if not isinstance(b, ast.Name) else b.id
+                _qualify_attribute_base(ast.unparse(b), module_aliases)
+                if not isinstance(b, ast.Name)
+                else aliased_bases.get(b.id, b.id)
                 for b in node.bases
             ]
             cls_deprecated, cls_remove_in = _deprecation_of(
@@ -1320,7 +1350,7 @@ def _class_index(
     for relpath, name, base_names, members in entries:
         key = (relpath, name)
         own.setdefault(key, set()).update(members)
-        bases.setdefault(key, []).extend(b.split(".")[-1] for b in base_names)
+        bases.setdefault(key, []).extend(base_names)
         by_name.setdefault(name, []).append(key)
 
     def walk(key: tuple[str, str], seen: set) -> set[str]:
@@ -1329,16 +1359,22 @@ def _class_index(
         seen.add(key)
         out = set(own.get(key, ()))
         relpath = key[0]
-        for base in bases.get(key, ()):
-            if (relpath, base) in own:
+        for full in bases.get(key, ()):
+            base = full.split(".")[-1]
+            if (relpath, base) in own and (relpath, base) != key:
                 target = (relpath, base)  # a sibling in the same module wins
             else:
-                candidates = by_name.get(base, ())
+                candidates = [c for c in by_name.get(base, ()) if c != key]
                 target = candidates[0] if len(candidates) == 1 else None
+            # A class is never its own base: ``class ShotSequencer(ptk.ShotSequencer)``
+            # names a same-named class in a sibling package, so it falls through.
             if target is not None:
                 out |= walk(target, seen)
             else:
-                out |= foreign.get(base, set())
+                # ``pythontk.ShotSequencer`` first: blendertk defines a
+                # ShotSequencer too, so the bare name is ambiguous across siblings.
+                qualified = f"{full.split('.')[0]}.{base}" if "." in full else None
+                out |= foreign.get(qualified, foreign.get(base, set()))
         return out
 
     return {key: walk(key, set()) for key in own}, by_name
@@ -1402,9 +1438,12 @@ def sibling_class_members(
             continue  # no readable sidecar: its bases simply stay unresolved
         resolved, _ = _class_index(_json_class_entries(data))
         for (_, cls_name), members in resolved.items():
-            if cls_name in seen and seen[cls_name] != members:
-                ambiguous.add(cls_name)
-            seen.setdefault(cls_name, set()).update(members)
+            # Bare (any sibling) and package-qualified (``pythontk.ShotSequencer``):
+            # a name two siblings define is ambiguous bare, never qualified.
+            for key in (cls_name, f"{name}.{cls_name}"):
+                if key in seen and seen[key] != members:
+                    ambiguous.add(key)
+                seen.setdefault(key, set()).update(members)
     for name in ambiguous:
         seen.pop(name, None)
     return seen
@@ -1421,12 +1460,24 @@ def module_reexports(
     definitions, not imports, so without this the re-export is invisible and a
     still-importable name reads as removed.
 
+    A module promoted to a package (``tube_rig.py`` -> ``tube_rig/``) keeps
+    its import path, so its ``__init__.py`` is read in its place, and the names
+    a ``lazy_exports`` call publishes count as served (CODE_STANDARD section 4:
+    a subpackage re-exports that way, never by a plain import).
+
+    The keys of a module-level ``Deprecation.attributes(globals(), {...})`` stub
+    do NOT count, on purpose: an aliased move is still the break CODE_STANDARD
+    section 5 prices at a minor bump, and ``required_bump`` reads that off the
+    Removed section (the retirement-debt section lists the alias beside it).
+
     Only the modules that actually lost a symbol are parsed, so this costs a
     handful of files rather than the whole tree.
     """
     out: dict[str, set[str]] = {}
     for relpath in relpaths:
         path = source_root / relpath
+        if not path.is_file() and path.suffix == ".py":
+            path = path.with_suffix("") / "__init__.py"
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except (OSError, SyntaxError):
@@ -1435,9 +1486,32 @@ def module_reexports(
         for node in tree.body:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 names.update(a.asname or a.name.split(".")[0] for a in node.names)
+            else:
+                names.update(_lazy_exported_names(node))
         if names:
             out[relpath] = names
     return out
+
+
+def _lazy_exported_names(node: ast.stmt) -> set[str]:
+    """The names a top-level ``lazy_exports(globals(), {...})`` publishes."""
+    call = node.value if isinstance(node, ast.Expr) else None
+    if not (
+        isinstance(call, ast.Call)
+        and getattr(call.func, "id", getattr(call.func, "attr", None)) == "lazy_exports"
+        and len(call.args) >= 2
+        and isinstance(call.args[1], ast.Dict)
+    ):
+        return set()
+    names: set[str] = set()
+    for value in call.args[1].values:
+        items = value.elts if isinstance(value, (ast.Tuple, ast.List)) else [value]
+        names.update(
+            item.value
+            for item in items
+            if isinstance(item, ast.Constant) and isinstance(item.value, str)
+        )
+    return names
 
 
 def _relpaths_losing_symbols(pkg: PackageData, prior_json: dict | None) -> set[str]:
@@ -1630,23 +1704,29 @@ def compute_api_delta(
         if len(parts) >= 2:
             owner, member = parts[-2], parts[-1]
             names = resolved.get((relpath, owner))
+            if names is None:
+                # The class left this module; follow it within the package
+                # when its name is unambiguous here.
+                candidates = by_name.get(owner, ())
+                if len(candidates) == 1:
+                    names = resolved[candidates[0]]
             if names is None and owner in reexports.get(relpath, ()):
-                # The owner moved out but the module still imports it, so the
+                # The module still imports it from a sibling package, so the
                 # old path resolves; ask the package that now defines it.
                 names = foreign_members.get(owner)
-            if names is None:
-                # The class left this module too; follow it only when its name
-                # is unambiguous package-wide.
-                candidates = by_name.get(owner, ())
-                names = resolved[candidates[0]] if len(candidates) == 1 else set()
-            gone = member not in names
+            gone = member not in (names or ())
         else:
             # A module-level class that turned up elsewhere in the package, or
-            # that this very module still re-exports. A module-level FUNCTION
-            # is never forgiven -- its import path really did change.
+            # a class or constant this very module still re-exports. A
+            # module-level FUNCTION is never forgiven -- its import path really
+            # did change.
+            kind = prior.get(key)
             gone = not (
-                prior.get(key) == "(class)"
-                and (symbol in reappeared or symbol in reexports.get(relpath, ()))
+                (kind == "(class)" and symbol in reappeared)
+                or (
+                    kind in ("(class)", "(constant)")
+                    and symbol in reexports.get(relpath, ())
+                )
             )
         (still_removed if gone else moved).append(key)
 

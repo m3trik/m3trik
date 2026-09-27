@@ -5,13 +5,15 @@
 The declaration is pythontk's; the owner doc's records table and unitytk's
 importer channel list are derived from it. These tests pin that the doc region
 exists and is current, that the Unity channels match the records declared for
-Unity (the same checks as ``--check``), and that the splice refuses a doc
+Unity and accept their declared versions (the same checks as ``--check``),
+and that the splice refuses a doc
 without its markers instead of guessing where the table goes.
 """
 
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -34,13 +36,29 @@ class TestSceneRecordsDerivedSurfaces(unittest.TestCase):
             self.assertIn(f"`{spec.key}`", table, spec.key)
 
     def test_unity_reads_exactly_the_records_declared_for_it(self):
-        self.assertEqual(s.unity_mismatch(), {"undeclared": [], "unread": []})
+        self.assertEqual(
+            s.unity_mismatch(), {"undeclared": [], "unread": [], "version": []}
+        )
+
+    def test_a_version_the_unity_importer_does_not_accept_is_reported(self):
+        """A record bumped without its importer: Unity would refuse the payload."""
+        bumped = [
+            SimpleNamespace(
+                key=spec.key,
+                consumers=spec.consumers,
+                version=spec.version + (spec.key == "shadow_metadata"),
+            )
+            for spec in s._records().deliverable()
+        ]
+        mismatch = s.unity_mismatch(SimpleNamespace(deliverable=lambda: bumped))
+        self.assertEqual(len(mismatch["version"]), 1, mismatch)
+        self.assertIn("ShadowPlaneController", mismatch["version"][0])
 
     def test_the_two_dcc_producer_tables_agree_modulo_the_ledger(self):
         self.assertEqual(s.producer_parity(), [])
 
     def test_every_producer_names_a_declared_record(self):
-        from pythontk.core_utils.scene_records import RecordSpec
+        from pythontk import RecordSpec
 
         declared = {
             name

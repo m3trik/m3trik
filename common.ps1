@@ -1,5 +1,13 @@
 ﻿$ErrorActionPreference = "Continue"
 
+# The python this machine runs, resolved once: `python`, else `python3` (a stock Linux
+# ships only python3, and pwsh there is how these scripts run off Windows). Never
+# python3 first: on Windows it can be the Microsoft Store stub, which opens the Store.
+$PYTHON = @("python", "python3") |
+    ForEach-Object { Get-Command $_ -CommandType Application -ErrorAction SilentlyContinue } |
+    Select-Object -First 1 -ExpandProperty Source
+if (-not $PYTHON) { $PYTHON = "python" }  # the "no python on PATH" checks report it
+
 function Write-Header {
     param([string]$Text)
     Write-Host ""

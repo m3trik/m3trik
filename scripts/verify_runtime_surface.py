@@ -85,7 +85,9 @@ def load_static_surface(pkg_dir: Path) -> dict[str, dict[str, str]]:
 
 def _own_and_private_base_records(obj: type) -> list:
     """Records for *obj*'s own members plus those it inherits from a PRIVATE
-    base declared in the same module.
+    base of its own package -- declared alongside it or in a sibling module
+    (``MeshConvert(_Fbx2GltfMixin, ...)``, each mixin in its own ``_<job>.py``),
+    followed through private bases only.
 
     Mirrors ``generate_api_registry.py``'s static rule exactly, so the two
     producers stay comparable.  ``_collect_records(inherited=False)`` is
@@ -96,15 +98,19 @@ def _own_and_private_base_records(obj: type) -> list:
     side used to see.  ``inherited=True`` would over-report instead, pulling
     in ``HelpMixin`` and every cross-module public base.
     """
-    owners = [
-        klass
-        for klass in obj.__mro__
-        if klass is obj
-        or (
-            klass.__name__.startswith("_")
-            and getattr(klass, "__module__", None) == obj.__module__
+    package = obj.__module__.split(".")[0]
+    owners, stack = [], [obj]
+    while stack:
+        klass = stack.pop()
+        if klass in owners:
+            continue
+        owners.append(klass)
+        stack.extend(
+            base
+            for base in klass.__bases__
+            if base.__name__.startswith("_")
+            and getattr(base, "__module__", "").split(".")[0] == package
         )
-    ]
     allowed = {name for klass in owners for name in vars(klass)}
     records = obj._collect_records(inherited=True, private=False)
     out, seen_names = [], set()

@@ -59,7 +59,7 @@ widget.menu.add(
 | mayatk · edit_utils | [`naming/naming_slots.py`](../../mayatk/mayatk/edit_utils/naming/naming_slots.py) |
 | mayatk · edit_utils | [`snap.py`](../../mayatk/mayatk/edit_utils/snap.py) |
 | mayatk · env_utils | [`hierarchy_sync/hierarchy_sync_slots.py`](../../mayatk/mayatk/env_utils/hierarchy_sync/hierarchy_sync_slots.py) |
-| mayatk · env_utils | [`reference_manager.py`](../../mayatk/mayatk/env_utils/reference_manager.py) |
+| mayatk · env_utils | [`reference_manager/reference_manager_slots.py`](../../mayatk/mayatk/env_utils/reference_manager/reference_manager_slots.py) |
 | mayatk · env_utils | [`scene_exporter/scene_exporter_slots.py`](../../mayatk/mayatk/env_utils/scene_exporter/scene_exporter_slots.py) |
 | mayatk · env_utils | [`workspace_map.py`](../../mayatk/mayatk/env_utils/workspace_map.py) |
 | mayatk · light_utils | [`hdr_manager.py`](../../mayatk/mayatk/light_utils/hdr_manager.py) |
@@ -68,14 +68,14 @@ widget.menu.add(
 | mayatk · mat_utils | [`marmoset_bridge/marmoset_bridge_slots.py`](../../mayatk/mayatk/mat_utils/marmoset_bridge/marmoset_bridge_slots.py) |
 | mayatk · mat_utils | [`mat_updater.py`](../../mayatk/mayatk/mat_utils/mat_updater.py) |
 | mayatk · mat_utils | [`render_opacity/render_effects_slots.py`](../../mayatk/mayatk/mat_utils/render_opacity/render_effects_slots.py) |
-| mayatk · mat_utils | [`shader_templates/_shader_templates.py`](../../mayatk/mayatk/mat_utils/shader_templates/_shader_templates.py) |
+| mayatk · mat_utils | [`shader_templates/shader_templates_slots.py`](../../mayatk/mayatk/mat_utils/shader_templates/shader_templates_slots.py) |
 | mayatk · mat_utils | [`substance_bridge/substance_bridge_slots.py`](../../mayatk/mayatk/mat_utils/substance_bridge/substance_bridge_slots.py) |
 | mayatk · mat_utils | [`texture_path_editor.py`](../../mayatk/mayatk/mat_utils/texture_path_editor.py) |
 | mayatk · node_utils | [`attributes/channels/channels_slots.py`](../../mayatk/mayatk/node_utils/attributes/channels/channels_slots.py) |
 | mayatk · nurbs_utils | [`image_tracer.py`](../../mayatk/mayatk/nurbs_utils/image_tracer.py) |
-| mayatk · rig_utils | [`shadow_rig.py`](../../mayatk/mayatk/rig_utils/shadow_rig.py) |
+| mayatk · rig_utils | [`shadow_rig/shadow_rig_slots.py`](../../mayatk/mayatk/rig_utils/shadow_rig/shadow_rig_slots.py) |
 | mayatk · rig_utils | [`telescope_rig.py`](../../mayatk/mayatk/rig_utils/telescope_rig.py) |
-| mayatk · rig_utils | [`tube_rig.py`](../../mayatk/mayatk/rig_utils/tube_rig.py) |
+| mayatk · rig_utils | [`tube_rig/tube_rig_slots.py`](../../mayatk/mayatk/rig_utils/tube_rig/tube_rig_slots.py) |
 | mayatk · rig_utils | [`wheel_rig.py`](../../mayatk/mayatk/rig_utils/wheel_rig.py) |
 | mayatk · ui_utils | [`calculator.py`](../../mayatk/mayatk/ui_utils/calculator.py) |
 | mayatk · uv_utils | [`rizom_bridge/rizom_bridge_slots.py`](../../mayatk/mayatk/uv_utils/rizom_bridge/rizom_bridge_slots.py) |

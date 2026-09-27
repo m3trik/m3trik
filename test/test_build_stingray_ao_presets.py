@@ -83,5 +83,24 @@ class TestAoPresets(unittest.TestCase):
         self.assertEqual(b.main(["--check"]), 0)
 
 
+class TestStockPresetsDir(unittest.TestCase):
+    def test_a_linux_install_is_found_without_maya_location(self):
+        """Linux Maya installs under /usr/autodesk/maya<ver>, not Program Files."""
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "maya2026")
+            presets = os.path.join(root, "presets", "ShaderFX", "Scenes", "StingrayPBS")
+            os.makedirs(presets)
+            def fake(pattern):
+                return [root] if pattern == "/usr/autodesk/maya*" else []
+
+            with patch.dict(os.environ, {"MAYA_LOCATION": ""}), patch.object(
+                b.glob, "glob", side_effect=fake
+            ):
+                self.assertEqual(b.stock_presets_dir(None), presets)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -75,14 +75,13 @@ PARENT_RE = re.compile(r"ParentMaterial=[^\n]+")
 def stock_presets_dir(maya: str | None) -> str:
     """Maya's StingrayPBS preset folder: `--maya`, `MAYA_LOCATION`, else the newest install."""
     roots = [maya, os.environ.get("MAYA_LOCATION")]
-    roots += sorted(
-        glob.glob(
-            os.path.join(
-                os.environ.get("ProgramFiles", r"C:\Program Files"), "Autodesk", "Maya*"
-            )
-        ),
-        reverse=True,
-    )
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    for pattern in (
+        os.path.join(program_files, "Autodesk", "Maya*"),
+        "/usr/autodesk/maya*",
+        "/Applications/Autodesk/maya*/Maya.app/Contents",
+    ):
+        roots += sorted(glob.glob(pattern), reverse=True)
     for root in roots:
         if root:
             d = os.path.join(root, "presets", "ShaderFX", "Scenes", "StingrayPBS")

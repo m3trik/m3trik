@@ -19,7 +19,10 @@ not twins in this sense and are none of this script's business. What IS in scope
 is the **controller tier**: helper mixins that carry the same algorithm in both
 packages because there is nowhere shared for them to live (uitk hosts no
 DCC-agnostic panel controller; pythontk cannot host Qt). Those files were copied,
-and a copy nothing compares is a copy that drifts.
+and a copy nothing compares is a copy that drifts. Since 2026-09-26 that tier is
+split by rule (CODE_STANDARD §14): the domain rules drop to a pythontk engine,
+generic widgetry to uitk (which names no domain), and only the thin domain glue
+left over stays mirrored -- and is ledgered here.
 
 Two granularities
 -----------------
@@ -216,6 +219,425 @@ LEDGER: List[TwinSpec] = [
         note=(
             "The whole class, fields included. The two engines differ throughout "
             "(Arnold vs Cycles); only the result they report is shared."
+        ),
+    ),
+    # Seeded 2026-09-26 after the auto-instancer's DCC-free merge/format moved
+    # to ``ptk.InstanceGrouping``: what is still identical, measured green.
+    TwinSpec(
+        rel="core_utils/auto_instancer/_auto_instancer.py",
+        reason=(
+            "The mirrored AutoInstancer public API a tentacle slot calls "
+            "branch-free. Its signature merge and run summary now delegate to "
+            "ptk.InstanceGrouping; what stays in both packages is the class "
+            "shell around the scene calls: config properties, logging, and "
+            "the delegating wrappers."
+        ),
+        symbols=(
+            "AutoInstancer._log_report",
+            "AutoInstancer._merge_similar_signatures",
+            "AutoInstancer._reset_summary",
+            "AutoInstancer.check_uvs",
+            "AutoInstancer.combine_assemblies",
+            "AutoInstancer.default_summary",
+            "AutoInstancer.format_summary",
+            "AutoInstancer.require_same_material",
+            "AutoInstancer.scale_tolerance",
+            "AutoInstancer.search_radius_mult",
+            "AutoInstancer.tolerance",
+            "AutoInstancer.verbose",
+            "InstanceGroup.__init__",
+        ),
+        note=(
+            "13 of 38 shared symbols. The rest walk the scene (DAG paths + "
+            "UUIDs vs bpy objects + session_uid) and are expected to differ. "
+            "The natural-sort key they both carried is ptk.StrUtils."
+            "natural_sort_key now, and instancing_strategy.py is a per-host "
+            "binding of ptk.InstancingStrategy (only the triangle-count hook "
+            "differs; nothing left to guard)."
+        ),
+    ),
+    TwinSpec(
+        rel="core_utils/auto_instancer/geometry_matcher.py",
+        reason=(
+            "Geometry signature matcher behind both AutoInstancers. The mesh "
+            "reads differ per host (OpenMaya vs bmesh), but the quantizer and "
+            "the cache reset are the same code and must stay so, or equal "
+            "meshes stop matching across the two hosts' signatures."
+        ),
+        symbols=("GeometryMatcher.clear_cache", "GeometryMatcher.quantize"),
+        note="2 of 16 shared methods; the rest read host geometry.",
+    ),
+    # Seeded 2026-09-26 after the DCC-free Qt split: the domain rules went to
+    # pythontk (RangeResolver / ManifestModel / Mapping / StepStatus / ShotReport,
+    # HierarchyBaselineStore) and the Suffix By Type editor to uitk
+    # (NamingConventionEditor). What each DCC keeps is thin panel glue over
+    # those -- identical, so it is guarded here, measured green.
+    TwinSpec(
+        rel="anim_utils/shots/shot_manifest/shot_manifest_slots.py",
+        reason=(
+            "Shot Manifest panel controller: Qt glue binding the panel's widgets to "
+            "the pythontk manifest engine, whose rules it calls (RangeResolver's "
+            "range edits and collisions, ManifestModel.describe_read_failure, "
+            "Mapping.seed_user_folder). uitk names no shots, so the glue is "
+            "mirrored in both DCC packages and guarded here."
+        ),
+        symbols=(
+            "ShotManifestSlots",
+            "ShotManifestController._active_store",
+            "ShotManifestController._all_ranges_complete",
+            "ShotManifestController._apply_mapping",
+            "ShotManifestController._apply_post_build",
+            "ShotManifestController._bind_store_listener",
+            "ShotManifestController._cascade_from",
+            "ShotManifestController._combo_data_index",
+            "ShotManifestController._csv_source_tooltip",
+            "ShotManifestController._describe_read_failure",
+            "ShotManifestController._ensure_steps",
+            "ShotManifestController._exclude_steps",
+            "ShotManifestController._fit_mode",
+            "ShotManifestController._include_step",
+            "ShotManifestController._initial_shot_length",
+            "ShotManifestController._is_built",
+            "ShotManifestController._is_detection_mode",
+            "ShotManifestController._load_csv",
+            "ShotManifestController._load_data",
+            "ShotManifestController._mark_csv_invalid",
+            "ShotManifestController._move_action_buttons_to_footer",
+            "ShotManifestController._on_csv_browsed",
+            "ShotManifestController._on_csv_path_edited",
+            "ShotManifestController._on_csv_recent_selected",
+            "ShotManifestController._on_csv_toggled",
+            "ShotManifestController._on_first_show",
+            "ShotManifestController._on_long_names_toggled",
+            "ShotManifestController._on_mapping_changed",
+            "ShotManifestController._on_range_double_clicked",
+            "ShotManifestController._on_store_event",
+            "ShotManifestController._open_audio_clips",
+            "ShotManifestController._open_in_shot_sequencer",
+            "ShotManifestController._open_in_shots",
+            "ShotManifestController._open_mappings_folder",
+            "ShotManifestController._populate_from_source",
+            "ShotManifestController._refresh_mapping_list",
+            "ShotManifestController._refresh_ranges",
+            "ShotManifestController._refresh_timing",
+            "ShotManifestController._resolve_ranges",
+            "ShotManifestController._seed_mappings_folder",
+            "ShotManifestController._set_footer",
+            "ShotManifestController._setup_csv_path_editing",
+            "ShotManifestController._setup_csv_toggle",
+            "ShotManifestController._setup_header_menu",
+            "ShotManifestController._setup_mapping_combo",
+            "ShotManifestController._setup_recent_csv",
+            "ShotManifestController._show_item_menu",
+            "ShotManifestController._step_index",
+            "ShotManifestController._step_is_built",
+            "ShotManifestController._sync_csv_widgets",
+            "ShotManifestController._sync_detection_widgets",
+            "ShotManifestController._unbind_store_listener",
+            "ShotManifestController._update_build_button",
+            "ShotManifestController._use_selected_keys",
+            "ShotManifestController._wire_mapping_option_box",
+            "ShotManifestController.detect",
+        ),
+        note=(
+            "62 of 73 shared methods. The rest reach the host: scene-change wiring "
+            "(Maya's ScriptJobManager vs the store's invalidation listener), the "
+            "current frame, the outliner reveal, the undo chunk around build, the "
+            "in-method manifest_data / Detection imports, and _store_cls itself -- "
+            "the one-line hook every store access goes through."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shots_slots.py",
+        reason=(
+            "Shots panel controller + slots: Qt glue over the pythontk shots engine "
+            "(ShotReport words the footer). Same tier and reason as the manifest "
+            "controller."
+        ),
+        symbols=(
+            "ShotsController.__init__",
+            "ShotsController._active_shot_name",
+            "ShotsController._active_store",
+            "ShotsController._apply_snap_to_spinboxes",
+            "ShotsController._bind_store_listener",
+            "ShotsController._index_to_mode",
+            "ShotsController._mode_to_index",
+            "ShotsController._on_shot_name_refused",
+            "ShotsController._on_store_event",
+            "ShotsController._on_store_invalidated",
+            "ShotsController._option_checked",
+            "ShotsController._populate_shot_combobox",
+            "ShotsController._push_shot_field",
+            "ShotsController._report_deltas",
+            "ShotsController._set_footer",
+            "ShotsController._setup_delete_menu",
+            "ShotsController._setup_gap_menu",
+            "ShotsController._setup_hide_on_leave",
+            "ShotsController._setup_move_menu",
+            "ShotsController._setup_shift_menu",
+            "ShotsController._setup_space_menu",
+            "ShotsController._setup_trim_menu",
+            "ShotsController._shot_name_error",
+            "ShotsController._sync_footer",
+            "ShotsController._sync_from_store",
+            "ShotsController._sync_shot_editor",
+            "ShotsController._unbind_store_listener",
+            "ShotsController.on_add_space",
+            "ShotsController.on_delete_stale_shots",
+            "ShotsController.on_detection_changed",
+            "ShotsController.on_detection_mode_changed",
+            "ShotsController.on_fit_mode_changed",
+            "ShotsController.on_gap_changed",
+            "ShotsController.on_initial_length_changed",
+            "ShotsController.on_move_shot",
+            "ShotsController.on_shift_all_shots",
+            "ShotsController.on_shot_desc_changed",
+            "ShotsController.on_shot_end_changed",
+            "ShotsController.on_shot_name_changed",
+            "ShotsController.on_shot_selected",
+            "ShotsController.on_shot_start_changed",
+            "ShotsController.on_snap_whole_frames_changed",
+            "ShotsController.on_trim_all_shots",
+            "ShotsController.on_trim_empty",
+            "ShotsController.refresh_state",
+            "ShotsController.remove_callbacks",
+            "ShotsSlots.__init__",
+            "ShotsSlots.b000",
+            "ShotsSlots.btn_add_leading_space",
+            "ShotsSlots.btn_add_trailing_space",
+            "ShotsSlots.btn_apply_gap",
+            "ShotsSlots.btn_delete_all",
+            "ShotsSlots.btn_delete_stale",
+            "ShotsSlots.btn_move_shot",
+            "ShotsSlots.btn_shift_all",
+            "ShotsSlots.btn_trim_all",
+            "ShotsSlots.btn_trim_all_both",
+            "ShotsSlots.btn_trim_all_leading",
+            "ShotsSlots.btn_trim_all_trailing",
+            "ShotsSlots.btn_trim_both",
+            "ShotsSlots.btn_trim_empty",
+            "ShotsSlots.btn_trim_leading",
+            "ShotsSlots.btn_trim_trailing",
+            "ShotsSlots.chk_snap_whole_frames",
+            "ShotsSlots.cmb_detection_mode",
+            "ShotsSlots.cmb_fit_mode",
+            "ShotsSlots.cmb_shot_select",
+            "ShotsSlots.spn_detection",
+            "ShotsSlots.spn_initial_length",
+            "ShotsSlots.spn_shot_end",
+            "ShotsSlots.spn_shot_start",
+            "ShotsSlots.txt_shot_desc",
+            "ShotsSlots.txt_shot_name",
+        ),
+        note=(
+            "73 of 80 shared methods. The rest differ on the undo bracket "
+            "(_boundary_edit: mayatk's store.scene_edit vs blendertk's snapshot + "
+            "CoreUtils.undo_chunk, and the delete handlers built on it), host prose "
+            "(confirm_stale_removal, header_init's tooltips), and the _store_cls / "
+            "_sequencer_cls hooks themselves."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shot_sequencer/widget_sync.py",
+        reason=(
+            "Shot Sequencer widget-sync mixin (split from shot_sequencer_slots.py "
+            "2026-09-26): Qt glue between the sequencer widget and each host's scene."
+        ),
+        symbols=(
+            "WidgetSyncMixin._on_frame_on_shot_change_toggled",
+            "WidgetSyncMixin._on_select_on_load_toggled",
+            "WidgetSyncMixin._rebuild_content",
+            "WidgetSyncMixin._resolve_sync_target",
+            "WidgetSyncMixin._set_cmb_mode",
+            "WidgetSyncMixin._set_playback_range_mode",
+            "WidgetSyncMixin._set_show_internal_holds",
+            "WidgetSyncMixin._set_view_mode",
+            "WidgetSyncMixin._sync_to_widget",
+            "WidgetSyncMixin._visible_shots",
+            "WidgetSyncMixin.refresh",
+        ),
+        note=(
+            "11 of 21 shared methods. The other 10 differ in code: each builds its "
+            "tracks, clips, audio rows and sub-rows from its own scene, and keeps its "
+            "own viewport and header state."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shot_manifest/table_presenter.py",
+        reason=(
+            "The Shot Manifest tree's presentation mixin: Qt item painting over the "
+            "pythontk manifest results (collisions from "
+            "RangeResolver.find_collisions, object verdicts from "
+            "StepStatus.find_object)."
+        ),
+        symbols=(
+            "ManifestTableMixin._auto_fill_ranges",
+            "ManifestTableMixin._color_behavior_label",
+            "ManifestTableMixin._make_behavior_label",
+            "ManifestTableMixin._on_behaviors_changed",
+            "ManifestTableMixin._restore_tree_state",
+            "ManifestTableMixin._restore_user_ranges",
+            "ManifestTableMixin._revert_range_cell",
+            "ManifestTableMixin._save_tree_state",
+            "ManifestTableMixin._use_short_names",
+            "ManifestTableMixin._validate_range_collisions",
+            "ManifestTableMixin.expand_extra",
+        ),
+        note=(
+            "11 of 17 shared methods. The rest resolve host node icons and names, "
+            "and re-apply a behavior through each host's applier."
+        ),
+    ),
+    TwinSpec(
+        rel="mat_utils/emissive_groups.py",
+        reason=(
+            "The Emissive Groups panel (EmissiveGroupsSlots) is pure glue over each "
+            "host's EmissiveGroups engine, identical in both packages; with no "
+            "domain model of its own it is guarded, not hoisted. The few engine "
+            "methods that only reach the shared registry are identical too."
+        ),
+        symbols=(
+            "EmissiveGroupsSlots",
+            "EmissiveGroups.compact_slots",
+            "EmissiveGroups.export_record",
+            "EmissiveGroups.set_default",
+            "_EmissiveGroupsInternal._refresh_export_if_published",
+            "_EmissiveGroupsInternal._registry",
+        ),
+        note=(
+            "The whole Slots class plus 5 engine methods. The engine's membership "
+            "storage diverges by design (Maya face objectSets, Blender boolean FACE "
+            "attributes)."
+        ),
+    ),
+    TwinSpec(
+        rel="edit_utils/naming/naming_slots.py",
+        reason=(
+            "The Naming panel. Its Suffix By Type editor lives once in uitk "
+            "(NamingConventionEditor); what stays here is host glue handing it data "
+            "(_convention_groups / _convention_tooltip / tb003_init, the host "
+            "difference expressed as CONVENTION_DISABLED) plus the shared operation "
+            "slots."
+        ),
+        symbols=(
+            "NamingSlots._add_apply_button",
+            "NamingSlots._apply_dry_run",
+            "NamingSlots._arm_apply",
+            "NamingSlots._begin",
+            "NamingSlots._convention_groups",
+            "NamingSlots._convention_tooltip",
+            "NamingSlots._disarm_apply",
+            "NamingSlots._file_targets",
+            "NamingSlots._follow_renames",
+            "NamingSlots._log_directories",
+            "NamingSlots._on_scope_changed",
+            "NamingSlots._report_found",
+            "NamingSlots._run",
+            "NamingSlots._run_on_files",
+            "NamingSlots._scene_only",
+            "NamingSlots._sync_scope_options",
+            "NamingSlots.base_names",
+            "NamingSlots.dry_run",
+            "NamingSlots.file_scope",
+            "NamingSlots.scope",
+            "NamingSlots.tb000",
+            "NamingSlots.tb000_init",
+            "NamingSlots.tb001_init",
+            "NamingSlots.tb002",
+            "NamingSlots.tb002_init",
+            "NamingSlots.tb003",
+            "NamingSlots.tb003_init",
+            "NamingSlots.txt001",
+            "NamingSlots.txt001_init",
+            "NamingSlots.valid_suffixes",
+        ),
+        note=(
+            "30 of 38 shared methods. The rest differ on host vocabulary: the scope "
+            "scan, the file browser, Locators vs Empties, the find/select report."
+        ),
+    ),
+    # Seeded 2026-09-26 after the scene-export engine pass: SceneExporterBase and
+    # SceneDataSidecarBase (pythontk) took the exporter's DCC-free shell and the
+    # sidecar; HierarchyAnalyzer the Hierarchy Sync pairing passes; TiledPath the
+    # tile/frame tokens. What each DCC still carries identically, measured green.
+    TwinSpec(
+        rel="env_utils/scene_exporter/task_manager.py",
+        reason=(
+            "The Scene Exporter's TaskManager is a per-host TaskFactory built from "
+            "the _task_* phase mixins, which reach the scene throughout; these two "
+            "DCC-free members ride it (pythontk has no export-task base to host "
+            "them without taking the phase mixins along)."
+        ),
+        symbols=("TaskManager._sidecar_kwargs", "TaskManager.run_tasks"),
+        note="2 of 7 shared methods; the rest build or read the host's scene.",
+    ),
+    TwinSpec(
+        rel="env_utils/scene_exporter/_task_data.py",
+        reason=(
+            "Exporter phase-mixin helpers that are pure delegations: the tile/frame "
+            "collapse is ptk.TiledPath (a private 3-token regex here once let a "
+            "<frame> / <u>_<v> texture skip the representative collapse)."
+        ),
+        symbols=(
+            "_TaskDataMixin._is_tiled_path",
+            "_TaskDataMixin._tiled_representative",
+            "_TaskDataMixin.export_path",
+        ),
+        note="3 of 14 shared methods; the texture scan itself walks each host's nodes.",
+    ),
+    TwinSpec(
+        rel="env_utils/scene_exporter/_task_animation.py",
+        reason=(
+            "The scene-records publish step's reporting (its log lines and the "
+            "range-coverage gate), identical over the pythontk ExportSnapshot both "
+            "exporters assemble; it lives on the per-host animation phase mixin."
+        ),
+        symbols=(
+            "_AnimationTasksMixin._log_data_node_summary",
+            "_AnimationTasksMixin._log_snapshot_notes",
+            "_AnimationTasksMixin._note_link",
+            "_AnimationTasksMixin._require_range_coverage",
+            "_AnimationTasksMixin.ensure_scene_records_published",
+        ),
+        note="5 of 18 shared methods; the bake and publish steps reach the scene.",
+    ),
+    TwinSpec(
+        rel="env_utils/scene_exporter/_task_checks.py",
+        reason=(
+            "Two check helpers with no scene call (the deliverable's file list and "
+            "the texture-budget remedy text), on the per-host checks mixin."
+        ),
+        symbols=(
+            "_TaskChecksMixin._deliverable_paths",
+            "_TaskChecksMixin._texture_size_limit_remedy",
+        ),
+        note="2 of 20 shared methods; every check body reads its host's scene.",
+    ),
+    TwinSpec(
+        rel="env_utils/scene_exporter/task_definitions.py",
+        reason=(
+            "The definitions accessor of the per-host task/check tables (the tables "
+            "themselves list each host's tasks)."
+        ),
+        symbols=("_TaskDefinitionsMixin.definitions",),
+        note="1 of 3 shared methods; task_definitions / check_definitions differ by host.",
+    ),
+    TwinSpec(
+        rel="env_utils/hierarchy_sync/_hierarchy_sync.py",
+        reason=(
+            "Hierarchy Sync's pairing passes are ptk.HierarchyAnalyzer's "
+            "(detect_fuzzy_renames / detect_suffix_flattening); what stays is each "
+            "host's thin wrapper -- the fuzzy_matching toggle, the debug log and the "
+            "never-raise guard around a diff."
+        ),
+        symbols=(
+            "HierarchySync._detect_fuzzy_renames",
+            "HierarchySync._detect_suffix_flattening",
+        ),
+        note=(
+            "2 of 19 shared methods. _detect_reparented differs by design: mayatk "
+            "vetoes a pairing by shape type (_reparent_pair_compatible); the fix_* "
+            "passes edit each host's scene."
         ),
     ),
 ]

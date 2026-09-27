@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (33)
+## Genuine cross-layer collisions (32)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -86,7 +86,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L492)
-- `uitk` — [`Parameters`](uitk/bridge/parameters.py#L38)
+- `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
 
@@ -169,11 +169,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`ToolbagLog`](blendertk/mat_utils/marmoset_bridge/toolbag_log.py#L30)
 - `extapps` — [`ToolbagLog`](extapps/marmoset_workflow/toolbag_log.py#L30)
 - `mayatk` — [`ToolbagLog`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L30)
-
-### `TooltipFormat` — pythontk, uitk
-
-- `pythontk` — [`TooltipFormat`](pythontk/str_utils/tooltip_format.py#L276)
-- `uitk` — [`TooltipFormat`](uitk/widgets/mixins/tooltip_mixin.py#L310)
 
 ### `close_plugin` — blendertk, extapps, mayatk
 

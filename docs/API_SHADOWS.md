@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (32)
+## Genuine cross-layer collisions (31)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -15,7 +15,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `Behaviors` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L230)
-- `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L144)
+- `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L137)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L83)
 
 ### `Call` — extapps, pythontk
@@ -43,7 +43,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `InstancingStrategy` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`InstancingStrategy`](blendertk/core_utils/auto_instancer/instancing_strategy.py#L32)
-- `mayatk` — [`InstancingStrategy`](mayatk/core_utils/auto_instancer/instancing_strategy.py#L33)
+- `mayatk` — [`InstancingStrategy`](mayatk/core_utils/auto_instancer/instancing_strategy.py#L23)
 - `pythontk` — [`InstancingStrategy`](pythontk/core_utils/engines/instancing/instancing_strategy.py#L48)
 
 ### `KeyStash` — blendertk, mayatk, pythontk
@@ -64,7 +64,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L76)
-- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
+- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L75)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk
 
@@ -81,11 +81,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L409)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L255)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L497)
-- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L466)
-- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L409)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L255)
-- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L492)
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L462)
+- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L162)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L401)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
+- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L491)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
@@ -127,7 +127,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotSequencer` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`ShotSequencer`](blendertk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L229)
-- `mayatk` — [`ShotSequencer`](mayatk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L70)
+- `mayatk` — [`ShotSequencer`](mayatk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L72)
 - `pythontk` — [`ShotSequencer`](pythontk/core_utils/engines/shots/shot_sequencer.py#L215)
 
 ### `ShotStore` — mayatk, pythontk
@@ -135,16 +135,14 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L389)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L303)
 
-### `StrategyConfig` — blendertk, mayatk, pythontk
+### `StrategyConfig` — blendertk, pythontk
 
 - `blendertk` — [`StrategyConfig`](blendertk/core_utils/auto_instancer/instancing_strategy.py#L25)
-- `mayatk` — [`StrategyConfig`](mayatk/core_utils/auto_instancer/instancing_strategy.py#L25)
 - `pythontk` — [`StrategyConfig`](pythontk/core_utils/engines/instancing/instancing_strategy.py#L32)
 
-### `StrategyType` — blendertk, mayatk, pythontk
+### `StrategyType` — blendertk, pythontk
 
 - `blendertk` — [`StrategyType`](blendertk/core_utils/auto_instancer/instancing_strategy.py#L17)
-- `mayatk` — [`StrategyType`](mayatk/core_utils/auto_instancer/instancing_strategy.py#L17)
 - `pythontk` — [`StrategyType`](pythontk/core_utils/engines/instancing/instancing_strategy.py#L22)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -175,11 +173,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L81)
 - `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L122)
 - `mayatk` — [`close_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L81)
-
-### `launch` — mayatk, tentacle
-
-- `mayatk` — [`launch`](mayatk/node_utils/attributes/channels/__init__.py#L15)
-- `tentacle` — [`launch`](tentacle/tcl_blender.py#L2191)
 
 ### `main` — blendertk, extapps, mayatk, pythontk
 

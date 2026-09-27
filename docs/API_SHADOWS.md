@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (29)
+## Genuine cross-layer collisions (28)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -107,13 +107,6 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L410)
 - `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L410)
 
-### `Selection` — blendertk, mayatk, tentacle
-
-- `blendertk` — [`Selection`](blendertk/edit_utils/selection.py#L35)
-- `mayatk` — [`Selection`](mayatk/edit_utils/selection.py#L19)
-- `tentacle` — [`Selection`](tentacle/slots/blender/selection.py#L8)
-- `tentacle` — [`Selection`](tentacle/slots/maya/selection.py#L9)
-
 ### `ShotApply` — mayatk, pythontk
 
 - `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L318)
@@ -198,8 +191,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `register` — extapps, tentacle
 
 - `extapps` — [`register`](extapps/substance_workflow/registry.py#L19)
-- `tentacle` — [`register`](tentacle/tcl_blender.py#L2196)
-- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1959)
+- `tentacle` — [`register`](tentacle/tcl_blender.py#L2285)
+- `tentacle` — [`register`](tentacle/tentacle_installer.py#L1961)
 
 ### `set_resolution` — blendertk, extapps, mayatk
 
@@ -216,7 +209,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (214)
+## Intentional mayatk↔blendertk port parity (215)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -354,6 +347,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ScriptJobManager`
 - `SegmentCollector`
 - `SegmentKeys`
+- `Selection`
 - `SelectionMacros`
 - `ShaderTemplatesSlots`
 - `ShadowPreview`

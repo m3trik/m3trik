@@ -15,8 +15,8 @@ Checks
   CLAUDE    each CLAUDE.md size (advisory + hard caps; the root file gets a
             larger advisory cap - it carries the ecosystem-wide rules).
   TOPIC     memory topic-file soft size cap (flag oversized files to split).
-  DISPATCH  root CLAUDE.md dispatch table covers every ECOSYSTEM_PACKAGES member
-            (SSoT == the generator tuple; catches the blendertk-style drift).
+  DISPATCH  root CLAUDE.md dispatch table matches m3trik/workspace.json
+            (the package-set SSoT; catches the blendertk-style drift).
   LINKS     every relative markdown link in a CLAUDE.md resolves (no broken nav).
   NAVDEPS   every registry-set package's CLAUDE.md `**Deps**:` line names each
             ecosystem package its pyproject.toml declares (hand-written nav
@@ -310,7 +310,7 @@ def check_nav_deps(report: Report) -> None:
     try:
         ECOSYSTEM_PACKAGES = _ecosystem_packages()
     except Exception as exc:  # noqa: BLE001
-        report.fail(f"NAVDEPS: cannot import ECOSYSTEM_PACKAGES from generate_api_registry: {exc}")
+        report.fail(f"NAVDEPS: cannot read the package set from m3trik/workspace.json: {exc}")
         return
     checked = 0
     for pkg in ECOSYSTEM_PACKAGES:
@@ -330,35 +330,34 @@ def check_nav_deps(report: Report) -> None:
         report.warn("NAVDEPS: no package pyproject/CLAUDE.md pairs found - skipped (partial checkout?)")
 
 
-def _ecosystem_packages() -> tuple[str, ...]:
-    """The package-set SSoT: generate_api_registry.ECOSYSTEM_PACKAGES."""
+def _sync_workspace():
+    """``sync_workspace``: the reader of ``m3trik/workspace.json``, the package-set SSoT."""
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
-    from generate_api_registry import ECOSYSTEM_PACKAGES  # type: ignore
+    import sync_workspace  # type: ignore
 
-    return tuple(ECOSYSTEM_PACKAGES)
+    return sync_workspace
+
+
+def _ecosystem_packages() -> tuple[str, ...]:
+    """The registry set, as ``m3trik/workspace.json`` declares it."""
+    return _sync_workspace().ecosystem_packages()
 
 
 def check_dispatch(report: Report) -> None:
-    try:
-        ECOSYSTEM_PACKAGES = _ecosystem_packages()
-    except Exception as exc:  # noqa: BLE001
-        report.fail(f"DISPATCH: cannot import ECOSYSTEM_PACKAGES from generate_api_registry: {exc}")
-        return
-
     root = REPO_ROOT / "CLAUDE.md"
     if not root.exists():
         report.warn("DISPATCH: root CLAUDE.md not found at repo root — skipping (expected when only sub-repos are checked out, e.g. CI)")
         return
-    text = root.read_text(encoding="utf-8")
-    missing = [pkg for pkg in ECOSYSTEM_PACKAGES if f"`{pkg}/`" not in text]
-    if missing:
-        report.fail(
-            f"DISPATCH: root CLAUDE.md dispatch table is missing ecosystem package(s) {missing} "
-            f"(SSoT = ECOSYSTEM_PACKAGES = {list(ECOSYSTEM_PACKAGES)})"
-        )
+    try:
+        drift = _sync_workspace().dispatch_drift(root)
+    except Exception as exc:  # noqa: BLE001
+        report.fail(f"DISPATCH: cannot read m3trik/workspace.json: {exc}")
+        return
+    if drift:
+        report.fail(f"DISPATCH: {drift}")
     else:
-        report.ok(f"DISPATCH: all {len(ECOSYSTEM_PACKAGES)} ECOSYSTEM_PACKAGES present in root dispatch table")
+        report.ok("DISPATCH: root dispatch table matches m3trik/workspace.json")
 
 
 def check_claude_links(report: Report) -> None:

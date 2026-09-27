@@ -31,7 +31,7 @@ is what enforces it.
 - Every `memory/*.md` topic file has **exactly one** index link — no orphans (un-recallable), no broken links — **or** one link from an indexed **hub** topic (a family index like the live-pass queue: the whole family costs MEMORY.md one entry; hub links are checked too, one level deep).
 - Each `CLAUDE.md` ≤ **10,240 bytes**, measured as git stores it (LF), so a `core.autocrlf` checkout reads what CI reads.
 - Registries fresh vs source (`generate_api_registry.py --check`).
-- Root dispatch table covers **every** `ECOSYSTEM_PACKAGES` member.
+- Root dispatch table matches `m3trik/workspace.json` (`sync_workspace.py`).
 - Every relative markdown link in a `CLAUDE.md` resolves (no broken nav).
 - Every registry-set package's `CLAUDE.md` **Nav `Deps:`** line names each ecosystem package its `pyproject.toml` depends on (the hand-maintained line must not lag the declared dependency).
 
@@ -54,10 +54,11 @@ is what enforces it.
 3. **Don't ship a control the agent can't afford to use.** "Check the registry
    before writing a helper" is only real because a compact, grep-able
    `API_INDEX.md` backs it. Grep `API_REGISTRY.md` for a symbol; never Read it whole.
-4. **One SSoT for the package set.** `generate_api_registry.py`'s
-   `ECOSYSTEM_PACKAGES` tuple is canonical. The root dispatch table, the ecosystem
-   chain, `m3trik/scripts/CLAUDE.md`, and the CI clone/commit loops are all derived
-   from it (and CI-asserted equal) — never hand-maintained lists that drift.
+4. **One SSoT for the package set.** [`m3trik/workspace.json`](../workspace.json)
+   is canonical (`generate_api_registry.ECOSYSTEM_PACKAGES` and `push.ps1` read it).
+   The root dispatch table and the CI clone/commit loops restate it and are
+   CI-asserted equal (`sync_workspace.py --check`) — never hand-maintained lists
+   that drift.
 5. **Protect the prompt cache.** It keys on a stable prefix. Keep `MEMORY.md`
    edits small (the index sits in that prefix) and confine churny registry
    refreshes to a fixed off-peak window.

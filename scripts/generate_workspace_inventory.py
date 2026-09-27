@@ -9,8 +9,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
+import sys
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -182,24 +182,18 @@ def _read_readme_summary(repo_root: Path) -> str:
     return ""
 
 
-def _parse_domain_map(workspace_root: Path) -> dict[str, str]:
-    instructions_path = workspace_root / ".github" / "copilot-instructions.md"
-    if not instructions_path.exists():
-        return {}
+def _declared_domains() -> dict[str, str]:
+    """Repo name -> its domain line, as ``m3trik/workspace.json`` declares it.
 
-    domain_map: dict[str, str] = {}
-    for raw_line in instructions_path.read_text(
-        encoding="utf-8", errors="ignore"
-    ).splitlines():
-        line = raw_line.lstrip("> ").strip()
-        if not line.startswith("|"):
-            continue
-        match = re.match(r"^\|\s*`([^`]+?)/`\s*\|.*?\|\s*([^|]+?)\s*\|$", line)
-        if match is None:
-            continue
-        repo_name, domain_cell = match.groups()
-        domain_map[repo_name] = domain_cell.strip()
-    return domain_map
+    The one declared fact in an otherwise measured report. A repo with no entry
+    reads Unclassified (``sync_workspace.py`` reports it too).
+    """
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import sync_workspace
+
+    return sync_workspace.domains()
 
 
 def _tracked_relative_files(repo_root: Path) -> list[Path]:
@@ -631,7 +625,7 @@ def _render_markdown(
 def generate_inventory(workspace_root: Path, output_dir: Path) -> tuple[Path, Path]:
     workspace_root = workspace_root.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    domain_map = _parse_domain_map(workspace_root)
+    domain_map = _declared_domains()
     repo_roots = sorted(
         [
             child

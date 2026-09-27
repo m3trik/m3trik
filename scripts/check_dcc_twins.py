@@ -640,6 +640,28 @@ LEDGER: List[TwinSpec] = [
             "passes edit each host's scene."
         ),
     ),
+    TwinSpec(
+        rel="mat_utils/marmoset_bridge/_marmoset_bridge.py",
+        reason=(
+            "The Marmoset bake roundtrip's host-free bookkeeping: packed-map "
+            "unpack staging over the material manifest, the re-bake-stable "
+            "material names, the map-filing aliases and the bucketing of baked "
+            "maps to source materials. It rides the bridge's DCC half beside the "
+            "scene I/O that differs, and the vendored engine it would otherwise "
+            "move into is extapps' too, which bakes nothing."
+        ),
+        symbols=(
+            "_MarmosetBridgeInternal._stage_manifest_textures",
+            "MarmosetBridge.source_material_name",
+            "MarmosetBridge.baked_material_name",
+            "MarmosetBridge.texture_set_aliases",
+            "MarmosetBridge._group_baked_outputs",
+        ),
+        note=(
+            "5 shared methods; export, cage, assignment and retirement read each "
+            "host's scene (blendertk swaps the baked material per slot)."
+        ),
+    ),
 ]
 
 

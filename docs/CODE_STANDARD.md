@@ -1,8 +1,33 @@
 # Code standard — the rules behind the root one-liners
 
-The root [`CLAUDE.md`](../../CLAUDE.md) states every cross-repo rule in one line because it is paid for on every query. This page is the long form: the rationale, the worked shape of each rule, and the rules that are needed less often (formatter, docstrings, deprecation, vendoring, performance, repo hygiene, dead code, scratch files, package architecture). Read it before a refactor, a new module, or a public-API change. Package-specific rules stay in each package's `CLAUDE.md`.
+The root [`CLAUDE.md`](../../CLAUDE.md) states every cross-repo rule in one line because it is paid for on every query. §0 is the shape every unit shares; the rest is the long form: the rationale, the worked shape of each rule, and the rules that are needed less often (formatter, docstrings, deprecation, vendoring, performance, repo hygiene, dead code, scratch files, package architecture). Read it before a refactor, a new module, or a public-API change. Package-specific rules stay in each package's `CLAUDE.md`.
 
 **Nav**: [← m3trik](../CLAUDE.md) · [Docs standard](DOCS_STANDARD.md) · [Context budget](CONTEXT_BUDGET.md) · [Test badge standard](TEST_BADGE_STANDARD.md)
+
+## 0. The shape — one holon at every scale
+
+Every boundary here is a **holon**, a whole to its parts and a part to its whole (Koestler): the workspace, a repo, a subpackage, a module, a class. Each has the same parts and obeys the same rules, so the structure reads the same at every zoom level, a unit moves up or down a scale by being *moved*, never rewritten, and someone working inside one holon cannot drift another, because the only ways across are declared. The sections below are the Python spelling: §3 layout and growth, §4 surface and imports, §5 contracts over time, §6 twins, §14 placement and seams.
+
+Each classic pattern governs one relationship, and the shape assigns it at every scale: to its **parent** a holon is a plugin (it registers through a seam, touched only through its surface); to its **children** a kernel (it owns their seams); among **siblings** a slice in a declared order; **inside** a host-free model under host adapters; to its **twins** in other hosts or languages a contract pinned by generated cases; **over time** a version (tolerant readers, dated removals).
+
+| Part | What it is | The rule, at every scale |
+|---|---|---|
+| **Charter** | purpose, owner, the secret it hides, what it refuses | One owner, one purpose, one secret. A charter that needs "and" is two holons. Write the refusals down. |
+| **Surface** | every name something outside calls **or stores** | Others touch only the surface; curated, domain-named, never leaking layout. It exposes whole parts (a class), never a part's insides flattened into the parent (the wildcard `*_utils` roots are grandfathered). |
+| **Model** | host-free logic: plain values in and out | Everything that can be host-free is, and sinks to the lowest holon whose dependencies it needs. |
+| **Adapters** | code binding the model to a host (DCC, engine, Qt, disk, network) | Adapters depend on the model, never the reverse. A new host adds adapters (a twin at the same relative path), never an abstraction layer over hosts. |
+| **Parts** | child holons in a declared order; the lowest is the **kernel** | Parts depend only downward; peers of one rank never import each other; a shared need sinks to a lower part. The kernel imports nothing above it. |
+| **Seams** | registries where parts plug in | A new part lands as an addition plus one declaration. Editing a dispatcher to add a case means a seam is missing: add it first, in its own change. |
+| **Contracts** | data and APIs crossing the surface | Declared once, as data, in the lowest holon every reader can reach. Python reads the declaration; other languages get generated types, and every restatement is checked. Versioned: readers tolerate, removal is expand, migrate, contract on a dated window. |
+| **Proof** | tests, generated cases, guards | Every rule has a check at the scale it governs; a rule without one is a wish. A port is pinned by cases its reference generates. A new check freezes today's violations and fails only on new ones. |
+
+- **A surface is every name something else depends on**, not only what the code exports: a script GUID in a `.meta`, a serialized field, a menu path, an event, a manifest key, a `.ui` objectName, an attribute on a scene node, a settings key. Most drift is a surface change nobody recognized as one. **Saved data is always published**: scenes, prefabs, GLBs and presets outlive the code, so the names they store get the longest window.
+- **The kernel is a role, not a folder name.** A folder named `core_utils` that imports its siblings is not acting as a kernel; declare the tenants that are really the top (pythontk's `core_utils/engines`) at their true rank.
+- **Visibility sets the change process.** Private to the holon: change freely. Internal to the repo: one commit with every consumer. Published (another repo, a user script, a deployed project, a saved file): a version, a `ptk.Deprecation` alias with `remove_in` and `since` (§5).
+- **Growth** is the §3 triggers at every scale; a subpackage becomes a repo only on a release cadence, toolchain or consumer set its parent cannot serve. A holon that stops earning its boundary merges back.
+- **Working independently**: work inside one holon; land a cross-holon contract first, then build each side against it; seam changes and moves are their own commits, announced to concurrent sessions.
+
+**Declared and checked.** [`m3trik/workspace.json`](../workspace.json) declares the cascade and each unit's release mode and domain; `push.ps1` and the generators read it, and `sync_workspace.py --check` holds the root Dispatch table, the CI sibling lists and every unit's charter to it. Membership stays measured (a folder holding `.git` belongs). Each package declares its parts' order in `[tool.m3trik.layers]` of its `pyproject.toml`, and `check_layers.py --check` holds both scales (an ecosystem import must be a declared dependency; imports point down the order) against a frozen baseline.
 
 ## 1. Formatter and lint — `ruff`
 

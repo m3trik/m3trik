@@ -228,6 +228,21 @@ jobs:
       - name: Scene records derived surfaces in sync
         run: python m3trik/scripts/sync_scene_records.py --check
 
+      # The workspace manifest: ONE declaration (m3trik/workspace.json) of the
+      # cascade, the registry set and every unit's domain line, read directly by
+      # push.ps1 and the generators. This checks what cannot read it: the sibling
+      # loops in these workflows, and every declared unit's CLAUDE.md. The root
+      # Dispatch table is checked too where a workspace root exists (SKIP here).
+      - name: Workspace manifest and its restatements in sync
+        run: python m3trik/scripts/sync_workspace.py --check
+
+      # Layer order (CODE_STANDARD section 0, Parts): every ecosystem import is a
+      # declared pyproject dependency, and each package that declares
+      # [tool.m3trik.layers] imports only downward. Today's exceptions are frozen
+      # in check_layers_baseline.json; this fails only on a new one.
+      - name: Declared layer order and dependencies hold
+        run: python m3trik/scripts/check_layers.py --check
+
       # The workspace-wide gates. Each of these is a rule the root CLAUDE.md
       # states as a requirement -- check_docs is named there verbatim ("must
       # exit 0") -- and each ran in no workflow, no push.ps1 step and no

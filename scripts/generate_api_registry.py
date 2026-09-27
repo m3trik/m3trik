@@ -413,15 +413,18 @@ def retired_forms(pkg_dir: Path, name: str) -> list[tuple[str, str, str, str]]:
     return out
 
 
-ECOSYSTEM_PACKAGES = (
-    "pythontk",
-    "uitk",
-    "mayatk",
-    "blendertk",
-    "tentacle",
-    "unitytk",
-    "extapps",
-)
+def _declared_ecosystem() -> tuple:
+    """The registry set as ``m3trik/workspace.json`` declares it (``sync_workspace``)."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import sync_workspace
+
+    return sync_workspace.ecosystem_packages()
+
+
+#: The cascade, then the standalone packages. Declared once, in workspace.json.
+ECOSYSTEM_PACKAGES = _declared_ecosystem()
 
 SKIP_DIR_NAMES = {
     "build",

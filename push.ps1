@@ -193,13 +193,20 @@ $ROOT = $Root
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $SCRIPT_DIR "common.ps1")
 
-# Packages that support strict validation.
-# blendertk is a full ecosystem package: public repo, published to PyPI, its own publish.yml,
-# and a hard tentacle dependency. It releases in parallel with mayatk (both consume uitk; the
-# chain is pythontk -> uitk -> {mayatk, blendertk} -> tentacle), so it sits after mayatk and
-# before tentacle in the release order. (unitytk remains off-chain — floor-pinned, not cascaded.)
-$STRICT_PACKAGES = @("pythontk", "uitk", "mayatk", "blendertk", "tentacle")
-$RELEASE_ORDER = @("pythontk", "uitk", "mayatk", "blendertk", "tentacle")
+# The cascade -- the release order, and the packages that support strict validation --
+# is declared once, in workspace.json beside this script (CODE_STANDARD section 0).
+# blendertk releases in parallel with mayatk (both consume uitk), so it sits after mayatk
+# and before tentacle; unitytk and extapps are "standalone" there (floor-pinned, not
+# cascaded). Nothing here re-lists the set: sync_workspace.py checks what cannot read it.
+$WORKSPACE_MANIFEST = Get-Content -Raw -Encoding UTF8 (Join-Path $SCRIPT_DIR "workspace.json") | ConvertFrom-Json
+$RELEASE_ORDER = @($WORKSPACE_MANIFEST.cascade)
+$STRICT_PACKAGES = @($WORKSPACE_MANIFEST.cascade)
+# Fail closed: a missing or unreadable manifest yields @($null) -- one null "package" --
+# and the run would release in whatever order it met, with no strict validation.
+if (-not $RELEASE_ORDER -or $RELEASE_ORDER -contains $null) {
+    Write-Err "workspace.json beside push.ps1 declares no cascade; refusing to release."
+    exit 1
+}
 
 # The maintenance scripts a release shells out to (registry, semver verdict,
 # parity). Derived from -Root rather than from $SCRIPT_DIR deliberately: a

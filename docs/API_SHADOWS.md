@@ -84,9 +84,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L327)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L462)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L162)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L401)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L402)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
-- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L491)
+- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L504)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
@@ -179,8 +179,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L162)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1064)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1411)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1180)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1527)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L117)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L615)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L120)

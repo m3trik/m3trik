@@ -246,15 +246,18 @@ jobs:
       # The JavaScript the packages serve (pythontk's WebXR runtime) is plain
       # ES modules typed with JSDoc -- no build step -- so the compiler is the
       # check that its modules, the published `viewer` API and the generated
-      # record typedefs still agree. Node is a dev tool here only; the script
-      # finds `npx` and pins TypeScript's major. Exit 2 (no compiler) fails the
+      # record typedefs still agree. Node is a dev tool here only. `TSC` pins
+      # TypeScript's major whatever the runner image puts on PATH (the script
+      # would otherwise prefer a global `tsc`). Exit 2 (no compiler) fails the
       # step: a check that did not run is not a pass.
       - name: Set up Node (for the JavaScript type check)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: JavaScript type check (tsc --checkJs)
+        env:
+          TSC: npx --yes -p typescript@5 tsc
         run: python m3trik/scripts/check_js_types.py
 
       # The workspace-wide gates. Each of these is a rule the root CLAUDE.md

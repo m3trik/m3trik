@@ -110,8 +110,17 @@ class TestGeneratedTypes(unittest.TestCase):
                 self.assertEqual(_text(path), s.render_record_cs(spec, shape))
                 meta = path.with_name(path.name + ".meta")
                 self.assertEqual(_text(meta), s.record_cs_meta(spec))
-                # Beside the importer that reads it, in its feature folder.
-                self.assertEqual(path.parent.name, "ArticulatedRig")
+                # Beside the importer that reads it: the hand-written half of
+                # the partial class sits in the same feature folder.
+                self.assertTrue(
+                    any(
+                        f"partial class {shape.__name__}"
+                        in p.read_text(encoding="utf-8")
+                        for p in path.parent.glob("*.cs")
+                        if p != path
+                    ),
+                    f"no hand-written partial {shape.__name__} beside {path}",
+                )
 
     def test_a_record_types_guid_is_its_records_alone(self):
         records = s._records()

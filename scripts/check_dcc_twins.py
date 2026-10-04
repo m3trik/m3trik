@@ -294,6 +294,7 @@ LEDGER: List[TwinSpec] = [
             "ShotManifestController._copy_asset_names",
             "ShotManifestController._csv_source_tooltip",
             "ShotManifestController._describe_read_failure",
+            "ShotManifestController._detection_inputs",
             "ShotManifestController._drop_excluded",
             "ShotManifestController._effect_pages",
             "ShotManifestController._ensure_steps",
@@ -357,7 +358,7 @@ LEDGER: List[TwinSpec] = [
             "ShotManifestController.detect",
         ),
         note=(
-            "72 of 84 shared methods. The rest reach the host: scene-change wiring "
+            "73 of 85 shared methods. The rest reach the host: scene-change wiring "
             "(Maya's ScriptJobManager vs the store's invalidation listener), the "
             "current frame, the outliner reveal, the undo chunk around build, the "
             "in-method manifest_data / Detection imports, and the _store_cls / "
@@ -542,6 +543,7 @@ LEDGER: List[TwinSpec] = [
             "RenderEffectsSlots._show_recipe_colors",
             "RenderEffectsSlots._shown_channel",
             "RenderEffectsSlots._shown_page",
+            "RenderEffectsSlots._spin_value",
             "RenderEffectsSlots._stop_watching",
             "RenderEffectsSlots._sync_pulse_shape",
             "RenderEffectsSlots._update_cycle_readout",
@@ -550,7 +552,7 @@ LEDGER: List[TwinSpec] = [
             "RenderEffectsSlots.ui_field",
         ),
         note=(
-            "18 of 62 shared methods. The rest speak host vocabulary: mayatk keys a "
+            "19 of 63 shared methods. The rest speak host vocabulary: mayatk keys a "
             "channel by ChannelSpec and blendertk by name, and selection, undo, "
             "the current frame and the WebXR push are each host's own."
         ),

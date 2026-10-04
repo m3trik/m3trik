@@ -1,7 +1,7 @@
 # m3trik — Changelog
 
 - **2026-10-04 - The twin ledger guards the shots and render-effects glue the two DCCs now share, and the shader mirrors follow their moved files (`scripts/check_dcc_twins.py`, `scripts/sync_shadow_shaders.py`, `.github/workflows/tests.yml`, `test/test_sync_scene_records.py`).**
-  - New ledger entries: `manifest_data.py` (`ManifestData.fmt_behavior` / `format_behavior_html`) and `render_effects_slots.py` (the Render Effects controller over pythontk's `EffectRecipe` and uitk's `ModelBinding` / `FormRows`). `ShotManifestController`'s shared surface grows to 72 of 84 methods, `ManifestTableMixin`'s to 13 of 19.
+  - New ledger entries: `manifest_data.py` (`ManifestData.fmt_behavior` / `format_behavior_html`) and `render_effects_slots.py` (the Render Effects controller over pythontk's `EffectRecipe` and uitk's `ModelBinding` / `FormRows`). `ShotManifestController`'s shared surface grows to 73 of 85 methods (with the review's `_detection_inputs`), `ManifestTableMixin`'s to 13 of 19, and the Render Effects controller's to 19 of 63 (`_spin_value`).
   - `sync_shadow_shaders.py` mirrors into pythontk's `features/shadow_rig/shadow_rig.js` and unitytk's `templates/ShadowPlane/ShadowPlaneHorizon.hlsl`, where both packages moved them.
   - CI's JavaScript type check pins TypeScript 5 through `$TSC`, whatever the runner image puts on PATH (the script prefers a global `tsc`), and runs on Node 22: 20 is past end of life.
   - `test_sync_scene_records` holds each generated `<Record>.g.cs` to the invariant its comment states -- a hand-written half of the partial class sits beside it -- instead of naming `ArticulatedRig/`, the one folder that has one today.

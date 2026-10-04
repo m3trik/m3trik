@@ -27,7 +27,7 @@ Each classic pattern governs one relationship, and the shape assigns it at every
 - **Growth** is the §3 triggers at every scale; a subpackage becomes a repo only on a release cadence, toolchain or consumer set its parent cannot serve. A holon that stops earning its boundary merges back.
 - **Working independently**: work inside one holon; land a cross-holon contract first, then build each side against it; seam changes and moves are their own commits, announced to concurrent sessions.
 
-**Declared and checked.** [`m3trik/workspace.json`](../workspace.json) declares the cascade and each unit's release mode and domain; `push.ps1` and the generators read it, and `sync_workspace.py --check` holds the root Dispatch table, the CI sibling lists and every unit's charter to it. Membership stays measured (a folder holding `.git` belongs). Each package declares its parts' order in `[tool.m3trik.layers]` of its `pyproject.toml`, and `check_layers.py --check` holds both scales (an ecosystem import must be a declared dependency; imports point down the order) against a frozen baseline.
+**Declared and checked.** [`m3trik/workspace.json`](../workspace.json) declares the cascade and each unit's release mode and domain; `push.ps1` and the generators read it, and `sync_workspace.py --check` holds the root Dispatch table, the CI sibling lists and every unit's charter to it. Membership stays measured (a folder holding `.git` belongs). Each package declares its parts' order in `[tool.m3trik.layers]` of its `pyproject.toml`, and `check_layers.py --check` holds both scales (an ecosystem import must be a declared dependency; imports point down the order -- a served ES module's relative imports too, a `"<folder>/*"` part making each child a peer) against a frozen baseline. A contract other languages read is declared once in Python -- a scene record's payload and web manifest as typed `SchemaSpec`s (`RecordSpec.shape`, `WebProjection`) -- and `sync_scene_records.py --check` holds the generated JavaScript typedefs and C# record types to it; a model ported to another runtime is pinned by the golden cases its reference generates (`ptk.Conformance`); `check_js_types.py` type-checks the JavaScript (`tsc --checkJs`). Where each host spells the anatomy: [the WebXR runtime](../../pythontk/docs/webxr_preview.md#the-runtimes-anatomy), [the Unity package](../../unitytk/unitytk/templates/README.md#extending-the-package-its-anatomy).
 
 ## 1. Formatter and lint — `ruff`
 
@@ -69,6 +69,18 @@ def leaf_name(node: str, strip_namespace: bool = True) -> str:
 ```
 
 Type-hint public signatures (essential for OpenMaya interop and for the API registry, which prints them). Private helpers may skip hints when the types are obvious.
+
+Which type for which need -- the Python spelling of a toolbox each host spells its own way ([the WebXR runtime](../../pythontk/docs/webxr_preview.md#the-runtimes-anatomy), [the Unity package](../../unitytk/unitytk/templates/README.md#extending-the-package-its-anatomy)):
+
+| Need | Python (3.9 floor) |
+|:---|:---|
+| value object | `@dataclass(frozen=True)` |
+| vocabulary | `class X(str, Enum)`; `Literal[...]` |
+| JSON payload shape | a typed `ptk.SchemaSpec` (`TYPED = True`): it validates a payload and publishes the JSON Schema other languages' types are generated from (§0, Contracts) |
+| structural contract | `typing.Protocol` |
+| distinct ids | `NewType("NodeIndex", int)` |
+| variants | subclasses plus a strategy table |
+| identity in saved data | a stable name -- published the moment a file stores it (§5) |
 
 ## 3. Naming and layout
 

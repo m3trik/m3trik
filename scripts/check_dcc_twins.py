@@ -288,12 +288,17 @@ LEDGER: List[TwinSpec] = [
             "ShotManifestController._apply_mapping",
             "ShotManifestController._apply_post_build",
             "ShotManifestController._bind_store_listener",
+            "ShotManifestController._build_option_rows",
             "ShotManifestController._cascade_from",
             "ShotManifestController._combo_data_index",
+            "ShotManifestController._copy_asset_names",
             "ShotManifestController._csv_source_tooltip",
             "ShotManifestController._describe_read_failure",
+            "ShotManifestController._drop_excluded",
+            "ShotManifestController._effect_pages",
             "ShotManifestController._ensure_steps",
             "ShotManifestController._exclude_steps",
+            "ShotManifestController._fill_missing_assets",
             "ShotManifestController._fit_mode",
             "ShotManifestController._include_step",
             "ShotManifestController._initial_shot_length",
@@ -301,37 +306,49 @@ LEDGER: List[TwinSpec] = [
             "ShotManifestController._is_detection_mode",
             "ShotManifestController._load_csv",
             "ShotManifestController._load_data",
+            "ShotManifestController._load_scene_shots",
+            "ShotManifestController._manifest",
             "ShotManifestController._mark_csv_invalid",
+            "ShotManifestController._match",
+            "ShotManifestController._migrate_retired_mapping",
             "ShotManifestController._move_action_buttons_to_footer",
             "ShotManifestController._on_csv_browsed",
             "ShotManifestController._on_csv_path_edited",
             "ShotManifestController._on_csv_recent_selected",
-            "ShotManifestController._on_csv_toggled",
             "ShotManifestController._on_first_show",
             "ShotManifestController._on_long_names_toggled",
             "ShotManifestController._on_mapping_changed",
+            "ShotManifestController._on_option_changed",
             "ShotManifestController._on_range_double_clicked",
             "ShotManifestController._on_store_event",
+            "ShotManifestController._open_audio_clip",
             "ShotManifestController._open_audio_clips",
+            "ShotManifestController._open_effect",
             "ShotManifestController._open_in_shot_sequencer",
             "ShotManifestController._open_in_shots",
             "ShotManifestController._open_mappings_folder",
+            "ShotManifestController._open_render_effects",
+            "ShotManifestController._open_scene_source",
+            "ShotManifestController._option_values",
+            "ShotManifestController._orphan_shots",
+            "ShotManifestController._pairing",
+            "ShotManifestController._placement_on_regions",
             "ShotManifestController._populate_from_source",
+            "ShotManifestController._reapply_mapping",
             "ShotManifestController._refresh_mapping_list",
             "ShotManifestController._refresh_ranges",
             "ShotManifestController._refresh_timing",
+            "ShotManifestController._remove_orphan",
             "ShotManifestController._resolve_ranges",
             "ShotManifestController._seed_mappings_folder",
             "ShotManifestController._set_footer",
             "ShotManifestController._setup_csv_path_editing",
-            "ShotManifestController._setup_csv_toggle",
             "ShotManifestController._setup_header_menu",
             "ShotManifestController._setup_mapping_combo",
             "ShotManifestController._setup_recent_csv",
             "ShotManifestController._show_item_menu",
             "ShotManifestController._step_index",
             "ShotManifestController._step_is_built",
-            "ShotManifestController._sync_csv_widgets",
             "ShotManifestController._sync_detection_widgets",
             "ShotManifestController._unbind_store_listener",
             "ShotManifestController._update_build_button",
@@ -340,11 +357,11 @@ LEDGER: List[TwinSpec] = [
             "ShotManifestController.detect",
         ),
         note=(
-            "62 of 73 shared methods. The rest reach the host: scene-change wiring "
+            "72 of 84 shared methods. The rest reach the host: scene-change wiring "
             "(Maya's ScriptJobManager vs the store's invalidation listener), the "
             "current frame, the outliner reveal, the undo chunk around build, the "
-            "in-method manifest_data / Detection imports, and _store_cls itself -- "
-            "the one-line hook every store access goes through."
+            "in-method manifest_data / Detection imports, and the _store_cls / "
+            "_manifest_cls hooks every store and engine access goes through."
         ),
     ),
     TwinSpec(
@@ -471,10 +488,12 @@ LEDGER: List[TwinSpec] = [
             "StepStatus.find_object)."
         ),
         symbols=(
+            "ManifestTableMixin._add_orphan_rows",
             "ManifestTableMixin._auto_fill_ranges",
             "ManifestTableMixin._color_behavior_label",
             "ManifestTableMixin._make_behavior_label",
             "ManifestTableMixin._on_behaviors_changed",
+            "ManifestTableMixin._reapply_behavior",
             "ManifestTableMixin._restore_tree_state",
             "ManifestTableMixin._restore_user_ranges",
             "ManifestTableMixin._revert_range_cell",
@@ -484,8 +503,56 @@ LEDGER: List[TwinSpec] = [
             "ManifestTableMixin.expand_extra",
         ),
         note=(
-            "11 of 17 shared methods. The rest resolve host node icons and names, "
-            "and re-apply a behavior through each host's applier."
+            "13 of 19 shared methods. The rest resolve host node icons and names "
+            "and populate/format rows through host widgets; re-applying a "
+            "behavior is shared (``ShotManifest.reapply_object``)."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shot_manifest/manifest_data.py",
+        reason=(
+            "The Shot Manifest tree's behavior labels: the rich text a behavior "
+            "cell shows (missing, keyed under an older effect recipe). Same tier "
+            "as the presenter."
+        ),
+        symbols=(
+            "ManifestData.fmt_behavior",
+            "ManifestData.format_behavior_html",
+        ),
+        note="2 of 3 shared methods; the icon loader is the host's.",
+    ),
+    TwinSpec(
+        rel="mat_utils/render_opacity/render_effects_slots.py",
+        reason=(
+            "Render Effects panel controller: Qt glue binding the effect pages to "
+            "the scene's effect recipe (pythontk EffectRecipe, through uitk's "
+            "ModelBinding and FormRows). uitk names no render effects and "
+            "pythontk hosts no Qt, so the glue is mirrored in both DCC packages."
+        ),
+        symbols=(
+            "RenderEffectsSlots._add_settings",
+            "RenderEffectsSlots._clear_report",
+            "RenderEffectsSlots._fade_preview_plan",
+            "RenderEffectsSlots._fit_stack",
+            "RenderEffectsSlots._on_mode_changed",
+            "RenderEffectsSlots._on_scene_selection",
+            "RenderEffectsSlots._pulse_preview_plan",
+            "RenderEffectsSlots._recipe_values",
+            "RenderEffectsSlots._refit",
+            "RenderEffectsSlots._show_recipe_colors",
+            "RenderEffectsSlots._shown_channel",
+            "RenderEffectsSlots._shown_page",
+            "RenderEffectsSlots._stop_watching",
+            "RenderEffectsSlots._sync_pulse_shape",
+            "RenderEffectsSlots._update_cycle_readout",
+            "RenderEffectsSlots._write_recipe",
+            "RenderEffectsSlots.b000",
+            "RenderEffectsSlots.ui_field",
+        ),
+        note=(
+            "18 of 62 shared methods. The rest speak host vocabulary: mayatk keys a "
+            "channel by ChannelSpec and blendertk by name, and selection, undo, "
+            "the current frame and the WebXR push are each host's own."
         ),
     ),
     TwinSpec(

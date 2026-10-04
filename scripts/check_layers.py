@@ -117,6 +117,44 @@ def iter_modules(repo: Path, package: str) -> Iterator[Tuple[Path, List[str]]]:
         yield path, parts
 
 
+#: A static ES-module import or re-export: ``import x from './a.js'`` (braces
+#: may span lines), ``export { y } from '../b.js'``, ``import './c.js'``.
+#: Dynamic ``import(...)`` is a runtime seam (a feature the manifest names),
+#: not a dependency, and is not matched.
+_JS_IMPORT = re.compile(
+    r"^\s*(?:import|export)\b[^;]*?\bfrom\s*['\"]([^'\"]+)['\"]"
+    r"|^\s*import\s*['\"]([^'\"]+)['\"]",
+    re.M,
+)
+_JS_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+
+
+def iter_js_modules(repo: Path, package: str) -> Iterator[Path]:
+    """Every ES module (``*.js``) of *package* outside exempt dirs: a web
+    runtime the package serves, held to the same declared order."""
+    for path in sorted((repo / package).rglob("*.js")):
+        if not EXEMPT_DIRS & set(path.relative_to(repo).parts[:-1]):
+            yield path
+
+
+def js_imports(repo: Path, package: str, path: Path) -> List[str]:
+    """Package-relative paths (posix) of the modules *path* imports by a
+    relative specifier; a bare one (``'three'``) names no part of *package*."""
+    text = _JS_BLOCK_COMMENT.sub("", path.read_text(encoding="utf-8", errors="ignore"))
+    root = (repo / package).resolve()
+    targets = []
+    for match in _JS_IMPORT.finditer(text):
+        spec = match.group(1) or match.group(2)
+        if not spec.startswith("."):
+            continue
+        target = (path.parent / spec).resolve()
+        try:
+            targets.append(target.relative_to(root).as_posix())
+        except ValueError:
+            continue  # outside the package
+    return targets
+
+
 def module_imports(repo: Path, path: Path, parts: List[str]) -> List[str]:
     """Dotted targets of *path*'s runtime imports (each file parsed once a run:
     both scales read the same imports)."""
@@ -166,6 +204,38 @@ def layer_order(data: dict) -> Optional[List[List[str]]]:
     return [[part.strip() for part in tier.split("|")] for tier in order]
 
 
+def expand_order(root: Path, order: List[List[str]]) -> List[List[str]]:
+    """*order* with every ``"<folder>/*"`` part made one part per child of
+    that folder -- each file (named without its suffix) or subfolder -- all
+    peers of the wildcard's rank. A plug-in folder declares its parts once:
+    a new child is a new peer with no edit to the declaration."""
+    expanded = []
+    for tier in order:
+        parts = []
+        for part in tier:
+            if not part.endswith("/*"):
+                parts.append(part)
+                continue
+            folder = part[:-2]
+            children = (
+                sorted(
+                    (
+                        child.relative_to(root).with_suffix("")
+                        if child.is_file()
+                        else child.relative_to(root)
+                    ).as_posix()
+                    for child in (root / folder).iterdir()
+                    if child.name not in EXEMPT_DIRS
+                    and not child.name.startswith((".", "_"))
+                )
+                if (root / folder).is_dir()
+                else []
+            )
+            parts.extend(children)
+        expanded.append(parts)
+    return expanded
+
+
 def part_of(relative: str, parts: Sequence[str]) -> Optional[str]:
     """The longest declared part that *relative* (package-relative posix) is in."""
     best = None
@@ -198,7 +268,7 @@ def order_problems(repo: Path, package: str, order: List[List[str]]) -> List[str
         problems.append(f"parts declared twice: {dupes}")
     root = repo / package
     for part in flat:
-        target = root / part
+        target = root / (part[:-2] if part.endswith("/*") else part)
         if not (target.is_dir() or target.with_suffix(".py").is_file()):
             problems.append(f"declared part {part!r} does not exist")
     for child in sorted(root.iterdir()):
@@ -213,23 +283,29 @@ def order_problems(repo: Path, package: str, order: List[List[str]]) -> List[str
 
 
 def layer_violations(repo: Path, package: str, order: List[List[str]]) -> Set[str]:
-    """Imports that point up the declared order, or across peers of one rank."""
+    """Imports that point up the declared order, or across peers of one rank --
+    a Python module's, and an ES module's (``*.js``) by its relative imports."""
+    order = expand_order(repo / package, order)
     rank = {part: index for index, tier in enumerate(order) for part in tier}
     parts = list(rank)
     found = set()
-    for path, dotted in iter_modules(repo, package):
+
+    def check(path: Path, dest_path: str, target: str) -> None:
         source = part_of(_rel(repo, package, path, suffix=False), parts)
-        if source is None:
-            continue
+        dest = part_of(dest_path, parts)
+        if source is None or dest is None or dest == source:
+            return
+        if rank[dest] <= rank[source]:
+            found.add(f"{_rel(repo, package, path)} -> {target}")
+
+    for path, dotted in iter_modules(repo, package):
         for target in module_imports(repo, path, dotted):
             pieces = target.split(".")
-            if pieces[0] != package or len(pieces) < 2:
-                continue
-            dest = part_of("/".join(pieces[1:]), parts)
-            if dest is None or dest == source:
-                continue
-            if rank[dest] <= rank[source]:
-                found.add(f"{_rel(repo, package, path)} -> {target}")
+            if pieces[0] == package and len(pieces) >= 2:
+                check(path, "/".join(pieces[1:]), target)
+    for path in iter_js_modules(repo, package):
+        for target in js_imports(repo, package, path):
+            check(path, str(Path(target).with_suffix("").as_posix()), target)
     return found
 
 

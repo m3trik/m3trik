@@ -27,12 +27,13 @@
 | `check_tooltips.py --workspace` | a tooltip Qt would eat (bare `<`); a reset control off `ResetGesture` | Renders, then parses. |
 | `check_ui_spacers.py [--root] [--max-gap]` | a `Fixed` vertical spacer taller than the panels' ~10 px gap (Designer's 20×40 default ships dead space) | Sweeps the four UI repos; tentacle also pins it (`test_ui_integrity.py`). |
 | `verify_runtime_surface.py verify <pkg>` / `dump` | a member in the live `HelpMixin` surface that the committed registry lacks | Catches metaclass/mixin injection the AST walker misses; DCC packages dump from a fresh headless session via `Check-RuntimeSurface.ps1` (weekly, `Invoke-ContextBudgetCheck.ps1`). |
-| `sync_rpc_core.py [--check]` | drift between `pythontk/net_utils/rpc/plugin_core.py` and the four staged `_rpc_core.py` plugin payloads (mayatk/blendertk × marmoset/substance) | Never hand-edit a staged copy; pinned by `pythontk/test/test_sync_rpc_core.py`. |
-| `sync_shadow_shaders.py [--check]` | drift between `pythontk/geo_utils/shadow_horizon.glsl` and its two generated mirrors (`shadow_rig.js`, `unitytk` `ShadowPlaneHorizon.hlsl`) | **Marker**-spliced, not whole-file: each mirror keeps its uniforms + `SH_Fetch` hook outside the region; a missing marker pair is refused. Maya/Blender assemble instead, via `ShadowHorizon.shader_source(language)`. `pythontk/test/test_sync_shadow_shaders.py` pins it. |
-| `sync_shared_bat.py [--check]` | drift between `m3trik/package-manager.bat` and the committed mirrors in `mayatk`/`blendertk` `env_utils/` | Ships in each wheel beside the thin per-DCC wrapper; pinned by `m3trik/test/test_sync_shared_bat.py`. |
-| `sync_scene_records.py [--check]` | `ptk.SceneRecords` vs doc table, Unity channels + versions, both PRODUCERS | Tested. |
+| `sync_rpc_core.py [--check]` | drift between `pythontk/net_utils/rpc/plugin_core.py` and the four staged `_rpc_core.py` plugin payloads (mayatk/blendertk × marmoset/substance) | Never hand-edit a staged copy. Tested. |
+| `sync_shadow_shaders.py [--check]` | drift between `pythontk/geo_utils/shadow_horizon.glsl` and its two generated mirrors (`shadow_rig.js`, `unitytk` `ShadowPlaneHorizon.hlsl`) | **Marker**-spliced, not whole-file: each mirror keeps its uniforms + `SH_Fetch` hook outside the region; a missing marker pair is refused. Maya/Blender assemble instead, via `ShadowHorizon.shader_source(language)`. Tested. |
+| `sync_shared_bat.py [--check]` | drift between `m3trik/package-manager.bat` and the committed mirrors in `mayatk`/`blendertk` `env_utils/` | Ships in each wheel beside the thin per-DCC wrapper. Tested. |
+| `sync_scene_records.py [--check]` | `ptk.SceneRecords` vs doc table, Unity channels + versions, both PRODUCERS; emits `records.js`, `*.g.cs` | Tested. |
 | `sync_workspace.py [--check]` | `../workspace.json` vs root Dispatch, CI loops, charters | §0. |
 | `check_layers.py [--check]` / `--update` | undeclared ecosystem import; import up `[tool.m3trik.layers]` | Frozen baseline beside it. |
+| `check_js_types.py` | `tsc --checkJs` errors in `PROJECTS` | No compiler = exit 2. |
 
 ## Rules
 

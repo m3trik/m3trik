@@ -49,8 +49,12 @@ END = "// <<< END GENERATED shadow_horizon body"
 #: checked out is skipped rather than fabricated — the ecosystem repos are
 #: cloned independently.
 _MIRRORS = (
-    ("pythontk", "pythontk/net_utils/preview/scripts/shadow_rig.js", "glsl"),
-    ("unitytk", "unitytk/templates/ShadowPlaneHorizon.hlsl", "hlsl"),
+    (
+        "pythontk",
+        "pythontk/net_utils/preview/features/shadow_rig/shadow_rig.js",
+        "glsl",
+    ),
+    ("unitytk", "unitytk/templates/ShadowPlane/ShadowPlaneHorizon.hlsl", "hlsl"),
 )
 
 

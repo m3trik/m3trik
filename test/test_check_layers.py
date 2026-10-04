@@ -92,5 +92,53 @@ class TestRules(unittest.TestCase):
         self.assertIsNone(cl.part_of("corex/y", ["core"]))
 
 
+class TestWebRuntime(unittest.TestCase):
+    """The same declaration over a served ES-module runtime: its relative
+    imports point down the order, and a ``<folder>/*`` part makes each feature
+    a peer of the others."""
+
+    FILES = {
+        "pkg/__init__.py": "",
+        "pkg/web/__init__.py": "",
+        "pkg/web/kernel/math.js": "export const add = (a, b) => a + b;\n",
+        "pkg/web/kernel/main.js": (
+            "import * as THREE from 'three';\n"  # bare: names no part
+            "import { add } from './math.js';\n"
+            "import { spin } from '../features/spin.js';\n"  # upward
+        ),
+        "pkg/web/features/spin.js": (
+            "/* an app can import { add } from '../kernel/nowhere.js' */\n"  # comment
+            "import {\n  add,\n} from '../kernel/math.js';\n"  # down, multi-line
+            "export const spin = 1;\n"
+        ),
+        "pkg/web/features/rig/rig.js": (
+            "export { spin } from '../spin.js';\n"  # peer feature
+            "import './model.js';\n"  # its own folder
+        ),
+        "pkg/web/features/rig/model.js": "",
+    }
+    ORDER = [["web/features/*"], ["web/kernel"], ["web"]]
+
+    def test_upward_and_peer_imports_are_violations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _package(Path(tmp), self.FILES)
+            found = cl.layer_violations(repo, "pkg", self.ORDER)
+        self.assertEqual(
+            found,
+            {
+                "web/kernel/main.js -> web/features/spin.js",
+                "web/features/rig/rig.js -> web/features/spin.js",
+            },
+        )
+
+    def test_a_wildcard_part_is_each_child_a_peer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _package(Path(tmp), self.FILES)
+            order = cl.expand_order(repo / "pkg", self.ORDER)
+            problems = cl.order_problems(repo, "pkg", self.ORDER)
+        self.assertEqual(order[0], ["web/features/rig", "web/features/spin"])
+        self.assertEqual(problems, [])
+
+
 if __name__ == "__main__":
     unittest.main()

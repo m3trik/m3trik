@@ -12,7 +12,7 @@
   - `check_js_types.py` runs `tsc --checkJs` over each project in `PROJECTS`. It finds the compiler as `$TSC`, `tsc`, `npx`, then Playwright's node with VS Code's TypeScript. With no compiler it exits 2, never a pass. CI installs Node and runs it.
   - `check_layers.py` follows relative ES imports in served `*.js`, and a `"<folder>/*"` part makes each child a peer of the others.
   - CODE_STANDARD §0 gains *Declared and checked*, and §2 a Python type toolbox.
-  - The layer baseline goes from 185 to 178: mayatk's plug-in door removed seven edges.
+  - The layer baseline goes from 185 to 177: mayatk's plug-in door removed seven edges, and the release review an eighth (`light_utils` no longer reads `env_utils.scene_state`: the emission-weight table moved down into `ShaderAttributeMap`).
 
   Tests: `test_sync_scene_records` (`TestGeneratedTypes`), `test_check_js_types`, `test_check_layers` (`TestWebRuntime`).
 

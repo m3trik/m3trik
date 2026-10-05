@@ -75,7 +75,6 @@
   "env_utils/scene_exporter/_task_scene.py -> mayatk.core_utils.diagnostics.scene_diag",
   "env_utils/scene_exporter/_task_scene.py -> mayatk.core_utils.diagnostics.transform_diag",
   "env_utils/usd.py -> mayatk.anim_utils._anim_utils",
-  "light_utils/_light_utils.py -> mayatk.env_utils.scene_state",
   "light_utils/hdr_manager.py -> mayatk.env_utils._env_utils",
   "light_utils/lightmap_baker/lightmap_baker.py -> mayatk.core_utils.diagnostics.uv_diag",
   "light_utils/lightmap_baker/lightmap_baker_slots.py -> mayatk.env_utils._env_utils",

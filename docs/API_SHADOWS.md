@@ -14,14 +14,14 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Behaviors` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L211)
-- `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L128)
+- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L229)
+- `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L157)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L110)
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L427)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L188)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
 ### `Finding` — mayatk, pythontk
@@ -110,12 +110,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotManifest` — mayatk, pythontk
 
-- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L112)
+- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L116)
 - `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L92)
 
 ### `ShotSequencer` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`ShotSequencer`](blendertk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L235)
+- `blendertk` — [`ShotSequencer`](blendertk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L245)
 - `mayatk` — [`ShotSequencer`](mayatk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L72)
 - `pythontk` — [`ShotSequencer`](pythontk/core_utils/engines/shots/shot_sequencer.py#L215)
 

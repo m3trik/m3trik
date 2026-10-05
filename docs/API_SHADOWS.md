@@ -14,13 +14,13 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Behaviors` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L224)
+- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L229)
 - `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L157)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L110)
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L414)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L427)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
@@ -97,8 +97,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `RpcPlugin` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L410)
-- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L410)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L426)
+- `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L426)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L426)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L426)
 - `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L426)
@@ -115,7 +115,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotSequencer` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`ShotSequencer`](blendertk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L232)
+- `blendertk` — [`ShotSequencer`](blendertk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L245)
 - `mayatk` — [`ShotSequencer`](mayatk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L72)
 - `pythontk` — [`ShotSequencer`](pythontk/core_utils/engines/shots/shot_sequencer.py#L215)
 
@@ -164,7 +164,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L31)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L56)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1228)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1086)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1123)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L240)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L257)
 - `blendertk` — [`main`](blendertk/env_utils/pm_doctor.py#L56)
@@ -192,7 +192,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `set_resolution` — blendertk, extapps, mayatk
 
-- `blendertk` — [`set_resolution`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L158)
+- `blendertk` — [`set_resolution`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L169)
 - `extapps` — [`set_resolution`](extapps/substance_workflow/bake_utils.py#L349)
 - `extapps` — [`set_resolution`](extapps/substance_workflow/texture_set_utils.py#L21)
 - `mayatk` — [`set_resolution`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L169)
@@ -205,7 +205,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (215)
+## Intentional mayatk↔blendertk port parity (216)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -393,6 +393,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UnityBridge`
 - `UnityBridgeSlots`
 - `UsdUtils`
+- `UvDiagnostics`
 - `UvUtils`
 - `Validator`
 - `WebXrPreview`

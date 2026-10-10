@@ -117,6 +117,47 @@ class TwinSpec:
         return f"{self.rel}  [{self.a}<->{self.b}, {kind}]"
 
 
+#: The Shot Manifest panel folder, and the modules in it that answer to their
+#: host (each DCC's own): the host adapter, the engine adapter, the range
+#: facade bound to the host's audio sizing, the generated ``.ui`` module and the
+#: package docstring.
+_MANIFEST_PANEL = "anim_utils/shots/shot_manifest"
+_MANIFEST_HOST_MODULES = frozenset(
+    (
+        "__init__.py",
+        "manifest_host.py",
+        "_shot_manifest.py",
+        "range_resolver.py",
+        "shot_manifest_ui.py",
+    )
+)
+
+
+def _manifest_panel_twins() -> List["TwinSpec"]:
+    """A whole-file entry per Shot Manifest panel module but the host's.
+
+    Derived from mayatk's folder, never hand-listed (CODE_STANDARD §6): a module
+    the panel gains is guarded the day it lands, and one blendertk lacks reads
+    MISSING.  Empty when mayatk is not checked out.
+    """
+    root = os.path.join(REPO, "mayatk", "mayatk", *_MANIFEST_PANEL.split("/"))
+    if not os.path.isdir(root):
+        return []
+    return [
+        TwinSpec(
+            rel=f"{_MANIFEST_PANEL}/{name}",
+            reason=(
+                "The Shot Manifest panel's Qt glue over the pythontk manifest "
+                "engine (pairing, rows, ranges, edits, tags). uitk names no "
+                "shots, so it is mirrored in both DCC packages -- one text, "
+                "every host call going through manifest_host.ManifestHost."
+            ),
+        )
+        for name in sorted(os.listdir(root))
+        if name.endswith(".py") and name not in _MANIFEST_HOST_MODULES
+    ]
+
+
 # Seeded 2026-09-16 from a measured pass, NOT from a guess: every symbol below
 # was confirmed identical-after-fold at the moment it was added. An entry that
 # was never green is worse than no entry -- it teaches the reader that red is
@@ -272,99 +313,10 @@ LEDGER: List[TwinSpec] = [
     # HierarchyBaselineStore) and the Suffix By Type editor to uitk
     # (NamingConventionEditor). What each DCC keeps is thin panel glue over
     # those -- identical, so it is guarded here, measured green.
-    TwinSpec(
-        rel="anim_utils/shots/shot_manifest/shot_manifest_slots.py",
-        reason=(
-            "Shot Manifest panel controller: Qt glue binding the panel's widgets to "
-            "the pythontk manifest engine, whose rules it calls (RangeResolver's "
-            "range edits and collisions, ManifestModel.describe_read_failure, "
-            "Mapping.seed_user_folder). uitk names no shots, so the glue is "
-            "mirrored in both DCC packages and guarded here."
-        ),
-        symbols=(
-            "ShotManifestSlots",
-            "ShotManifestController._active_store",
-            "ShotManifestController._all_ranges_complete",
-            "ShotManifestController._apply_mapping",
-            "ShotManifestController._apply_post_build",
-            "ShotManifestController._bind_store_listener",
-            "ShotManifestController._build_option_rows",
-            "ShotManifestController._cascade_from",
-            "ShotManifestController._combo_data_index",
-            "ShotManifestController._copy_asset_names",
-            "ShotManifestController._csv_source_tooltip",
-            "ShotManifestController._describe_read_failure",
-            "ShotManifestController._detection_inputs",
-            "ShotManifestController._drop_excluded",
-            "ShotManifestController._effect_pages",
-            "ShotManifestController._ensure_steps",
-            "ShotManifestController._exclude_steps",
-            "ShotManifestController._fill_missing_assets",
-            "ShotManifestController._fit_mode",
-            "ShotManifestController._include_step",
-            "ShotManifestController._initial_shot_length",
-            "ShotManifestController._is_built",
-            "ShotManifestController._is_detection_mode",
-            "ShotManifestController._load_csv",
-            "ShotManifestController._load_data",
-            "ShotManifestController._load_scene_shots",
-            "ShotManifestController._manifest",
-            "ShotManifestController._mark_csv_invalid",
-            "ShotManifestController._match",
-            "ShotManifestController._migrate_retired_mapping",
-            "ShotManifestController._move_action_buttons_to_footer",
-            "ShotManifestController._on_csv_browsed",
-            "ShotManifestController._on_csv_path_edited",
-            "ShotManifestController._on_csv_recent_selected",
-            "ShotManifestController._on_first_show",
-            "ShotManifestController._on_long_names_toggled",
-            "ShotManifestController._on_mapping_changed",
-            "ShotManifestController._on_option_changed",
-            "ShotManifestController._on_range_double_clicked",
-            "ShotManifestController._on_store_event",
-            "ShotManifestController._open_audio_clip",
-            "ShotManifestController._open_audio_clips",
-            "ShotManifestController._open_effect",
-            "ShotManifestController._open_in_shot_sequencer",
-            "ShotManifestController._open_in_shots",
-            "ShotManifestController._open_mappings_folder",
-            "ShotManifestController._open_render_effects",
-            "ShotManifestController._open_scene_source",
-            "ShotManifestController._option_values",
-            "ShotManifestController._orphan_shots",
-            "ShotManifestController._pairing",
-            "ShotManifestController._placement_on_regions",
-            "ShotManifestController._populate_from_source",
-            "ShotManifestController._reapply_mapping",
-            "ShotManifestController._refresh_mapping_list",
-            "ShotManifestController._refresh_ranges",
-            "ShotManifestController._refresh_timing",
-            "ShotManifestController._remove_orphan",
-            "ShotManifestController._resolve_ranges",
-            "ShotManifestController._seed_mappings_folder",
-            "ShotManifestController._set_footer",
-            "ShotManifestController._setup_csv_path_editing",
-            "ShotManifestController._setup_header_menu",
-            "ShotManifestController._setup_mapping_combo",
-            "ShotManifestController._setup_recent_csv",
-            "ShotManifestController._show_item_menu",
-            "ShotManifestController._step_index",
-            "ShotManifestController._step_is_built",
-            "ShotManifestController._sync_detection_widgets",
-            "ShotManifestController._unbind_store_listener",
-            "ShotManifestController._update_build_button",
-            "ShotManifestController._use_selected_keys",
-            "ShotManifestController._wire_mapping_option_box",
-            "ShotManifestController.detect",
-        ),
-        note=(
-            "73 of 85 shared methods. The rest reach the host: scene-change wiring "
-            "(Maya's ScriptJobManager vs the store's invalidation listener), the "
-            "current frame, the outliner reveal, the undo chunk around build, the "
-            "in-method manifest_data / Detection imports, and the _store_cls / "
-            "_manifest_cls hooks every store and engine access goes through."
-        ),
-    ),
+    # The Shot Manifest panel, restructured 2026-10-10: every module but the
+    # host's is one text in both packages, so each is guarded whole-file --
+    # the set derived from the folder (_manifest_panel_twins).
+    *_manifest_panel_twins(),
     TwinSpec(
         rel="anim_utils/shots/shots_slots.py",
         reason=(
@@ -401,7 +353,6 @@ LEDGER: List[TwinSpec] = [
             "ShotsController._sync_shot_editor",
             "ShotsController._unbind_store_listener",
             "ShotsController.on_add_space",
-            "ShotsController.on_delete_stale_shots",
             "ShotsController.on_detection_changed",
             "ShotsController.on_detection_mode_changed",
             "ShotsController.on_fit_mode_changed",
@@ -424,8 +375,6 @@ LEDGER: List[TwinSpec] = [
             "ShotsSlots.btn_add_leading_space",
             "ShotsSlots.btn_add_trailing_space",
             "ShotsSlots.btn_apply_gap",
-            "ShotsSlots.btn_delete_all",
-            "ShotsSlots.btn_delete_stale",
             "ShotsSlots.btn_move_shot",
             "ShotsSlots.btn_shift_all",
             "ShotsSlots.btn_trim_all",
@@ -448,11 +397,14 @@ LEDGER: List[TwinSpec] = [
             "ShotsSlots.txt_shot_name",
         ),
         note=(
-            "73 of 80 shared methods. The rest differ on the undo bracket "
+            "70 shared methods. The rest differ on the undo bracket "
             "(_boundary_edit: mayatk's store.scene_edit vs blendertk's snapshot + "
             "CoreUtils.undo_chunk, and the delete handlers built on it), host prose "
-            "(confirm_stale_removal, header_init's tooltips), and the _store_cls / "
-            "_sequencer_cls hooks themselves."
+            "(confirm_stale_removal, header_init's tooltips), the _store_cls / "
+            "_sequencer_cls hooks themselves, and the retired on_delete_*_shots "
+            "aliases, whose Deprecation remove_in is each package's own version. "
+            "btn_delete_all / btn_delete_stale left both panels on 2026-10-10 "
+            "for one btn_delete_shots."
         ),
     ),
     TwinSpec(
@@ -481,46 +433,17 @@ LEDGER: List[TwinSpec] = [
         ),
     ),
     TwinSpec(
-        rel="anim_utils/shots/shot_manifest/table_presenter.py",
+        rel="anim_utils/shots/shot_sequencer/scene_selection.py",
         reason=(
-            "The Shot Manifest tree's presentation mixin: Qt item painting over the "
-            "pythontk manifest results (collisions from "
-            "RangeResolver.find_collisions, object verdicts from "
-            "StepStatus.find_object)."
+            "Shot Sequencer selection mixin: the footer's key-selection line "
+            "(2026-10-10), the widget's clips read into the shared "
+            "pythontk ShotSequencer.describe_key_selection."
         ),
-        symbols=(
-            "ManifestTableMixin._add_orphan_rows",
-            "ManifestTableMixin._auto_fill_ranges",
-            "ManifestTableMixin._color_behavior_label",
-            "ManifestTableMixin._make_behavior_label",
-            "ManifestTableMixin._on_behaviors_changed",
-            "ManifestTableMixin._reapply_behavior",
-            "ManifestTableMixin._restore_tree_state",
-            "ManifestTableMixin._restore_user_ranges",
-            "ManifestTableMixin._revert_range_cell",
-            "ManifestTableMixin._save_tree_state",
-            "ManifestTableMixin._use_short_names",
-            "ManifestTableMixin._validate_range_collisions",
-            "ManifestTableMixin.expand_extra",
-        ),
+        symbols=("SceneSelectionMixin._show_key_selection",),
         note=(
-            "13 of 19 shared methods. The rest resolve host node icons and names "
-            "and populate/format rows through host widgets; re-applying a "
-            "behavior is shared (``ShotManifest.reapply_object``)."
+            "1 shared method; the rest mirror each host's selection (Maya's "
+            "selectKey / Channel Box vs Blender's keyframe points and channels)."
         ),
-    ),
-    TwinSpec(
-        rel="anim_utils/shots/shot_manifest/manifest_data.py",
-        reason=(
-            "The Shot Manifest tree's behavior labels: the rich text a behavior "
-            "cell shows (missing, keyed under an older effect recipe). Same tier "
-            "as the presenter."
-        ),
-        symbols=(
-            "ManifestData.fmt_behavior",
-            "ManifestData.format_behavior_html",
-        ),
-        note="2 of 3 shared methods; the icon loader is the host's.",
     ),
     TwinSpec(
         rel="mat_utils/render_opacity/render_effects_slots.py",

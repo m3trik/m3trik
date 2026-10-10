@@ -300,6 +300,13 @@ jobs:
       - name: No unmanaged temp allocations or stray artifacts
         run: python m3trik/scripts/check_temp_artifacts.py
 
+      # The root CLAUDE.md's "English only" rule: no letter of a non-Latin
+      # script (and no Greek word) in any checked-out repo's text or paths.
+      # The private repos this job never clones are swept weekly instead, by
+      # scripts/Invoke-ContextBudgetCheck.ps1 on the developer workspace.
+      - name: English only
+        run: python m3trik/scripts/check_english_only.py
+
       - name: Tooltips well-formed
         env:
           QT_QPA_PLATFORM: offscreen

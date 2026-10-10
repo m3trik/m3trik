@@ -2508,6 +2508,30 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("RESULT=True", result.stdout, out)
             self.assertIn("private", out)
 
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_the_english_gate_stops_a_non_latin_word_and_passes_a_clean_tree(self):
+        """``Test-EnglishOnly`` runs ``scripts/check_english_only.py`` over the
+        packages a run would publish, so non-English text stops the release
+        instead of reddening the next m3trik push. The letters are built with
+        ``chr()``: the gate scans this file too."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            script = M3TRIK_DIR / "scripts" / "check_english_only.py"
+            call = (
+                f"$ok = Test-EnglishOnly '{root}' @('pythontk') -Script '{script}'\n"
+                'Write-Output "RESULT=$ok"\n'
+            )
+            clean = self._run_push_functions(root, call)
+            self.assertIn("RESULT=True", clean.stdout, clean.stdout + clean.stderr)
+
+            word = "".join(chr(cp) for cp in (0x65E5, 0x672C))
+            (repo / "notes.md").write_text(f"see {word} here\n", encoding="utf-8")
+            foreign = self._run_push_functions(root, call)
+            out = foreign.stdout + foreign.stderr
+            self.assertIn("RESULT=False", foreign.stdout, out)
+            self.assertIn("notes.md", out)
+
     def test_the_public_hygiene_gate_fails_when_python_cannot_run(self):
         """A stale ``$LASTEXITCODE`` of 0 must not pass a check that never ran."""
         with tempfile.TemporaryDirectory() as td:

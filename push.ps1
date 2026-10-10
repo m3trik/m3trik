@@ -288,12 +288,39 @@ function Get-TreeHash {
     }
 }
 
+function Invoke-RepoGate {
+    # One python gate over $Names (repo folders under $Root), its report echoed. $true when the
+    # trees are clean; $false on a finding and on a check that could not run - a pushed or
+    # published tree cannot be recalled, so an unanswered check stops the run as surely as a
+    # failed one.
+    param(
+        [string]$Label,
+        [string]$Script,
+        [string[]]$GateArgs,
+        [string[]]$Names
+    )
+    if (-not $Names) { return $true }
+    if (-not (Test-Path -LiteralPath $Script)) {
+        Write-Err "$Label gate missing: $Script"
+        return $false
+    }
+    # Checked first: a python that cannot start leaves $LASTEXITCODE as the previous native
+    # command left it, and a stale 0 would pass a check that never ran.
+    if (-not (Get-Command $PYTHON -CommandType Application -ErrorAction SilentlyContinue)) {
+        Write-Err "$Label gate cannot run: no python on PATH"
+        return $false
+    }
+    $report = & $PYTHON $Script @GateArgs @Names 2>&1
+    $code = $LASTEXITCODE
+    foreach ($line in @($report)) { Write-Host "  $line" }
+    if ($code -eq 0) { return $true }
+    Write-Err "$Label gate failed (exit $code): nothing was committed, pushed or released"
+    return $false
+}
+
 function Test-PublicHygiene {
-    # The public-hygiene gate: scripts/check_public_hygiene.py over $Names (repo folders
-    # under $Root), its report echoed. $true when the trees are clean, or when this machine
-    # has no private denylist (the script reports SKIP); $false on a denylisted identifier
-    # and on a check that could not run - a pushed leak cannot be recalled, so an unanswered
-    # check stops the run as surely as a failed one. -Script and -Denylist exist for tests;
+    # The public-hygiene gate: scripts/check_public_hygiene.py over $Names. A machine with no
+    # private denylist passes (the script reports SKIP). -Script and -Denylist exist for tests;
     # the real denylist lives outside every repo.
     param(
         [string]$Root,
@@ -301,27 +328,22 @@ function Test-PublicHygiene {
         [string]$Script = (Join-Path $PSScriptRoot "scripts\check_public_hygiene.py"),
         [string]$Denylist = ""
     )
-    if (-not $Names) { return $true }
-    if (-not (Test-Path -LiteralPath $Script)) {
-        Write-Err "Public hygiene gate missing: $Script"
-        return $false
-    }
-    # Checked first: a python that cannot start leaves $LASTEXITCODE as the previous native
-    # command left it, and a stale 0 would pass a check that never ran.
-    if (-not (Get-Command $PYTHON -CommandType Application -ErrorAction SilentlyContinue)) {
-        Write-Err "Public hygiene gate cannot run: no python on PATH"
-        return $false
-    }
     # --public-only: a run hands over every repo it touches (-All takes the private ones
     # too), and a private repo may name clients.
-    $cliArgs = @($Script, "--workspace", $Root, "--public-only")
-    if ($Denylist) { $cliArgs += @("--denylist", $Denylist) }
-    $report = & $PYTHON @cliArgs @Names 2>&1
-    $code = $LASTEXITCODE
-    foreach ($line in @($report)) { Write-Host "  $line" }
-    if ($code -eq 0) { return $true }
-    Write-Err "Public hygiene gate failed (exit $code): nothing was committed, pushed or released"
-    return $false
+    $gateArgs = @("--workspace", $Root, "--public-only")
+    if ($Denylist) { $gateArgs += @("--denylist", $Denylist) }
+    return Invoke-RepoGate "Public hygiene" $Script $gateArgs $Names
+}
+
+function Test-EnglishOnly {
+    # The English-only gate: scripts/check_english_only.py over $Names, so non-English text
+    # stops the release instead of reddening the next m3trik push. -Script exists for tests.
+    param(
+        [string]$Root,
+        [string[]]$Names,
+        [string]$Script = (Join-Path $PSScriptRoot "scripts\check_english_only.py")
+    )
+    return Invoke-RepoGate "English-only" $Script @("--workspace", $Root) $Names
 }
 
 function Get-RecentlyModifiedFiles {
@@ -2363,15 +2385,17 @@ if ($reposToProcess.Count -gt 1) {
 }
 
 # ------------------------------------------------------------------------------------------------
-# Public-hygiene gate (every run). A client identifier in anything this run could commit, push
-# or cut into Release notes stops it HERE, before any of that happens: a pushed leak cannot be
-# recalled. The denylist lives outside every repo, so the check itself publishes nothing; a
-# machine without it gets SKIP and runs on (Test-PublicHygiene).
+# Public-hygiene and English-only gates (every run). A client identifier, or non-English text,
+# in anything this run could commit, push or cut into Release notes stops it HERE, before any of
+# that happens: a pushed leak cannot be recalled. The denylist lives outside every repo, so the
+# check itself publishes nothing; a machine without it gets SKIP and runs on (Test-PublicHygiene).
 # ------------------------------------------------------------------------------------------------
 if ($reposToProcess.Count -gt 0) {
     $hygieneNames = @($reposToProcess | ForEach-Object { $_.Name })
     Write-Step "Public hygiene: $($hygieneNames -join ', ')"
     if (-not (Test-PublicHygiene $ROOT $hygieneNames)) { exit 1 }
+    Write-Step "English only: $($hygieneNames -join ', ')"
+    if (-not (Test-EnglishOnly $ROOT $hygieneNames)) { exit 1 }
 }
 
 # ------------------------------------------------------------------------------------------------

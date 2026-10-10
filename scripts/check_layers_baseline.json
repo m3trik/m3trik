@@ -131,6 +131,8 @@
   "core_utils/hierarchy_utils/hierarchy_diff.py -> pythontk.file_utils._file_utils",
   "core_utils/naming_convention.py -> pythontk.file_utils._file_utils",
   "core_utils/naming_convention.py -> pythontk.str_utils._str_utils",
+  "core_utils/naming_convention/_naming_convention.py -> pythontk.file_utils._file_utils",
+  "core_utils/naming_convention/_naming_convention.py -> pythontk.str_utils._str_utils",
   "core_utils/package_manager.py -> pythontk.file_utils._file_utils",
   "core_utils/package_manager.py -> pythontk.file_utils.temp_artifacts",
   "core_utils/package_manager.py -> pythontk.iter_utils._iter_utils",

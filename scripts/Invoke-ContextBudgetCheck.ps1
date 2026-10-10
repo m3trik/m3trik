@@ -92,15 +92,27 @@ if (Test-Path $docsScript) {
     Add-Content -Path $LogPath -Value "----- docs sweep: exit $docsCode -----`n$docsOut" -Encoding UTF8
 }
 
+# English-only sweep -- every repo of the workspace, the private ones CI never
+# clones included (policy: the root CLAUDE.md; detail: the script's docstring).
+$englishScript = Join-Path $RepoRoot 'm3trik\scripts\check_english_only.py'
+$englishCode = 0
+if (Test-Path $englishScript) {
+    $englishOut  = & $py $englishScript --workspace $RepoRoot 2>&1 | Out-String
+    $englishCode = $LASTEXITCODE
+    Add-Content -Path $LogPath -Value "----- english-only sweep: exit $englishCode -----`n$englishOut" -Encoding UTF8
+}
+
 if ($code -ne 0) {
     Show-BudgetToast 'Context budget FAILED' 'A hard budget was breached — see claude-context-budget.log and run check_context_budget.py.'
 } elseif ($driftCode -ne 0) {
     Show-BudgetToast 'API runtime drift' 'A package registry promises a member its live class lacks — see claude-runtime-surface.log.'
 } elseif ($docsCode -ne 0) {
     Show-BudgetToast 'Docs sweep FAILED' 'Broken links or orphaned docs — see claude-context-budget.log and run check_docs.py --workspace.'
+} elseif ($englishCode -ne 0) {
+    Show-BudgetToast 'English-only sweep FAILED' 'A repo holds a non-Latin letter or a Greek word -- see claude-context-budget.log and run check_english_only.py.'
 } elseif ($nearCap) {
     Show-BudgetToast 'MEMORY.md near cap' 'Memory index is within 2 KB of the 24.4 KB load cap — compress index entries soon.'
 }
 
-if ($code -eq 0 -and ($driftCode -ne 0 -or $docsCode -ne 0)) { $code = 1 }
+if ($code -eq 0 -and ($driftCode -ne 0 -or $docsCode -ne 0 -or $englishCode -ne 0)) { $code = 1 }
 exit $code

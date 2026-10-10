@@ -26,7 +26,8 @@ What is scanned
 ---------------
 Each repo's publishable paths (a module named for a client leaks through any
 listing, this workspace's own inventory included) and the text of every
-publishable file. A file with a NUL byte in its first 8 KB is binary and skipped.
+publishable file. A file with a NUL byte in its first 8 KB is binary and skipped,
+unless it opens with a UTF-16 byte order mark: that is text (:func:`read_text`).
 
 Usage
 -----
@@ -45,6 +46,7 @@ Exit code 0 = clean (or no denylist, or nothing public to check), 1 = a match,
 from __future__ import annotations
 
 import argparse
+import codecs
 import os
 import re
 import subprocess
@@ -139,6 +141,27 @@ def publishable_files(repo_dir: str) -> List[str]:
     )
 
 
+def read_text(path: str) -> Optional[str]:
+    """*path*'s text; None for a binary file, or one that cannot be read.
+
+    UTF-8, an undecodable byte read as U+FFFD -- except a file opening with a
+    UTF-16 byte order mark (what Windows PowerShell 5.1's ``>`` writes), whose
+    NUL bytes would otherwise read as binary. Binary: a NUL byte in the first
+    :data:`BINARY_SNIFF_BYTES`. Shared with ``check_english_only.py``, so the
+    two text gates read one set of files one way.
+    """
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(BINARY_SNIFF_BYTES)
+            if head.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+                return (head + handle.read()).decode("utf-16", "replace")
+            if b"\0" in head:
+                return None
+            return (head + handle.read()).decode("utf-8", "replace")
+    except OSError:  # a staged deletion, a gitlink directory
+        return None
+
+
 def scan_repo(repo_dir: str, pattern: "re.Pattern[str]", label: str) -> List[Finding]:
     """Every denylisted match in *repo_dir*'s publishable paths and text."""
     findings = []
@@ -146,15 +169,9 @@ def scan_repo(repo_dir: str, pattern: "re.Pattern[str]", label: str) -> List[Fin
         named = pattern.search(rel)
         if named:
             findings.append(Finding(label, rel, None, named.group(0)))
-        try:
-            with open(os.path.join(repo_dir, rel), "rb") as handle:
-                head = handle.read(BINARY_SNIFF_BYTES)
-                if b"\0" in head:
-                    continue
-                data = head + handle.read()
-        except OSError:  # a staged deletion, a gitlink directory
+        text = read_text(os.path.join(repo_dir, rel))
+        if text is None:
             continue
-        text = data.decode("utf-8", "replace")
         line, counted = 1, 0
         for match in pattern.finditer(text):
             line += text.count("\n", counted, match.start())

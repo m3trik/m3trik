@@ -102,6 +102,17 @@ class TestScan(_RepoCase):
         self.write("asset.bin", b"\x00\x01ZORK_WIDGET")
         self.assertEqual(self.scan(), [])
 
+    def test_a_utf16_file_is_text_not_a_binary(self):
+        """What Windows PowerShell 5.1's ``>`` writes: a byte order mark, then
+        a NUL in every ASCII character -- read as text, never skipped."""
+        for codec in ("utf-16-le", "utf-16-be"):
+            with self.subTest(codec=codec):
+                bom = "﻿".encode(codec)
+                self.write("ps.log", bom + "x\nZORK_WIDGET\n".encode(codec))
+                self.assertEqual(
+                    self.scan(), [gate.Finding("pubrepo", "ps.log", 2, "ZORK_WIDGET")]
+                )
+
     def test_a_path_that_names_a_client_is_reported_without_a_line(self):
         self.write("test/test_zork_widget_case.py", "clean\n")
         self.assertEqual(

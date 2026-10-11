@@ -93,6 +93,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      # PySide6's system libraries, as every Qt sibling workflow installs them:
+      # without libEGL, `import qtpy.QtCore` fails at import, and extapps'
+      # conftest (loaded by the vendor-sync step) dies with pytest exit 4.
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libdbus-1-3 libfontconfig1
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

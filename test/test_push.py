@@ -2533,14 +2533,20 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("notes.md", out)
 
     def test_the_public_hygiene_gate_fails_when_python_cannot_run(self):
-        """A stale ``$LASTEXITCODE`` of 0 must not pass a check that never ran."""
+        """A stale ``$LASTEXITCODE`` of 0 must not pass a check that never ran.
+
+        ``$PYTHON`` is a full path, resolved once when common.ps1 loads, so a
+        narrowed ``PATH`` hides nothing from it: a CI runner's toolcache python
+        still ran and the gate SKIPped (no denylist there) as a pass. The
+        interpreter itself is pointed at nothing instead."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             script = M3TRIK_DIR / "scripts" / "check_public_hygiene.py"
+            missing = root / "no-python" / "python.exe"
             result = self._run_push_functions(
                 root,
                 "cmd /c exit 0\n"
-                "$env:PATH = Join-Path $env:SystemRoot 'System32'\n"
+                f"$PYTHON = '{missing}'\n"
                 f"$ok = Test-PublicHygiene '{root}' @('pythontk') -Script '{script}'\n"
                 'Write-Output "RESULT=$ok"\n',
             )

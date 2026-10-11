@@ -9,7 +9,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `AudioUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L73)
-- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L82)
+- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L83)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L14)
 
 ### `Behaviors` — blendertk, mayatk, pythontk
@@ -81,9 +81,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Parameters`](extapps/photogrammetry/metashape_workflow/parameters.py#L373)
 - `extapps` — [`Parameters`](extapps/photogrammetry/realityscan_workflow/parameters.py#L164)
 - `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L126)
-- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L327)
+- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L356)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L462)
-- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L162)
+- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L165)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L402)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L504)
@@ -99,8 +99,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`RpcPlugin`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L426)
 - `blendertk` — [`RpcPlugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L426)
-- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L426)
-- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L426)
+- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L451)
+- `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L451)
 - `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L451)
 
 ### `ShotApply` — mayatk, pythontk
@@ -179,8 +179,8 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L162)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1180)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1527)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1232)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1579)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L117)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L641)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L120)

@@ -105,7 +105,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotApply` — mayatk, pythontk
 
-- `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L324)
+- `mayatk` — [`ShotApply`](mayatk/anim_utils/shots/_shot_apply.py#L329)
 - `pythontk` — [`ShotApply`](pythontk/core_utils/engines/shots/shot_apply.py#L55)
 
 ### `ShotManifest` — mayatk, pythontk
@@ -116,7 +116,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotSequencer` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`ShotSequencer`](blendertk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L254)
-- `mayatk` — [`ShotSequencer`](mayatk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L72)
+- `mayatk` — [`ShotSequencer`](mayatk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L62)
 - `pythontk` — [`ShotSequencer`](pythontk/core_utils/engines/shots/shot_sequencer.py#L375)
 
 ### `ShotStore` — mayatk, pythontk
@@ -178,7 +178,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/metashape_workflow/run_combined.py#L271)
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L162)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L212)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1232)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1579)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L117)
@@ -205,7 +205,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (226)
+## Intentional mayatk↔blendertk port parity (225)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -270,7 +270,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `EmissiveGroupsSlots`
 - `EnvUtils`
 - `ExplodedViewSlots`
-- `ExportMenuMixin`
 - `FKChainStrategy`
 - `FbxUtils`
 - `GameShader`

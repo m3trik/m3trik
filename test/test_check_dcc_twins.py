@@ -124,6 +124,38 @@ class WholeFileCompareTest(_TwinTreeCase):
         shutil.rmtree(os.path.join(self.root, "blendertk"))
         self.assertEqual(gate.compare(self.spec())[0], "absent")
 
+    def test_a_twin_file_gone_from_a_checked_out_sibling_is_missing(self):
+        """A renamed or deleted twin FILE is not an unchecked-out sibling.
+
+        It read ``absent`` -- "sibling not checked out", a skip that passes --
+        so moving one side's file silently retired its guard.
+        """
+        os.remove(os.path.join(self.root, "blendertk", "blendertk", "pkg", "mod.py"))
+        status, detail = gate.compare(self.spec())
+        self.assertEqual(status, "missing")
+        self.assertIn("blendertk", detail[0])
+
+    def test_a_manifest_module_only_one_host_has_is_guarded(self):
+        """The derived Shot Manifest set reads BOTH folders, so a panel module
+        that lands in either host first is ledgered (and reads ``missing``)."""
+        folder = gate._MANIFEST_PANEL.split("/")
+        for pkg, names in (
+            ("mayatk", ("shared.py", "maya_first.py")),
+            ("blendertk", ("shared.py", "blender_first.py")),
+        ):
+            path = os.path.join(self.root, pkg, pkg, *folder)
+            os.makedirs(path, exist_ok=True)
+            for name in names:
+                with open(os.path.join(path, name), "w", encoding="utf-8") as fh:
+                    fh.write("X = 1\n")
+        specs = {s.rel.rsplit("/", 1)[1]: s for s in gate._manifest_panel_twins()}
+        self.assertEqual(
+            sorted(specs), ["blender_first.py", "maya_first.py", "shared.py"]
+        )
+        self.assertEqual(gate.compare(specs["shared.py"])[0], "ok")
+        self.assertEqual(gate.compare(specs["maya_first.py"])[0], "missing")
+        self.assertEqual(gate.compare(specs["blender_first.py"])[0], "missing")
+
 
 class SymbolCompareTest(_TwinTreeCase):
     A_SRC = (

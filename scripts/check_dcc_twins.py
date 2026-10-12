@@ -119,8 +119,9 @@ class TwinSpec:
 
 #: The Shot Manifest panel folder, and the modules in it that answer to their
 #: host (each DCC's own): the host adapter, the engine adapter, the range
-#: facade bound to the host's audio sizing, the generated ``.ui`` module and the
-#: package docstring.
+#: facade bound to the host's audio sizing, the generated ``.ui`` module, the
+#: package docstring and a deprecated alias (its ``remove_in`` is its
+#: package's release).
 _MANIFEST_PANEL = "anim_utils/shots/shot_manifest"
 _MANIFEST_HOST_MODULES = frozenset(
     (
@@ -129,6 +130,7 @@ _MANIFEST_HOST_MODULES = frozenset(
         "_shot_manifest.py",
         "range_resolver.py",
         "shot_manifest_ui.py",
+        "export_menu.py",
     )
 )
 
@@ -136,13 +138,15 @@ _MANIFEST_HOST_MODULES = frozenset(
 def _manifest_panel_twins() -> List["TwinSpec"]:
     """A whole-file entry per Shot Manifest panel module but the host's.
 
-    Derived from mayatk's folder, never hand-listed (CODE_STANDARD §6): a module
-    the panel gains is guarded the day it lands, and one blendertk lacks reads
-    MISSING.  Empty when mayatk is not checked out.
+    Derived from both packages' folders, never hand-listed (CODE_STANDARD §6):
+    a module the panel gains in either host is guarded the day it lands, and
+    one the other host lacks reads MISSING.  Empty when neither is checked out.
     """
-    root = os.path.join(REPO, "mayatk", "mayatk", *_MANIFEST_PANEL.split("/"))
-    if not os.path.isdir(root):
-        return []
+    names = set()
+    for pkg in ("mayatk", "blendertk"):
+        root = os.path.join(REPO, pkg, pkg, *_MANIFEST_PANEL.split("/"))
+        if os.path.isdir(root):
+            names.update(os.listdir(root))
     return [
         TwinSpec(
             rel=f"{_MANIFEST_PANEL}/{name}",
@@ -153,7 +157,7 @@ def _manifest_panel_twins() -> List["TwinSpec"]:
                 "every host call going through manifest_host.ManifestHost."
             ),
         )
-        for name in sorted(os.listdir(root))
+        for name in sorted(names)
         if name.endswith(".py") and name not in _MANIFEST_HOST_MODULES
     ]
 
@@ -194,17 +198,20 @@ LEDGER: List[TwinSpec] = [
             "GapManagerMixin._drag_modifiers",
             "GapManagerMixin._find_shot_by_end",
             "GapManagerMixin._find_shot_by_start",
+            "GapManagerMixin._gap_edit_epilogue",
             "GapManagerMixin._gap_pair_at",
             "GapManagerMixin._refuse_if_gap_locked",
             "GapManagerMixin.on_gap_lock_all",
             "GapManagerMixin.on_gap_unlock_all",
         ),
         note=(
-            "7 of 14 methods identical. The other 7 differ on the undo bracket: "
-            "mayatk wraps edits in store.scene_edit(label), a primitive blendertk's "
-            "store does not have (it uses CoreUtils.undo_chunk()). That asymmetry "
-            "is also the root of the unguarded-boundary-edit bug in blendertk's "
-            "shots_slots -- when it is resolved, re-measure and widen this list."
+            "8 of 13 methods identical (re-measured 2026-10-10). Both stores now "
+            "bracket edits in store.scene_edit(label); the other 5 differ on the "
+            "label each host shows (mayatk's chunk ids 'gapresize' / 'shotmove', "
+            "Blender's undo-history names 'Resize Gap' / 'Move Shot'), comment "
+            "wording, one debug log (on_gap_lock_changed) and a signature wrap "
+            "(on_gap_moved). Reconcile the comments and the log and only the "
+            "labels remain."
         ),
     ),
     TwinSpec(
@@ -217,13 +224,17 @@ LEDGER: List[TwinSpec] = [
         ),
         symbols=(
             "ShotNavMixin._configure_shot_combobox",
+            "ShotNavMixin._go_to_shot",
+            "ShotNavMixin._land_on_shot",
+            "ShotNavMixin._set_playhead_to_shot_start",
             "ShotNavMixin._sync_combobox",
             "ShotNavMixin._update_shot_nav_state",
             "ShotNavMixin.on_shot_block_clicked",
         ),
         note=(
-            "4 of 8 methods identical. The rest wrap real DCC calls (playback "
-            "range, selection) and are expected to differ."
+            "7 of 11 methods identical (re-measured 2026-10-12). The other 4 wrap "
+            "real DCC calls (playback range, navigation, selection, cell edits) "
+            "and are expected to differ."
         ),
     ),
     TwinSpec(
@@ -254,12 +265,23 @@ LEDGER: List[TwinSpec] = [
             "What LightmapBaker.bake returns, one shape in both packages so the "
             "panels and a script read the same result. A lightmap-only type has "
             "no home in pythontk -- the shared half of this tool there is the "
-            "generic FileDependencies -- so each baker carries the dataclass."
+            "generic FileDependencies -- so each baker carries the dataclass, and "
+            "the few host-free baker helpers beside it for the same reason."
         ),
-        symbols=("LightmapBakeResult",),
+        symbols=(
+            "LightmapBakeResult",
+            "LightmapBaker._atlas_gutter",
+            "LightmapBaker._move_into_place",
+            "LightmapBaker.peak_level",
+            "LightmapBaker.plan_sizes",
+            "LightmapBaker.preset_store",
+        ),
         note=(
-            "The whole class, fields included. The two engines differ throughout "
-            "(Arnold vs Cycles); only the result they report is shared."
+            "The result class whole, fields included, plus 5 host-free baker "
+            "helpers identical on both sides (re-measured 2026-10-12): the atlas "
+            "gutter, the safe move into place, the brightest-map level, the "
+            "atlas plan's pixel sizes and the preset store. The two engines "
+            "differ throughout otherwise (Arnold vs Cycles)."
         ),
     ),
     # Seeded 2026-09-26 after the auto-instancer's DCC-free merge/format moved
@@ -338,6 +360,7 @@ LEDGER: List[TwinSpec] = [
             "ShotsController._option_checked",
             "ShotsController._populate_shot_combobox",
             "ShotsController._push_shot_field",
+            "ShotsController._relabel_shot_row",
             "ShotsController._report_deltas",
             "ShotsController._set_footer",
             "ShotsController._setup_delete_menu",
@@ -345,20 +368,31 @@ LEDGER: List[TwinSpec] = [
             "ShotsController._setup_hide_on_leave",
             "ShotsController._setup_move_menu",
             "ShotsController._setup_shift_menu",
+            "ShotsController._setup_shot_nav",
             "ShotsController._setup_space_menu",
             "ShotsController._setup_trim_menu",
             "ShotsController._shot_name_error",
+            "ShotsController._shot_row",
             "ShotsController._sync_footer",
             "ShotsController._sync_from_store",
             "ShotsController._sync_shot_editor",
             "ShotsController._unbind_store_listener",
+            "ShotsController._update_shot_nav_state",
+            "ShotsController.confirm_removal",
+            "ShotsController.delete_scope",
+            "ShotsController.label_apply_gap",
+            "ShotsController.label_delete_shots",
+            "ShotsController.label_shift_all",
             "ShotsController.on_add_space",
+            "ShotsController.on_delete_shots",
             "ShotsController.on_detection_changed",
             "ShotsController.on_detection_mode_changed",
             "ShotsController.on_fit_mode_changed",
             "ShotsController.on_gap_changed",
             "ShotsController.on_initial_length_changed",
             "ShotsController.on_move_shot",
+            "ShotsController.on_navigate_shot",
+            "ShotsController.on_new_shot",
             "ShotsController.on_shift_all_shots",
             "ShotsController.on_shot_desc_changed",
             "ShotsController.on_shot_end_changed",
@@ -370,11 +404,15 @@ LEDGER: List[TwinSpec] = [
             "ShotsController.on_trim_empty",
             "ShotsController.refresh_state",
             "ShotsController.remove_callbacks",
+            "ShotsController.scope_count",
+            "ShotsController.scope_label",
+            "ShotsController.shot_label",
             "ShotsSlots.__init__",
             "ShotsSlots.b000",
             "ShotsSlots.btn_add_leading_space",
             "ShotsSlots.btn_add_trailing_space",
             "ShotsSlots.btn_apply_gap",
+            "ShotsSlots.btn_delete_shots",
             "ShotsSlots.btn_move_shot",
             "ShotsSlots.btn_shift_all",
             "ShotsSlots.btn_trim_all",
@@ -386,6 +424,7 @@ LEDGER: List[TwinSpec] = [
             "ShotsSlots.btn_trim_leading",
             "ShotsSlots.btn_trim_trailing",
             "ShotsSlots.chk_snap_whole_frames",
+            "ShotsSlots.cmb_delete_scope",
             "ShotsSlots.cmb_detection_mode",
             "ShotsSlots.cmb_fit_mode",
             "ShotsSlots.cmb_shot_select",
@@ -397,14 +436,15 @@ LEDGER: List[TwinSpec] = [
             "ShotsSlots.txt_shot_name",
         ),
         note=(
-            "70 shared methods. The rest differ on the undo bracket "
-            "(_boundary_edit: mayatk's store.scene_edit vs blendertk's snapshot + "
-            "CoreUtils.undo_chunk, and the delete handlers built on it), host prose "
-            "(confirm_stale_removal, header_init's tooltips), the _store_cls / "
-            "_sequencer_cls hooks themselves, and the retired on_delete_*_shots "
-            "aliases, whose Deprecation remove_in is each package's own version. "
-            "btn_delete_all / btn_delete_stale left both panels on 2026-10-10 "
-            "for one btn_delete_shots."
+            "87 of 96 shared methods (re-measured 2026-10-12). The other 9 differ "
+            "on the undo bracket (_boundary_edit: mayatk's store.scene_edit vs "
+            "blendertk's snapshot + CoreUtils.undo_chunk, and on_delete_shot built "
+            "on it), host prose (confirm_stale_removal, _setup_delete_shots_menu, "
+            "header_init's tooltips), the _store_cls / _sequencer_cls hooks "
+            "themselves, and the retired on_delete_all_shots / "
+            "on_delete_stale_shots aliases, whose Deprecation remove_in is each "
+            "package's own version. btn_delete_all / btn_delete_stale left both "
+            "panels on 2026-10-10 for one btn_delete_shots."
         ),
     ),
     TwinSpec(
@@ -414,22 +454,130 @@ LEDGER: List[TwinSpec] = [
             "2026-09-26): Qt glue between the sequencer widget and each host's scene."
         ),
         symbols=(
+            "WidgetSyncMixin._apply_view",
+            "WidgetSyncMixin._drop_caches",
+            "WidgetSyncMixin._on_editor_changed",
             "WidgetSyncMixin._on_frame_on_shot_change_toggled",
             "WidgetSyncMixin._on_select_on_load_toggled",
             "WidgetSyncMixin._rebuild_content",
             "WidgetSyncMixin._resolve_sync_target",
+            "WidgetSyncMixin._restore_viewport",
+            "WidgetSyncMixin._save_viewport_state",
             "WidgetSyncMixin._set_cmb_mode",
             "WidgetSyncMixin._set_playback_range_mode",
             "WidgetSyncMixin._set_show_internal_holds",
+            "WidgetSyncMixin._set_view",
             "WidgetSyncMixin._set_view_mode",
             "WidgetSyncMixin._sync_to_widget",
             "WidgetSyncMixin._visible_shots",
             "WidgetSyncMixin.refresh",
         ),
         note=(
-            "11 of 21 shared methods. The other 10 differ in code: each builds its "
-            "tracks, clips, audio rows and sub-rows from its own scene, and keeps its "
-            "own viewport and header state."
+            "17 of 25 shared methods (re-measured 2026-10-12). The other 8 differ "
+            "in code: each builds its tracks, clips, audio rows and sub-rows from "
+            "its own scene, colors its own scene attributes, and keeps its own "
+            "decoration, header and shotless state."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shot_sequencer/segment_collector.py",
+        reason=(
+            "Shot Sequencer segment reader: the object-row summary rule is "
+            "host-neutral, the key probe under it (_has_key_at) is each host's "
+            "own curve query."
+        ),
+        symbols=(
+            "SegmentCollector.active_object_set",
+            "SegmentCollector.summary_times",
+        ),
+        note=(
+            "2 of 6 shared methods (2026-10-12): the summary rule and the active "
+            "shot's object set. The rest read Maya animCurves or Blender fcurves "
+            "directly."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shot_sequencer/shot_sequencer_slots.py",
+        reason=(
+            "Shot Sequencer panel slots: Qt glue over the shared engine, one per "
+            "host because each wires its own controller."
+        ),
+        symbols=(
+            "ShotSequencerSlots._delete_shot",
+            "ShotSequencerSlots._edit_shot_in_settings",
+            "ShotSequencerSlots._on_cmb_mode_changed",
+            "ShotSequencerSlots._on_playback_range_changed",
+            "ShotSequencerSlots._on_shortcut_overlay_changed",
+            "ShotSequencerSlots._on_snap_to_keys_toggled",
+            "ShotSequencerSlots._on_track_order_changed",
+            "ShotSequencerSlots._register_track_options",
+            "ShotSequencerSlots._set_help",
+            "ShotSequencerSlots._view_option",
+            "ShotSequencerSlots.btn_shortcuts",
+            "ShotSequencerSlots.btn_shot_settings",
+        ),
+        note=(
+            "12 of 21 shared methods (re-measured 2026-10-12): the View menu pair, "
+            "the header help (one guide for both hosts) and the option and button "
+            "handlers. The other 9 differ in their host's undo, shortcut and "
+            "dialog wiring (__init__, header_init, the shot combo and its context "
+            "menu, shot detection and navigation, colors, the snap spinbox, "
+            "ShotEditDialog.show)."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shot_sequencer/graph_sync.py",
+        reason=(
+            "Shot Sequencer graph-editor glue: what the graph shows (the visible "
+            "shots' members, the frame window) and how its key selection reaches "
+            "the key menu are host-neutral; reading and writing curves is each "
+            "host's own."
+        ),
+        symbols=(
+            "GraphSync._bounds",
+            "GraphSync._edit",
+            "GraphSync._ledger",
+            "GraphSync._on_rebuilt",
+            "GraphSync._shot_at",
+            "GraphSync._visible",
+            "GraphSync.key_targets",
+            "GraphSync.on_key_menu",
+            "GraphSync.sync",
+        ),
+        note=(
+            "9 of 29 shared methods (re-measured 2026-10-12). Curve ids, reads, "
+            "writes, infinity, selection following and change detection are per "
+            "host (Maya animCurve nodes and MAnimMessage; Blender fcurves, Cycles "
+            "modifiers and fingerprints)."
+        ),
+    ),
+    TwinSpec(
+        rel="anim_utils/shots/shot_sequencer/key_menu.py",
+        reason=(
+            "Shot Sequencer key-menu mixin: the rows a key selection gets from "
+            "any view, and how a key shortcut finds the selection of a view "
+            "other than the track rows (the graph's)."
+        ),
+        symbols=(
+            "KeyMenuMixin._add_selection_key_actions",
+            "KeyMenuMixin._claims_follow",
+            "KeyMenuMixin._copy_keys_shortcut",
+            "KeyMenuMixin._key_scene_edit",
+            "KeyMenuMixin._key_selection_edit",
+            "KeyMenuMixin._key_targets",
+            "KeyMenuMixin._key_targets_to_sequences",
+            "KeyMenuMixin._paste_keys_shortcut",
+            "KeyMenuMixin._selected_key_targets",
+            "KeyMenuMixin._target_objects",
+            "KeyMenuMixin._target_span",
+            "KeyMenuMixin.register_key_targets",
+        ),
+        note=(
+            "12 of 29 shared methods (re-measured 2026-10-12): the selection rows, "
+            "the key targets and their edit brackets, the copy / paste shortcuts. "
+            "The tangent rows and the key operations themselves differ (Maya "
+            "tangent types and animCurves; Blender handle types, interpolation "
+            "and fcurves)."
         ),
     ),
     TwinSpec(
@@ -439,10 +587,15 @@ LEDGER: List[TwinSpec] = [
             "(2026-10-10), the widget's clips read into the shared "
             "pythontk ShotSequencer.describe_key_selection."
         ),
-        symbols=("SceneSelectionMixin._show_key_selection",),
+        symbols=(
+            "SceneSelectionMixin._select_target_keys",
+            "SceneSelectionMixin._show_key_selection",
+            "SceneSelectionMixin.on_header_menu",
+        ),
         note=(
-            "1 shared method; the rest mirror each host's selection (Maya's "
-            "selectKey / Channel Box vs Blender's keyframe points and channels)."
+            "3 of 20 shared methods (re-measured 2026-10-12); the rest mirror each "
+            "host's selection (Maya's selectKey / Channel Box vs Blender's "
+            "keyframe points and channels)."
         ),
     ),
     TwinSpec(
@@ -473,9 +626,11 @@ LEDGER: List[TwinSpec] = [
             "RenderEffectsSlots._write_recipe",
             "RenderEffectsSlots.b000",
             "RenderEffectsSlots.ui_field",
+            "RenderEffectsSlots.unfocus",
         ),
         note=(
-            "19 of 63 shared methods. The rest speak host vocabulary: mayatk keys a "
+            "20 of 63 shared methods (re-measured 2026-10-12). The rest speak "
+            "host vocabulary: mayatk keys a "
             "channel by ChannelSpec and blendertk by name, and selection, undo, "
             "the current frame and the WebXR push are each host's own."
         ),
@@ -572,10 +727,14 @@ LEDGER: List[TwinSpec] = [
         ),
         symbols=(
             "_TaskDataMixin._is_tiled_path",
+            "_TaskDataMixin._log_link",
             "_TaskDataMixin._tiled_representative",
             "_TaskDataMixin.export_path",
         ),
-        note="3 of 14 shared methods; the texture scan itself walks each host's nodes.",
+        note=(
+            "4 of 17 shared methods (re-measured 2026-10-12); the texture scan "
+            "itself walks each host's nodes."
+        ),
     ),
     TwinSpec(
         rel="env_utils/scene_exporter/_task_animation.py",
@@ -585,13 +744,17 @@ LEDGER: List[TwinSpec] = [
             "exporters assemble; it lives on the per-host animation phase mixin."
         ),
         symbols=(
+            "_AnimationTasksMixin._bake_range_token",
             "_AnimationTasksMixin._log_data_node_summary",
             "_AnimationTasksMixin._log_snapshot_notes",
             "_AnimationTasksMixin._note_link",
             "_AnimationTasksMixin._require_range_coverage",
             "_AnimationTasksMixin.ensure_scene_records_published",
         ),
-        note="5 of 18 shared methods; the bake and publish steps reach the scene.",
+        note=(
+            "6 of 23 shared methods (re-measured 2026-10-12); the bake and publish "
+            "steps reach the scene."
+        ),
     ),
     TwinSpec(
         rel="env_utils/scene_exporter/_task_checks.py",
@@ -648,10 +811,17 @@ LEDGER: List[TwinSpec] = [
             "MarmosetBridge.baked_material_name",
             "MarmosetBridge.texture_set_aliases",
             "MarmosetBridge._group_baked_outputs",
+            "MarmosetBridge._deliver",
+            "MarmosetBridge._delivered_paths",
+            "MarmosetBridge.render_template",
+            "MarmosetBridge.source_model_path_for",
+            "MarmosetBridge.toolbag_path",
         ),
         note=(
-            "5 shared methods; export, cage, assignment and retirement read each "
-            "host's scene (blendertk swaps the baked material per slot)."
+            "10 of 25 shared methods (re-measured 2026-10-12; delivery, the "
+            "template render and the Toolbag and source-model paths joined); "
+            "export, cage, assignment and retirement read each host's scene "
+            "(blendertk swaps the baked material per slot)."
         ),
     ),
 ]
@@ -797,7 +967,7 @@ def twin_normalized(lines: Sequence[str], rel: str) -> List[str]:
 
 # --------------------------------------------------------------- comparison
 def _source(package: str, rel: str) -> Optional[str]:
-    """``<root>/<pkg>/<pkg>/<rel>`` if the sibling is checked out, else ``None``."""
+    """``<root>/<pkg>/<pkg>/<rel>`` if that file exists, else ``None``."""
     path = os.path.join(REPO, package, package, *rel.split("/"))
     return path if os.path.isfile(path) else None
 
@@ -856,13 +1026,18 @@ def compare(spec: TwinSpec) -> Tuple[str, List[str]]:
 
     Returns:
         ``(status, detail_lines)`` where status is ``ok``, ``drift``, ``missing``
-        or ``absent``. ``absent`` means a sibling is not checked out, which is
-        not a failure -- it is a narrower run.
+        or ``absent``. ``absent`` means a sibling PACKAGE is not checked out,
+        which is not a failure -- it is a narrower run. A checked-out package
+        without the twin FILE is ``missing``: a rename or a deletion on one side
+        must not retire the guard as a skip.
     """
+    for pkg in (spec.a, spec.b):
+        if not os.path.isdir(os.path.join(REPO, pkg, pkg)):
+            return "absent", [f"{pkg} not checked out"]
     a_path, b_path = _source(spec.a, spec.rel), _source(spec.b, spec.rel)
     if a_path is None or b_path is None:
         which = spec.a if a_path is None else spec.b
-        return "absent", [f"{which} not checked out"]
+        return "missing", [f"{spec.rel}: not found in {which}"]
 
     if spec.symbols is None:
         a = twin_normalized(_read(a_path), spec.rel)

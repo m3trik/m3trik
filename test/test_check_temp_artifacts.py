@@ -121,12 +121,81 @@ class SelfCleaningFormsTest(_ScanCase):
         self.assertEqual(len(found), 1, found)
         self.assertIn("delete=False", found[0])
 
-    def test_gettempdir_is_not_flagged(self):
-        """Naming a durable location is not allocating an untracked artifact."""
+
+class TempNamingTest(_ScanCase):
+    """Outside pythontk, the system temp folder is named only through
+    ``TempArtifacts.root()`` -- a hand-joined folder escapes the sandbox, the
+    ``PYTHONTK_TEMP_ROOT`` override and the store sweep."""
+
+    def test_gettempdir_is_flagged_outside_the_owner(self):
         self.write(
             "d.py",
             "import os, tempfile\n\ndef f():\n"
             '    return os.path.join(tempfile.gettempdir(), "my_output_dir")\n',
+        )
+        found = self.scan()
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("gettempdir()", found[0])
+
+    def test_the_owner_package_may_name_it(self):
+        self.write(
+            "d.py", "import tempfile\n\ndef root():\n    return tempfile.gettempdir()\n"
+        )
+        gate.TEMP_OWNERS.add("fakepkg")
+        try:
+            self.assertEqual(self.scan(), [])
+        finally:
+            gate.TEMP_OWNERS.discard("fakepkg")
+
+    def test_environment_reads_are_flagged(self):
+        self.write(
+            "e.py",
+            "import os\nfrom os import environ as env, getenv\n\ndef f():\n"
+            '    a = os.environ["TEMP"]\n'
+            '    b = os.environ.get("TMP")\n'
+            '    c = getenv("TMPDIR")\n'
+            '    d = env.get("TEMP")\n'
+            "    return a, b, c, d\n",
+        )
+        found = self.scan()
+        self.assertEqual(len(found), 4, found)
+
+    def test_every_environment_read_spelling_is_flagged(self):
+        """``import os.path`` binds ``os``; Windows reads the name in any case;
+        ``setdefault`` / ``pop`` / ``key=`` read it too."""
+        self.write(
+            "g.py",
+            "import os.path\n\ndef f():\n"
+            '    a = os.environ.get("tmp")\n'
+            '    b = os.environ.setdefault("TEMP", "x")\n'
+            '    c = os.environ.pop("TMPDIR", None)\n'
+            '    d = os.getenv(key="Temp")\n'
+            "    return a, b, c, d\n",
+        )
+        found = self.scan()
+        self.assertEqual(len(found), 4, found)
+
+    def test_a_string_spelling_a_temp_variable_is_flagged(self):
+        self.write(
+            "h.py",
+            'def f():\n    """Writes under ${TEMP} (prose: not flagged)."""\n'
+            '    return {"root": "${TEMP}/x", "win": "%temp%\\\\y"}\n',
+        )
+        found = self.scan()
+        self.assertEqual(len(found), 2, found)
+
+    def test_a_mel_local_variable_is_not_a_temp_token(self):
+        """MEL's ``$tmp`` is a local; POSIX env names are case-sensitive."""
+        self.write("i.py", "def f():\n    return 'string $tmp = `ls`; print $temp;'\n")
+        self.assertEqual(self.scan(), [])
+
+    def test_setting_a_childs_temp_is_not_flagged(self):
+        """A store points a child process's temp at ours -- not a read."""
+        self.write(
+            "f.py",
+            "import os\n\ndef f(path):\n"
+            '    os.environ["TEMP"] = path\n'
+            '    return os.environ.get("HOME")\n',
         )
         self.assertEqual(self.scan(), [])
 
@@ -150,13 +219,54 @@ class ScopeTest(_ScanCase):
         finally:
             gate.ALLOWLIST.pop("fakepkg/g.py::ok", None)
 
-    def test_unparsable_file_does_not_abort_the_scan(self):
-        """Rendered templates carry __TOKEN__ placeholders and may not parse."""
+    def test_unparsable_file_is_reported_and_does_not_abort_the_scan(self):
+        """An unscanned file is not a clean one; the rest still scans."""
         self.write("broken.py", "def f(:\n")
         self.write(
             "h.py", "import tempfile\n\ndef f():\n    return tempfile.mkdtemp()\n"
         )
-        self.assertEqual(len(self.scan()), 1)
+        found = self.scan()
+        self.assertEqual(len(found), 2, found)
+        self.assertTrue(any("could not be scanned" in v for v in found), found)
+
+    def test_a_bom_file_is_scanned_like_python_reads_it(self):
+        """Windows PowerShell 5.1's Out-File writes a BOM; Python runs the file."""
+        path = os.path.join(self.pkg, "bom.py")
+        with open(path, "wb") as fh:
+            fh.write(b"\xef\xbb\xbfimport tempfile\n\ndef f():\n")
+            fh.write(b"    return tempfile.mkdtemp()\n")
+        found = self.scan()
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("mkdtemp", found[0])
+
+    def test_token_placeholders_parse(self):
+        """Exec templates' __TOKEN__ placeholders are plain names: scanned."""
+        self.write(
+            "tpl.py",
+            "import tempfile\nOUT = __OUTPUT__\n\ndef f():\n"
+            "    return tempfile.mkdtemp()\n",
+        )
+        found = self.scan()
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("mkdtemp", found[0])
+
+    def test_an_allowlist_entry_matching_nothing_is_stale(self):
+        self.write("i.py", "def f():\n    return 1\n")
+        gate.ALLOWLIST["fakepkg/i.py::f"] = "test"
+        try:
+            found = self.scan()
+        finally:
+            gate.ALLOWLIST.pop("fakepkg/i.py::f", None)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("stale", found[0])
+
+    def test_an_entry_for_an_unscanned_package_is_never_judged(self):
+        """A CI runner that never cloned a repo must not call its entries stale."""
+        gate.ALLOWLIST["otherpkg/x.py::f"] = "test"
+        try:
+            self.assertEqual(self.scan(), [])
+        finally:
+            gate.ALLOWLIST.pop("otherpkg/x.py::f", None)
 
 
 class StrayArtifactTest(_ScanCase):
@@ -237,6 +347,16 @@ class StrayArtifactTest(_ScanCase):
         with open(os.path.join(self.root, "LICENSE"), "w", encoding="utf-8") as fh:
             fh.write("MIT")
         self.assertEqual(self.strays(), [])
+
+    def test_stray_allowlist_directory_key_excuses_its_tree(self):
+        self.declare(manifest="recursive-include fakepkg *.ui")
+        self.write("bin/tools/adb.exe", "x")
+        self.assertEqual(len(self.strays()), 1)
+        gate.STRAY_ALLOWLIST["fakepkg/bin/tools/"] = "test"
+        try:
+            self.assertEqual(self.strays(), [])
+        finally:
+            gate.STRAY_ALLOWLIST.pop("fakepkg/bin/tools/", None)
 
     def test_stray_allowlist_suppresses(self):
         self.declare(manifest="recursive-include fakepkg *.ui")

@@ -2280,9 +2280,12 @@ function Test-WorkspaceRootHygiene {
 
     $out = & $PYTHON $gate --workspace-root
     if ($LASTEXITCODE -eq 0) { return }
+    # The gate also scans every package; only its root lines are this notice's.
+    $rootLines = @($out | Where-Object { $_ -match '\(workspace root;' })
+    if ($rootLines.Count -eq 0) { return }
 
     Write-Step "Workspace-root hygiene: residue found outside every repo (not blocking this release)"
-    $out | Where-Object { $_ -match '\(workspace root;' } | ForEach-Object {
+    $rootLines | ForEach-Object {
         Write-Host "    $_" -ForegroundColor DarkGray
     }
     Write-Host "    Clear it, or allowlist it in check_temp_artifacts.py with a reason." -ForegroundColor DarkGray

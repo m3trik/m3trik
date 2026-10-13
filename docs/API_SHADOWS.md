@@ -9,7 +9,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `AudioUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L73)
-- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L83)
+- `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L88)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L14)
 
 ### `Behaviors` — blendertk, mayatk, pythontk
@@ -132,7 +132,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `TestSandbox` — pythontk, uitk
 
-- `pythontk` — [`TestSandbox`](pythontk/core_utils/test_sandbox.py#L223)
+- `pythontk` — [`TestSandbox`](pythontk/core_utils/test_sandbox.py#L228)
 - `uitk` — [`TestSandbox`](uitk/testing.py#L101)
 
 ### `ToolbagHelpers` — blendertk, extapps, mayatk
@@ -162,11 +162,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `main` — blendertk, extapps, mayatk, pythontk
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L42)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L57)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L64)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1259)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1123)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L289)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L313)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L314)
 - `blendertk` — [`main`](blendertk/env_utils/pm_doctor.py#L56)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)
@@ -178,10 +178,10 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/metashape_workflow/run_combined.py#L271)
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L212)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L222)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1232)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1579)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L117)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L138)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L641)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L120)
 - `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)

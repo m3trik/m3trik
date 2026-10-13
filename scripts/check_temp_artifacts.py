@@ -33,10 +33,19 @@ Scope
 Production source only. Tests are exempt: a test harness owns its own teardown and
 is not what leaks on a user's machine.
 
-``tempfile.gettempdir()`` is NOT flagged on its own -- it is also how code names a
-stable, deliberately durable location (a bridge output folder the user opens, an
-icon cache). Only the *allocating* calls are flagged, because those are the ones
-that mint a new artifact nobody is tracking.
+Naming the system temp folder is flagged too, outside pythontk: a
+``tempfile.gettempdir()`` call or a read of ``TEMP`` / ``TMP`` / ``TMPDIR`` from the
+environment. ``TempArtifacts.root()`` is the one spelling of "temp" -- it honours
+``PYTHONTK_TEMP_ROOT``, a test sandbox and the store sweep, and a hand-joined
+``<gettempdir>/<name>`` folder escapes all three. A durable location wants
+``ptk.UserConfig.cache_dir()`` or the scene's ``ptk.Workspace`` instead. Setting
+``TEMP`` for a child process (a store) is not a read and is not flagged. A string
+that spells the variable for later expansion (``"${TEMP}/x"``, ``"%TEMP%"``) is
+flagged too; docstrings are not.
+
+An allowlist entry that no longer matches anything is reported as stale, so the
+list cannot outlive the code it excused. A file that does not parse is reported
+rather than skipped: an unscanned file is not a clean one.
 
 Usage
 -----
@@ -53,6 +62,7 @@ import argparse
 import ast
 import fnmatch
 import os
+import re
 import sys
 from typing import Dict, List, Optional, Tuple
 
@@ -72,10 +82,14 @@ PACKAGES: Dict[str, str] = {
     "extapps": "extapps/extapps",
     "comfyui": "comfyui/comfyui",
     "comfyui-src": "comfyui/src",
+    "androidtk": "androidtk/androidtk",
+    "m3trik-scripts": "m3trik/scripts",
 }
 
-# Allocations with NO automatic reclamation. gettempdir() is intentionally absent
-# (see the docstring), and so are the self-cleaning forms:
+# Packages allowed to NAME the system temp folder: the owner of TempArtifacts.
+TEMP_OWNERS = {"pythontk"}
+
+# Allocations with NO automatic reclamation. The self-cleaning forms are absent:
 #
 #   * ``TemporaryDirectory()``      -- removes its tree on context exit / finalize
 #   * ``NamedTemporaryFile()``      -- removes on close (delete=True is the default)
@@ -84,18 +98,28 @@ PACKAGES: Dict[str, str] = {
 # opts OUT of that guarantee, so it is flagged like a raw mkstemp.
 ALWAYS_FLAGGED = {("tempfile", "mkstemp"), ("tempfile", "mkdtemp")}
 FLAGGED_WHEN_DELETE_FALSE = {("tempfile", "NamedTemporaryFile")}
+# Naming the system temp folder (flagged outside TEMP_OWNERS).
+NAMING_CALLS = {("tempfile", "gettempdir"), ("tempfile", "gettempdirb")}
+TEMP_ENV_VARS = {"TEMP", "TMP", "TMPDIR"}  # compared upper-case (Windows ignores case)
+# A temp variable spelled for later expansion: %TEMP% (any case, as Windows
+# reads it), $TMP / ${TMPDIR} (case-sensitive, as POSIX reads it -- a MEL `$tmp`
+# is a local variable, not the environment).
+TEMP_TOKEN = re.compile(r"(?i:%(?:TEMP|TMP)%)|\$\{?(?:TEMP|TMPDIR|TMP)\b\}?")
 
 # Justified exceptions: "<repo-relative path>::<function>" -> reason.
 # Keep this list SHORT and each entry argued. A growing allowlist means the
 # primitive is missing a capability -- add it there instead.
 ALLOWLIST: Dict[str, str] = {
-    "pythontk/pythontk/file_utils/temp_artifacts.py::*": (
-        "the primitive itself -- it is what everything else routes through"
+    "blendertk/blendertk/core_utils/_core_utils.py::get_recent_autosave": (
+        "names BLENDER's autosave folder (its documented OS-temp fallback when "
+        "the preference is empty) -- reads Blender's files, writes nothing"
     ),
-    "pythontk/pythontk/file_utils/_file_utils.py::atomic_write_text": (
-        "atomic replace: the temp file is created in the DESTINATION directory "
-        "(not the temp dir) and is os.replace'd onto the target in a finally, so "
-        "it is consumed rather than left behind"
+    "tentacle/tentacle/slots/blender/hud.py::_warn_check_autosave_file_open": (
+        "the same Blender autosave-folder test as get_recent_autosave; read-only"
+    ),
+    "mayatk/mayatk/mat_utils/texture_baker.py::_exr_trouble": (
+        "names OPENCV's own temp folder in a diagnostic message (cv2 resolves it "
+        "from the OS, not from TempArtifacts); allocates nothing"
     ),
 }
 
@@ -140,9 +164,23 @@ ROOT_SENTINELS = {
     "Procfile",
 }
 
-# Justified strays: "<repo-relative path>" -> reason. Same discipline as ALLOWLIST
-# above -- if this grows, the file probably wants declaring, not excusing.
-STRAY_ALLOWLIST: Dict[str, str] = {}
+# Justified strays: "<repo-relative path>" -> reason; a key ending in "/" excuses
+# the tree under it. Same discipline as ALLOWLIST above -- if this grows, the file
+# probably wants declaring, not excusing.
+STRAY_ALLOWLIST: Dict[str, str] = {
+    "androidtk/androidtk/bin/platform-tools/": (
+        "Google's platform-tools, downloaded at runtime by "
+        "install_tools.install_platform_tools (gitignored); adb.py / fastboot.py "
+        "resolve the binaries beside the package"
+    ),
+}
+
+
+def _stray_allowed(rel: str) -> bool:
+    return rel in STRAY_ALLOWLIST or any(
+        key.endswith("/") and rel.startswith(key) for key in STRAY_ALLOWLIST
+    )
+
 
 # --------------------------------------------------------------- workspace root
 #
@@ -222,7 +260,8 @@ class _Visitor(ast.NodeVisitor):
     defeat is worse than none, because it reads as proof of compliance.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, flag_naming: bool = False) -> None:
+        self.flag_naming = flag_naming
         self.stack: List[str] = []
         self.found: List[Tuple[int, str, str]] = []  # (line, call, function)
         # local name -> "tempfile"            (import tempfile [as tf])
@@ -232,11 +271,17 @@ class _Visitor(ast.NodeVisitor):
 
     def visit_Import(self, node) -> None:
         for alias in node.names:
-            if alias.name == "tempfile":
-                self.module_aliases[alias.asname or alias.name] = "tempfile"
+            if alias.name in ("tempfile", "os"):
+                self.module_aliases[alias.asname or alias.name] = alias.name
+            elif alias.name.startswith("os.") and not alias.asname:
+                self.module_aliases["os"] = "os"  # `import os.path` binds `os`
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node) -> None:
+        if node.module == "os":
+            for alias in node.names:
+                if alias.name in ("environ", "getenv"):
+                    self.func_aliases[alias.asname or alias.name] = ("os", alias.name)
         if node.module == "tempfile":
             for alias in node.names:
                 self.func_aliases[alias.asname or alias.name] = (
@@ -273,33 +318,122 @@ class _Visitor(ast.NodeVisitor):
                 return key, func.id
         return None
 
+    def _record(self, node, label: str) -> None:
+        self.found.append(
+            (node.lineno, label, self.stack[-1] if self.stack else "<module>")
+        )
+
+    def _is_environ(self, node) -> bool:
+        """True for an expression spelling ``os.environ`` (any alias)."""
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            return (
+                self.module_aliases.get(node.value.id) == "os"
+                and node.attr == "environ"
+            )
+        return isinstance(node, ast.Name) and self.func_aliases.get(node.id) == (
+            "os",
+            "environ",
+        )
+
+    @staticmethod
+    def _temp_var(node) -> Optional[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if node.value.upper() in TEMP_ENV_VARS:
+                return node.value
+        return None
+
+    def visit_Expr(self, node) -> None:
+        """A bare string statement is a docstring: prose, never scanned."""
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return
+        self.generic_visit(node)
+
+    def visit_Constant(self, node) -> None:
+        """A string spelling a temp variable for later expansion."""
+        if (
+            self.flag_naming
+            and isinstance(node.value, str)
+            and TEMP_TOKEN.search(node.value)
+        ):
+            self._record(node, f"{TEMP_TOKEN.search(node.value).group(0)!r} token")
+
+    def visit_Subscript(self, node) -> None:
+        """An ``os.environ["TEMP"]`` read (a store sets a child's temp: allowed)."""
+        if self.flag_naming and isinstance(node.ctx, ast.Load):
+            var = self._temp_var(node.slice)
+            if var and self._is_environ(node.value):
+                self._record(node, f'os.environ["{var}"]')
+        self.generic_visit(node)
+
+    def _env_read(self, node) -> Optional[str]:
+        """Label for ``os.environ.get|setdefault|pop("TEMP")`` / ``os.getenv("TMP")``
+        (positional or ``key=``), or None."""
+        first = node.args[0] if node.args else None
+        if first is None:
+            first = next((kw.value for kw in node.keywords if kw.arg == "key"), None)
+        var = self._temp_var(first)
+        if not var:
+            return None
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr in ("get", "setdefault", "pop")
+            and self._is_environ(func.value)
+        ):
+            return f'os.environ.{func.attr}("{var}")'
+        resolved = self._resolve(func)
+        if resolved is not None and resolved[0] == ("os", "getenv"):
+            return f'os.getenv("{var}")'
+        return None
+
     def visit_Call(self, node) -> None:
+        if self.flag_naming:
+            env = self._env_read(node)
+            if env:
+                self._record(node, env)
         resolved = self._resolve(node.func)
         if resolved is not None:
             key, label = resolved
-            if key in ALWAYS_FLAGGED or (
+            if self.flag_naming and key in NAMING_CALLS:
+                self._record(node, f"{label}()")
+            elif key in ALWAYS_FLAGGED or (
                 key in FLAGGED_WHEN_DELETE_FALSE and self._opts_out_of_autodelete(node)
             ):
-                if key in FLAGGED_WHEN_DELETE_FALSE:
-                    label += "(delete=False)"
-                self.found.append(
-                    (node.lineno, label, self.stack[-1] if self.stack else "<module>")
+                label = (
+                    f"{label}(delete=False)"
+                    if key in FLAGGED_WHEN_DELETE_FALSE
+                    else f"{label}()"
                 )
+                self._record(node, label)
         self.generic_visit(node)
 
 
-def _allowed(rel: str, function: str) -> bool:
+def _allowed(rel: str, function: str, used: Optional[set] = None) -> bool:
     rel = rel.replace(os.sep, "/")
-    return f"{rel}::*" in ALLOWLIST or f"{rel}::{function}" in ALLOWLIST
+    for key in (f"{rel}::*", f"{rel}::{function}"):
+        if key in ALLOWLIST:
+            if used is not None:
+                used.add(key)
+            return True
+    return False
 
 
 def scan(packages: List[str]) -> List[str]:
-    """Return one violation line per unallowed allocation."""
+    """Return one violation line per unallowed allocation or temp naming, per
+    unscannable file, and per stale allowlist entry.
+
+    An entry is stale when its file sits under a scanned package present on disk
+    and nothing in it matched -- a package a CI runner never checked out is
+    never judged.
+    """
     violations: List[str] = []
+    used: set = set()
+    scanned_roots: List[str] = []
     for pkg in packages:
         root = os.path.join(REPO, PACKAGES[pkg])
         if not os.path.isdir(root):
             continue
+        scanned_roots.append(PACKAGES[pkg].replace(os.sep, "/").rstrip("/") + "/")
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
             for filename in filenames:
@@ -308,16 +442,26 @@ def scan(packages: List[str]) -> List[str]:
                 full = os.path.join(dirpath, filename)
                 rel = os.path.relpath(full, REPO).replace(os.sep, "/")
                 try:
-                    with open(full, encoding="utf-8") as fh:
+                    # Bytes, so ast honours a BOM and a `# coding:` line as
+                    # Python does (PS 5.1's Out-File writes a BOM).
+                    with open(full, "rb") as fh:
                         tree = ast.parse(fh.read())
-                except (OSError, SyntaxError):
-                    continue  # templates carry __TOKEN__ placeholders
-                visitor = _Visitor()
+                except (OSError, SyntaxError, ValueError) as exc:
+                    # Exec templates' __TOKEN__ placeholders are plain names and
+                    # parse; a file that does not is unscanned, not clean.
+                    violations.append(f"{rel}  could not be scanned ({exc})")
+                    continue
+                visitor = _Visitor(flag_naming=pkg not in TEMP_OWNERS)
                 visitor.visit(tree)
                 for line, call, function in visitor.found:
-                    if _allowed(rel, function):
+                    if _allowed(rel, function, used):
                         continue
-                    violations.append(f"{rel}:{line}  {call}()  in {function}()")
+                    violations.append(f"{rel}:{line}  {call}  in {function}()")
+    for key in sorted(ALLOWLIST):
+        path = key.split("::", 1)[0]
+        if key in used or not any(path.startswith(r) for r in scanned_roots):
+            continue
+        violations.append(f"{key}  stale ALLOWLIST entry (nothing matches it)")
     return violations
 
 
@@ -408,7 +552,7 @@ def scan_strays(packages: List[str]) -> List[str]:
                     if _is_declared(rel_to_pkg, pairs):
                         continue
                     rel = os.path.relpath(full, REPO).replace(os.sep, "/")
-                    if rel in STRAY_ALLOWLIST:
+                    if _stray_allowed(rel):
                         continue
                     violations.append(
                         f"{rel}  (inside the package; not loaded, not shipped)"
@@ -428,7 +572,7 @@ def scan_strays(packages: List[str]) -> List[str]:
             if "." in name or name in ROOT_SENTINELS or not os.path.isfile(full):
                 continue
             rel = os.path.relpath(full, REPO).replace(os.sep, "/")
-            if rel in STRAY_ALLOWLIST:
+            if _stray_allowed(rel):
                 continue
             violations.append(f"{rel}  (repo root; no extension, not a known sentinel)")
     return violations
@@ -485,7 +629,7 @@ def main() -> int:
         return 0
 
     if violations:
-        print(f"FAIL: {len(violations)} unmanaged temp allocation(s):")
+        print(f"FAIL: {len(violations)} unmanaged temp allocation(s) / naming(s):")
         print("")
         for v in violations:
             print(f"  {v}")
@@ -494,6 +638,8 @@ def main() -> int:
             "still reclaimed by a later run's age-gated sweep:\n"
             '    path = ptk.TempArtifacts("prefix").path(extension=".ext")\n'
             '    work = ptk.TempArtifacts("prefix").dir_path()\n'
+            "A folder joined onto gettempdir()/TEMP wants TempArtifacts.root() (or\n"
+            "UserConfig.cache_dir() / the scene Workspace when it must persist).\n"
             "Policies: scoped (delete on clean exit, keep on failure), session\n"
             "(delete at interpreter exit), detached (default -- the consumer outlives\n"
             "us; stale ones are swept).\n"

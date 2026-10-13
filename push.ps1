@@ -15,7 +15,14 @@ re-run after ANY abort resumes at the right place instead of re-doing or skippin
              but unpublished gets its publish.yml dispatched; one that is published but
              untagged gets its tag + GitHub Release. Runs FIRST so a previous aborted run
              is completed before anything new is prepared, and LAST for this run's own
-             release. "No changes" can never hide an unfinished release.
+             release. "No changes" can never hide an unfinished release. When the
+             entry publish CONCLUDES red and dev holds a delta that reaches main
+             (artifact or must-reach-main), that delta is the likely fix: the run
+             merges it (Prepare -> Push -> Merge) and finalizes once more, dispatching
+             publish.yml when the paths filter queues none. A wait that only ran out
+             never does, nor a re-dispatched run not yet listed: either may still
+             publish the merged version. A version PyPI holds is finalized (tagged)
+             whatever its run's colour.
 - Prepare    classifies the dev delta (Test-ReleaseDelta). An ARTIFACT delta (anything
              that ships, or an upstream floor that must ratchet) becomes ONE commit,
              `Release X.Y.Z`: the version (Resolve-ReleaseVersion — stepped from what is
@@ -43,6 +50,16 @@ Core safety rules (Strict+Merge)
   evidence their suite ever ran against the tree being published. Receipts key on a
   content hash of the SOURCE tree (generated sidecars excluded), so a registry refresh
   never voids one; Prepare re-keys them across its own Release commit.
+- Re-checks the tree the release gate judged before each commit that sweeps the working
+  tree in. The gate runs once, before any mutation, and pins every strict package's tree
+  (exempt ones too); the absorb before sync, push.ps1's own version/floor edit, the
+  Release commit and the absorb before push each compare against it first, and the edit
+  moves the pin. A tree that moved mid-run -- another session's edit, landing during an
+  upstream package's publish wait -- is judged again by the gate's own rule and, if the
+  gate would refuse it, is refused with the changed files and their ages, nothing
+  committed; so is a tree that cannot be hashed. Not re-checked: the rebase onto
+  origin/dev before a push, and a direct merge's conflict resolution. Not under
+  -SkipReview, which waives the whole gate.
 - Keeps internal pyproject.toml pins in sync with the versions being released, and
   waits for a just-published upstream version to become visible on PyPI before merging
   a downstream package that pins it.
@@ -85,7 +102,8 @@ Key flags
                       post-publish visibility wait). Meant for offline use only —
                       indexing lag is already handled by bounded retries.
 -SkipReview           Bypass the whole Strict+Merge release gate -- review AND tests
-                      receipts, plus the m3trik-first guard (emergencies only).
+                      receipts, its mid-run re-check, and the m3trik-first guard
+                      (emergencies only).
 -SkipTestsReceipt     Bypass ONLY the "tests" half of the release gate, after printing
                       a loud banner naming what is being given up. The review receipt
                       is still required.
@@ -276,7 +294,15 @@ function Get-TreeHash {
         # `finally` no matter how this function exits.
         $env:GIT_INDEX_FILE = $indexFile
         git read-tree --empty 2>$null | Out-Null
-        git add -A -- . $GENERATED_PATHSPEC 2>$null | Out-Null
+        # A file git cannot read (one a sync client or editor holds) fails the add,
+        # and write-tree would then hash the EMPTY tree -- a key a receipt could be
+        # recorded under while covering nothing. No hash is the only honest answer.
+        $addOut = @(git add -A -- . $GENERATED_PATHSPEC 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            $why = @($addOut | ForEach-Object { "$_" } | Where-Object { $_ -match 'error|fatal' })
+            Write-Err "Cannot hash the source tree of $RepoPath`: git add failed ($($why -join '; '))"
+            return $null
+        }
         $sha = (git write-tree 2>$null)
         if (-not $sha) { return $null }
         return $sha.Trim().Substring(0, 12)
@@ -346,6 +372,53 @@ function Test-EnglishOnly {
     return Invoke-RepoGate "English-only" $Script @("--workspace", $Root) $Names
 }
 
+function Get-TreeDiffPaths {
+    # The repo-relative paths that differ between two Get-TreeHash trees. Both are real
+    # tree objects Get-TreeHash wrote into the object store, so the abbreviated shas
+    # resolve. Two DIFFERENT trees always differ in at least one path, so an empty
+    # answer for two different hashes means the diff itself could not run.
+    param([string]$RepoPath, [string]$From, [string]$To)
+    return @(git -C $RepoPath -c core.quotepath=off diff --name-only --no-renames $From $To 2>$null |
+        Where-Object { $_ })
+}
+
+function Get-FileAges {
+    # Minutes since each of $Paths (repo-relative) was written, newest first. A path
+    # that is no longer a file (deleted) keeps Minutes = $null and sorts last, so a
+    # deletion is still named. -WithinMinutes keeps only files written that recently.
+    param(
+        [string]$RepoPath,
+        [string[]]$Paths,
+        [int]$WithinMinutes = 0
+    )
+    $now = (Get-Date).ToUniversalTime()
+    $rows = foreach ($p in $Paths) {
+        $fi = Get-Item -LiteralPath (Join-Path $RepoPath $p) -ErrorAction SilentlyContinue
+        $age = $null
+        if ($fi -and -not $fi.PSIsContainer) { $age = ($now - $fi.LastWriteTimeUtc).TotalMinutes }
+        if ($WithinMinutes -gt 0 -and ($null -eq $age -or $age -ge $WithinMinutes)) { continue }
+        $minutes = $null
+        if ($null -ne $age) { $minutes = [math]::Round($age, 1) }
+        [pscustomobject]@{ Path = $p; Minutes = $minutes }
+    }
+    return @($rows | Sort-Object { if ($null -eq $_.Minutes) { [double]::MaxValue } else { $_.Minutes } })
+}
+
+function Write-ChangedFiles {
+    # $Files (Get-FileAges rows) under $Heading, eight at most: the evidence of who is
+    # writing a tree, shown by the receipt gate and by Assert-GatedTree alike.
+    param([string]$Heading, [object[]]$Files)
+    Write-Host "    $Heading" -ForegroundColor Yellow
+    foreach ($f in ($Files | Select-Object -First 8)) {
+        $age = "deleted".PadLeft(13)
+        if ($null -ne $f.Minutes) { $age = "$($f.Minutes.ToString().PadLeft(5)) min ago" }
+        Write-Host "      $age  $($f.Path)" -ForegroundColor DarkGray
+    }
+    if ($Files.Count -gt 8) {
+        Write-Host "      ... and $($Files.Count - 8) more" -ForegroundColor DarkGray
+    }
+}
+
 function Get-RecentlyModifiedFiles {
     <#
       Changed files whose mtime is within $WithinMinutes. Used ONLY to explain a
@@ -360,7 +433,6 @@ function Get-RecentlyModifiedFiles {
         [string]$RepoPath,
         [int]$WithinMinutes = 15
     )
-    $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-$WithinMinutes)
     Push-Location $RepoPath
     try {
         $paths = @(git status --porcelain 2>$null | ForEach-Object {
@@ -370,19 +442,10 @@ function Get-RecentlyModifiedFiles {
                 if ($p -match ' -> ') { $p = ($p -split ' -> ')[-1] }
                 $p
             })
-        $recent = foreach ($p in $paths) {
-            if ($GENERATED_PATHS -contains $p) { continue }
-            $fi = Get-Item -LiteralPath (Join-Path $RepoPath $p) -ErrorAction SilentlyContinue
-            if ($fi -and -not $fi.PSIsContainer -and $fi.LastWriteTimeUtc -gt $cutoff) {
-                [pscustomobject]@{
-                    Path    = $p
-                    Minutes = [math]::Round(((Get-Date).ToUniversalTime() - $fi.LastWriteTimeUtc).TotalMinutes, 1)
-                }
-            }
-        }
-        return @($recent | Sort-Object Minutes)
     }
     finally { Pop-Location }
+    $paths = @($paths | Where-Object { $GENERATED_PATHS -notcontains $_ })
+    return (Get-FileAges $RepoPath $paths -WithinMinutes $WithinMinutes)
 }
 
 function Read-Receipts {
@@ -413,7 +476,9 @@ function Save-Receipts {
 
 function Write-ReceiptEntry {
     param([string]$PackageName, [string]$RepoPath, [string[]]$Checks)
-    $key = "$PackageName@$(Get-TreeHash $RepoPath)"
+    $hash = Get-TreeHash $RepoPath
+    if (-not $hash) { return $null }
+    $key = "$PackageName@$hash"
     $map = Read-Receipts
     $entry = if ($map.ContainsKey($key)) { $map[$key] } else { New-Object PSObject }
     $now = [DateTime]::UtcNow.ToString('o')
@@ -442,6 +507,7 @@ function Test-Receipt {
         [string]$TreeHash  # optional precomputed hash (avoids recomputation)
     )
     if (-not $TreeHash) { $TreeHash = Get-TreeHash $RepoPath }
+    if (-not $TreeHash) { return $false }
     $map = Read-Receipts
     $key = "$PackageName@$TreeHash"
     if (-not $map.ContainsKey($key)) { return $false }
@@ -465,7 +531,7 @@ function Copy-ReceiptsToTree {
     # gate exempted (no delta of its own) gets no receipt here either - its
     # re-run is covered by Test-MechanicalDelta instead.
     param([string]$PackageName, [string]$FromHash, [string]$ToHash)
-    if ($FromHash -eq $ToHash) { return }
+    if (-not $FromHash -or -not $ToHash -or $FromHash -eq $ToHash) { return }
     $map = Read-Receipts
     $fromKey = "$PackageName@$FromHash"
     if (-not $map.ContainsKey($fromKey)) { return }
@@ -494,6 +560,140 @@ function Test-MechanicalDelta {
         return $true
     }
     finally { Pop-Location }
+}
+
+function Get-GateVerdict {
+    # The release gate's judgement of $PackageName's tree AS IT IS NOW: the one rule the
+    # pre-pass applies before any mutation, and Assert-GatedTree applies again when the
+    # tree moves mid-run. Returns @{ Hash; HasDelta; Exempt; Missing }:
+    #   Hash      the source-tree hash judged (what a receipt keys on)
+    #   HasDelta  dirty, unpushed, or ahead of origin/main
+    #   Class     Test-ReleaseDelta's class of that delta ('none' without one)
+    #   Exempt    why no receipt is needed ($null when one is): only an ARTIFACT delta
+    #             needs review + tests, and push.ps1's own Release commit needs neither
+    #   Missing   the receipts the gate demands and this tree lacks ("tests" is never
+    #             demanded under -SkipTestsReceipt, which waives it)
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+    Push-Location $RepoPath
+    try {
+        git fetch origin main dev --quiet 2>&1 | Out-Null
+        $dirty = [bool](git status --porcelain 2>$null)
+        $ahead = 0
+        $a = git rev-list --count origin/dev..dev 2>$null
+        if ($a) { $ahead = [int]$a }
+        $mainDelta = 0
+        $m = git rev-list --count origin/main..dev 2>$null
+        if ($m) { $mainDelta = [int]$m }
+    }
+    finally { Pop-Location }
+    $verdict = @{ Hash = (Get-TreeHash $RepoPath); HasDelta = $true; Class = 'none'; Exempt = $null; Missing = @() }
+    if (-not ($dirty -or $ahead -gt 0 -or $mainDelta -gt 0)) {
+        $verdict.HasDelta = $false
+        $verdict.Exempt = "has nothing to release"
+        return $verdict
+    }
+    # A CI-only or sidecar-only delta merges without a version (or not at all) and
+    # never reaches PyPI.
+    $verdict.Class = Test-ReleaseDelta $PackageName $RepoPath $Versions
+    if ($verdict.Class -ne 'artifact') {
+        $verdict.Exempt = "delta is $($verdict.Class)"
+        return $verdict
+    }
+    if (Test-MechanicalDelta $RepoPath) {
+        $verdict.Exempt = "is ahead only by push.ps1's own Release commit"
+        return $verdict
+    }
+    $checks = @('review')
+    if (-not $SkipTestsReceipt) { $checks += 'tests' }
+    foreach ($c in $checks) {
+        if (-not (Test-Receipt -PackageName $PackageName -RepoPath $RepoPath -Check $c -TreeHash $verdict.Hash)) {
+            $verdict.Missing += $c
+        }
+    }
+    return $verdict
+}
+
+# The source tree the release gate judged, per package: pinned by the pre-pass for EVERY
+# strict package in the run (gated or exempt), then moved only by push.ps1's own edit
+# (Set-GatedTree) and by a re-judgement that passes. Empty when the gate did not run
+# (-SkipReview, or no -Strict -Merge), so those runs commit as they always have.
+$GATED_TREES = @{}
+# The packages Assert-GatedTree refused this run, so the summary names the cause.
+$TREE_REFUSED = @{}
+
+function Set-GatedTree {
+    # Re-pin $PackageName to its tree as it is NOW. Called only right after push.ps1's
+    # own edit (the version line, the floors), so that edit is never judged as someone
+    # else's -- and the pin then holds the tree the Release commit is built from.
+    # Returns the new pin; $null when the package is not pinned (or cannot be hashed,
+    # which the next Assert-GatedTree refuses).
+    param([string]$PackageName, [string]$RepoPath)
+    if (-not $GATED_TREES.ContainsKey($PackageName)) { return $null }
+    $GATED_TREES[$PackageName] = Get-TreeHash $RepoPath
+    return $GATED_TREES[$PackageName]
+}
+
+function Assert-GatedTree {
+    # $true when $PackageName's source tree is still the one the release gate judged.
+    # Called before each step that sweeps the working tree into a commit with
+    # `git add -A` (the absorb before sync, the Release commit, the absorb before push)
+    # and before push.ps1's own version/floor edit, which Set-GatedTree then pins.
+    #
+    # The gate runs ONCE, before any mutation, and a release then spends minutes in other
+    # packages' publish waits. A session that edits a tree in that window used to be swept
+    # into a commit and published with no receipt for what shipped (2026-09-26 uitk 1.5.3;
+    # 2026-10-12 mayatk 0.24.0, a bridge fix committed by the absorb and a test edit by the
+    # "Update" absorb after the Release commit). So a moved tree is judged AGAIN, by the
+    # gate's own rule: a receipted package voids on any source edit, exactly as its receipt
+    # key does; an exempt one stays exempt only while its delta does. A tree the gate would
+    # refuse is refused here, naming what changed since the gate ran and when -- with
+    # nothing committed for it. So is a tree that cannot be hashed: what cannot be compared
+    # cannot be passed. What remains is the second between a check and its commit.
+    param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
+    if (-not $GATED_TREES.ContainsKey($PackageName)) { return $true }
+    $pinned = $GATED_TREES[$PackageName]
+    $now = Get-TreeHash $RepoPath
+    if (-not $now) {
+        $TREE_REFUSED[$PackageName] = $true
+        Write-Header "Release gate: $PackageName cannot be checked"
+        Write-Err "$PackageName's tree could not be hashed (above), so it cannot be compared with the tree the release gate passed; refusing to commit it."
+        Write-Host "  Usually a file another process holds open. Re-run this same command once it is free." -ForegroundColor Yellow
+        return $false
+    }
+    if ($now -eq $pinned) { return $true }
+    # No pin to diff against (the pre-pass could not hash this tree): judge it as it is.
+    $moved = @()
+    if ($pinned) { $moved = @(Get-TreeDiffPaths $RepoPath $pinned $now) }
+    $verdict = Get-GateVerdict $PackageName $RepoPath $Versions
+    if ($verdict.Hash -and ($verdict.Exempt -or $verdict.Missing.Count -eq 0)) {
+        $why = "has valid receipts ($PackageName@$($verdict.Hash))"
+        if ($verdict.Exempt) { $why = "$($verdict.Exempt) (exempt)" }
+        Write-Skip "Review gate: $PackageName changed after the gate ran; its new tree $why"
+        $GATED_TREES[$PackageName] = $verdict.Hash
+        return $true
+    }
+    $TREE_REFUSED[$PackageName] = $true
+    Write-Header "Release gate: $PackageName changed mid-run"
+    Write-Err "$PackageName changed after the release gate passed it ($pinned -> $now); refusing to commit it."
+    if (-not $verdict.Hash) {
+        Write-Err "Its tree could not be hashed again to judge it (above)."
+    }
+    foreach ($c in @($verdict.Missing | Where-Object { $verdict.Hash })) {
+        Write-Err "No $c receipt for the current tree of: $PackageName@$($verdict.Hash)"
+    }
+    if ($moved.Count -gt 0) {
+        Write-ChangedFiles "$($moved.Count) file(s) changed since the gate ran:" (Get-FileAges $RepoPath $moved)
+    } elseif ($pinned) {
+        Write-Host "    (the changed files could not be listed: git diff $pinned $now failed)" -ForegroundColor DarkGray
+    }
+    Write-Host @"
+  Another session is editing this tree. Committing it now would release that session's
+  in-progress work (every commit here is ``git add -A``), and a release cannot be recalled.
+  WAIT for it to settle, then review and test the tree, record:
+    .\m3trik\push.ps1 -RecordReceipt review,tests -Packages $PackageName
+  and re-run this same push command: every phase resumes where this one stopped.
+"@ -ForegroundColor Yellow
+    return $false
 }
 
 function Get-RepoSlugFromOriginUrl {
@@ -724,19 +924,22 @@ function Resolve-ReleaseVersion {
     #               refreshed by Finalize as packages release in this run), or
     #               max(simple index incl. yanked, highest v* tag) when absent
     #   local     = __version__ on dev
-    #   release   = (local > published AND local not on the index) ? local
+    #   release   = local > published ? (local on the index ? Step(local) : local)
     #             : Step(published)
     # A hand-edited __version__ ABOVE the published one is a deliberate minor or
     # major bump and is honored as-is; anything else steps the patch from what is
     # published. `local > published` alone is not enough: a stale index can make
     # a just-published version look unpublished, and re-releasing it would merge
     # code to main that PyPI's copy does not have (publish.yml's exact-membership
-    # probe then silently skips the upload). Returns $null when nothing
-    # authoritative is reachable - the caller refuses rather than guesses.
+    # probe then silently skips the upload). And a local version the index DOES
+    # list is published -- it reached PyPI after the map was read -- so the
+    # release steps past it: stepping from the stale map would land back on it.
+    # Returns $null when nothing authoritative is reachable - the caller refuses
+    # rather than guesses.
     param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
     $published = Resolve-PublishedVersion $PackageName $RepoPath $Versions
     if (-not $published) { return $null }
-    $localText = Get-PackageVersion (Join-Path $RepoPath $PackageName)
+    $localText = Get-PackageVersion $RepoPath
     $local = ConvertTo-VersionOrNull $localText
     $pub = [version]$published
     if ($local -and $local -gt $pub) {
@@ -745,6 +948,7 @@ function Resolve-ReleaseVersion {
             $onIndex = Test-PypiHasVersion (Get-PypiProjectName $PackageName) $localText
         }
         if (-not $onIndex) { return $localText }
+        return (Step-PatchVersion $localText)
     }
     return (Step-PatchVersion $published)
 }
@@ -816,12 +1020,9 @@ function Set-PackageVersion {
     # $true when the file changed. Detection and replacement are both anchored
     # to the real assignment line ($VERSION_LINE, common.ps1).
     param([string]$PackagePath, [string]$Version)
-    $initFile = Join-Path (Join-Path $PackagePath "src") "__init__.py"
-    if (-not (Test-Path $initFile)) {
-        $name = Split-Path $PackagePath -Leaf
-        $initFile = Join-Path (Join-Path $PackagePath $name) "__init__.py"
-    }
-    if (-not (Test-Path $initFile)) { return $false }
+    $rel = Get-VersionFile $PackagePath
+    if (-not $rel) { return $false }
+    $initFile = Join-Path $PackagePath $rel
     $content = Get-Content $initFile -Raw
     if ($content -notmatch $VERSION_LINE) { return $false }
     if ($Matches['ver'] -eq $Version) { return $false }
@@ -1058,6 +1259,11 @@ function Test-Build {
 }
 
 function Wait-ForWorkflow {
+    # Wait for publish.yml on origin/main's head. Returns "success"; "failed" when
+    # the run push.ps1 re-dispatched after a red one CONCLUDED red too (a verdict on
+    # the head itself); "timeout" when no run finished within the budget (one may
+    # still be queued or running, and may still publish); "error" when there is
+    # nothing to watch (no gh, no GitHub origin, no origin/main).
     param(
         [string]$RepoPath,
         [string]$PackageName
@@ -1067,7 +1273,7 @@ function Wait-ForWorkflow {
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         Write-Err "GitHub CLI (gh) not found; cannot reliably wait for workflows"
-        return $false
+        return "error"
     }
 
     $repoSlug = $null
@@ -1085,26 +1291,28 @@ function Wait-ForWorkflow {
 
     if (-not $repoSlug) {
         Write-Err "Cannot determine GitHub repo (remote.origin.url='$originUrl')"
-        return $false
+        return "error"
     }
     if (-not $headSha) {
         Write-Err "Cannot determine head SHA for origin/main"
-        return $false
+        return "error"
     }
 
-    # Polls `gh run list`, filters to $headSha, and reports a verdict:
-    # 'pending' (no matching run yet, or still running), 'success', or a
-    # failure conclusion string. Shared by the main wait loop and the
-    # post-timeout fallback below so both apply identical match/status logic.
+    # Polls `gh run list`, filters to $headSha, and returns @{ Verdict; Runs }.
+    # Verdict is 'norun' (no run for this SHA yet), 'pending' (one is still going,
+    # or the list could not be read), 'success', or the newest completed run's
+    # failure conclusion; Runs counts the SHA's runs, so a re-dispatch shows up
+    # as one more.
     function Get-MatchingRunVerdict {
         param([string]$RepoSlug, [string]$Sha)
+        $unread = @{ Verdict = "pending"; Runs = -1 }
         try {
             $runsJson = gh run list --repo $RepoSlug --branch main --workflow $WorkflowFile --limit 20 --json status,conclusion,headSha,createdAt,displayTitle 2>$null
-            if (-not $runsJson) { return "pending" }
+            if (-not $runsJson) { return $unread }
             $runs = $runsJson | ConvertFrom-Json
         }
         catch {
-            return "pending"
+            return $unread
         }
 
         $matching = @($runs | Where-Object { $_.headSha -eq $Sha })
@@ -1112,18 +1320,19 @@ function Wait-ForWorkflow {
         # exists and is still going): the manual-dispatch fallback below fires
         # only on "norun", so an already auto-triggered run isn't shadowed by a
         # redundant second dispatch.
-        if (-not $matching -or $matching.Count -eq 0) { return "norun" }
+        if ($matching.Count -eq 0) { return @{ Verdict = "norun"; Runs = 0 } }
 
         $inProgress = @($matching | Where-Object { $_.status -ne "completed" })
-        if ($inProgress.Count -gt 0) { return "pending" }
+        if ($inProgress.Count -gt 0) { return @{ Verdict = "pending"; Runs = $matching.Count } }
 
         # The NEWEST completed run for this sha is the verdict. A re-dispatch
         # after a failed run leaves the failure in the list; judging "any run
         # failed" would report the retry as red no matter how it went.
         $newest = @($matching | Sort-Object { [DateTime]$_.createdAt } -Descending)[0]
-        if ($newest.conclusion -and $newest.conclusion -ne "success") { return $newest.conclusion }
-
-        return "success"
+        if ($newest.conclusion -and $newest.conclusion -ne "success") {
+            return @{ Verdict = [string]$newest.conclusion; Runs = $matching.Count }
+        }
+        return @{ Verdict = "success"; Runs = $matching.Count }
     }
 
     # publish.yml's push trigger is path-filtered (paths: [<pkg>/**,
@@ -1147,7 +1356,7 @@ function Wait-ForWorkflow {
     $maxWait = $WorkflowTimeoutSeconds
     $elapsed = 0
     $dispatched = $false
-    $dispatchedAt = $null
+    $runsAtDispatch = 0
     $dispatchAfter = 90
 
     while ($elapsed -lt $maxWait) {
@@ -1159,7 +1368,8 @@ function Wait-ForWorkflow {
             $elapsed += $WorkflowPollSeconds
         }
 
-        $verdict = Get-MatchingRunVerdict -RepoSlug $repoSlug -Sha $headSha
+        $probe = Get-MatchingRunVerdict -RepoSlug $repoSlug -Sha $headSha
+        $verdict = $probe.Verdict
         if ($verdict -eq "norun" -or $verdict -eq "pending") {
             # Only dispatch when NO run exists for this SHA (norun). If one is
             # already in-progress (pending -- the push auto-triggered it), wait
@@ -1168,6 +1378,7 @@ function Wait-ForWorkflow {
                 Write-Host "    No auto-triggered run after ${elapsed}s (paths filter missed, or a hand-made [skip ci] head); dispatching publish.yml manually..." -ForegroundColor Yellow
                 gh workflow run $WorkflowFile --repo $repoSlug --ref main 2>&1 | Out-Null
                 $dispatched = $true
+                $runsAtDispatch = 0
             }
             if ($elapsed % 60 -eq 0) {
                 $mode = if ($dispatched) { "dispatched" } elseif ($verdict -eq "pending") { "auto" } else { "waiting" }
@@ -1177,7 +1388,7 @@ function Wait-ForWorkflow {
         }
         if ($verdict -eq "success") {
             Write-Success "Workflow completed (publish.yml)"
-            return $true
+            return "success"
         }
         # A failed run gets ONE re-dispatch. A flaky test job or an index-lag
         # Verify-Install timeout is the common cause, and the publish job is
@@ -1187,19 +1398,28 @@ function Wait-ForWorkflow {
             Write-Host "    Workflow concluded with '$verdict'; re-dispatching publish.yml once..." -ForegroundColor Yellow
             gh workflow run $WorkflowFile --repo $repoSlug --ref main 2>&1 | Out-Null
             $dispatched = $true
-            $dispatchedAt = $elapsed
+            $runsAtDispatch = $probe.Runs
             continue
         }
-        # Until the re-dispatched run is queued, the old failure is still the
-        # newest completed run; give GitHub a grace window before believing it.
-        if ($null -ne $dispatchedAt -and ($elapsed - $dispatchedAt) -lt 90) { continue }
+        # Until the re-dispatched run is LISTED, the newest completed run is still
+        # the old failure -- and the re-dispatch may yet run, and publish. A verdict
+        # read from the old run after a fixed grace called a run that was merely
+        # queued "failed", and a recovery could then merge on top of a publish still
+        # to come. "failed" is the re-dispatched run's own red conclusion; a run
+        # never listed within the budget is a timeout.
+        if ($probe.Runs -le $runsAtDispatch) {
+            if ($elapsed % 60 -eq 0) {
+                Write-Host "    Waiting for the re-dispatched run to appear... ($elapsed/$maxWait seconds)" -ForegroundColor Gray
+            }
+            continue
+        }
         Write-Err "Workflow concluded with '$verdict'"
-        return $false
+        return "failed"
     }
 
     Write-Host "    Warning: Timeout waiting for workflow (${maxWait}s)" -ForegroundColor Yellow
     Write-Host "    Stopping process - check GitHub Actions manually" -ForegroundColor Red
-    return $false
+    return "timeout"
 }
 
 function Get-GitHubRepoSlug {
@@ -1949,9 +2169,11 @@ function Get-MainVersion {
     # __version__ as committed on origin/main - never the working tree, which
     # may already hold the NEXT release's version. Caller has fetched origin/main.
     param([string]$PackageName, [string]$RepoPath)
+    $rel = Get-VersionFile $RepoPath
+    if (-not $rel) { return $null }
     Push-Location $RepoPath
     try {
-        $content = git show "origin/main:$PackageName/__init__.py" 2>$null
+        $content = git show "origin/main:$rel" 2>$null
         if ($LASTEXITCODE -ne 0 -or -not $content) { return $null }
         $joined = ($content -join "`n")
         if ($joined -match $VERSION_LINE) { return $Matches['ver'] }
@@ -1964,9 +2186,13 @@ function Invoke-FinalizePhase {
     # Reconcile origin/main with PyPI and the v* tags. Idempotent; runs at
     # package ENTRY (so a previous aborted run is completed before anything new
     # is prepared) and at EXIT (for this run's own release). Returns one of:
-    #   "noop"       main's version is tagged and released (or nothing to do)
-    #   "finalized"  tagged and/or released this call
-    #   "failed"     publish failed or PyPI never showed the version
+    #   "noop"            main's version is tagged and released (or nothing to do)
+    #   "finalized"       tagged and/or released this call
+    #   "publish-failed"  publish.yml CONCLUDED red for main's head: the merged
+    #                     head cannot publish as it stands, and a fix merged on
+    #                     top of it can (the caller's recovery)
+    #   "failed"          the wait ran out (a run may still publish this version),
+    #                     there was nothing to watch, or PyPI never showed it
     param([string]$PackageName, [string]$RepoPath, [hashtable]$Versions)
 
     # The ONE fetch for this phase; every helper below reads origin/main and the
@@ -2006,9 +2232,17 @@ function Invoke-FinalizePhase {
             return "noop"
         }
         Write-Step "origin/main carries $PackageName $mainVer, not yet on PyPI - waiting for publish.yml..."
-        if (-not (Wait-ForWorkflow $RepoPath $PackageName)) {
-            Write-Err "publish.yml did not succeed for $PackageName $mainVer"
-            return "failed"
+        $workflow = Wait-ForWorkflow $RepoPath $PackageName
+        # The index has the last word: a run can upload and then fail a later step,
+        # and a version PyPI holds is published whatever the run's colour -- a fix
+        # must never be merged under it.
+        if ($workflow -ne "success") {
+            if (-not (Test-PypiHasVersion $pypiName $mainVer)) {
+                Write-Err "publish.yml did not succeed for $PackageName $mainVer"
+                if ($workflow -eq "failed") { return "publish-failed" }
+                return "failed"
+            }
+            Write-Skip "$pypiName==$mainVer is on PyPI despite the publish run ($workflow) - finalizing it"
         }
         if (-not (Wait-PypiHasVersion $pypiName $mainVer -TimeoutSeconds $PypiVisibilityTimeoutSeconds)) {
             # BLOCKING, unlike the old tail: a tag is a promise that the version is
@@ -2072,6 +2306,8 @@ function Invoke-PreparePhase {
             $fromChangelog = Get-ChangelogCommitMessage $RepoPath
             if ($fromChangelog) { $absorbMessage = $fromChangelog }
         }
+        # The absorb is `git add -A`: only the tree the release gate judged may go in.
+        if (-not (Assert-GatedTree $PackageName $RepoPath $Versions)) { return $null }
         if (-not (Sync-DevWithOrigin $RepoPath -CommitMessage $absorbMessage)) {
             Write-Err "Pre-release sync failed"
             return $null
@@ -2098,8 +2334,7 @@ function Invoke-PreparePhase {
     }
 
     $result.Version = $version
-    $pkgSource = Join-Path $RepoPath $PackageName
-    $currentVer = Get-PackageVersion $pkgSource
+    $currentVer = Get-PackageVersion $RepoPath
 
     if ($DryRun) {
         if ($currentVer -ne $version) { Write-Step "[DryRun] Would release $PackageName $version (from $currentVer)" }
@@ -2119,7 +2354,12 @@ function Invoke-PreparePhase {
         return $result
     }
 
-    $preHash = Get-TreeHash $RepoPath
+    # The version resolve and the semver verdict above ran on the absorbed tree; it
+    # must still be the gated one before push.ps1 edits it (an edit that lands in a
+    # file push.ps1 then rewrites would otherwise ride along as push.ps1's own).
+    if (-not (Assert-GatedTree $PackageName $RepoPath $Versions)) { return $null }
+    $preHash = $GATED_TREES[$PackageName]
+    if (-not $preHash) { $preHash = Get-TreeHash $RepoPath }
     Push-Location $RepoPath
     try {
         git checkout dev --quiet 2>&1 | Out-Null
@@ -2131,6 +2371,8 @@ function Invoke-PreparePhase {
             $changed = $true
         }
         if (Update-InternalPins $PackageName $RepoPath $Versions) { $changed = $true }
+        # push.ps1's own edit is the new pinned tree: what the Release commit holds.
+        $null = Set-GatedTree $PackageName $RepoPath
 
         # A current registry in the release commit, so main always carries one and
         # the PR's `API registry up to date` check is green by construction. Runs
@@ -2203,6 +2445,9 @@ function Invoke-PreparePhase {
         if (git status --porcelain) { $changed = $true }
 
         if ($changed) {
+            # The generators above take seconds to minutes; an edit landing meanwhile
+            # would ride `git add -A` into the Release commit.
+            if (-not (Assert-GatedTree $PackageName $RepoPath $Versions)) { return $null }
             git add -A
             # Deliberately NOT tagged [skip ci]: this commit heads the dev branch the
             # release PR is opened from, and GitHub skips every workflow (tests.yml
@@ -2220,8 +2465,12 @@ function Invoke-PreparePhase {
 
     # The version line and floors moved the source hash; the tree is push.ps1's
     # own mechanical edit on a tree whose receipts were just verified (or which
-    # was exempt). Carry them across so a re-run after an abort passes its gate.
-    $postHash = Get-TreeHash $RepoPath
+    # was exempt). Carry them across so a re-run after an abort passes its gate --
+    # onto the pinned tree the commit was built from, never a fresh hash of the
+    # working tree: an edit landing right after `git commit` would be in that one,
+    # and would then pass the absorb before push as receipted.
+    $postHash = $GATED_TREES[$PackageName]
+    if (-not $postHash) { $postHash = Get-TreeHash $RepoPath }
     Copy-ReceiptsToTree $PackageName $preHash $postHash
 
     # Upstream floors this release pins must already be installable.
@@ -2275,9 +2524,18 @@ if ($RecordReceipt -or $ShowReceipts) {
         if ($RecordReceipt) {
             $checks = @($RecordReceipt | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
             $key = Write-ReceiptEntry -PackageName $pkg -RepoPath $repoPath -Checks $checks
+            if (-not $key) {
+                Write-Err "Nothing recorded for $pkg"
+                $receiptFail = $true
+                continue
+            }
             Write-Success "Recorded [$($checks -join ', ')] for $key"
         } else {
             $hash = Get-TreeHash $repoPath
+            if (-not $hash) {
+                $receiptFail = $true
+                continue
+            }
             $map = Read-Receipts
             $key = "$pkg@$hash"
             if ($map.ContainsKey($key)) {
@@ -2459,7 +2717,9 @@ if ($Merge -and $Strict -and -not $SkipReview) {
 # unless its CURRENT tree has BOTH a "review" and a "tests" receipt. Runs as a pre-pass BEFORE
 # any repo mutation so (a) a failure has zero side effects and (b) the cascade's own mechanical
 # commits (pin-sync, version bump) can't void a receipt mid-run. No-delta and housekeeping-only
-# packages are exempt — "push everything" never demands review of untouched repos.
+# packages are exempt — "push everything" never demands review of untouched repos. Every tree
+# it judges, exempt ones included, is pinned: each later commit re-checks it (Assert-GatedTree),
+# so a tree that moves during the run is judged again instead of absorbed.
 #
 # The "tests" half is a HARD gate, not advisory: mayatk and blendertk ship no
 # pull_request-triggered tests workflow (only bump-dev / publish / static-analysis), so the
@@ -2513,46 +2773,28 @@ if ($Merge -and $Strict -and -not $SkipReview) {
     foreach ($repo in $reposToProcess) {
         $gateName = $repo.Name
         if ($STRICT_PACKAGES -notcontains $gateName) { continue }
-        $gatePath = $repo.FullName
-        Push-Location $gatePath
-        try {
-            git fetch origin main dev --quiet 2>&1 | Out-Null
-            $gateDirty = [bool](git status --porcelain 2>$null)
-            $gateAhead = 0
-            $a = git rev-list --count origin/dev..dev 2>$null
-            if ($a) { $gateAhead = [int]$a }
-            $gateMainDelta = 0
-            $m = git rev-list --count origin/main..dev 2>$null
-            if ($m) { $gateMainDelta = [int]$m }
-        }
-        finally { Pop-Location }
-
-        if (-not ($gateDirty -or $gateAhead -gt 0 -or $gateMainDelta -gt 0)) { continue }
-        # Only an ARTIFACT delta — something that ships, or a floor that must ratchet —
-        # needs review + tests. A CI-only or sidecar-only delta merges without a
-        # version (or not at all) and never reaches PyPI.
-        $gateClass = Test-ReleaseDelta $gateName $gatePath $publishedVersions
-        if ($gateClass -ne 'artifact') {
-            Write-Skip "Review gate: $gateName delta is $gateClass (exempt)"
-            continue
-        }
-        if (Test-MechanicalDelta $gatePath) {
-            Write-Skip "Review gate: $gateName is ahead only by push.ps1's own Release commit (exempt)"
+        $gateVerdict = Get-GateVerdict $gateName $repo.FullName $publishedVersions
+        # Pinned whatever the verdict: a package with nothing to judge NOW is exactly the
+        # one a session can start editing during an upstream package's publish wait.
+        $GATED_TREES[$gateName] = $gateVerdict.Hash
+        if (-not $gateVerdict.HasDelta) { continue }
+        if ($gateVerdict.Exempt) {
+            Write-Skip "Review gate: $gateName $($gateVerdict.Exempt) (exempt)"
             continue
         }
 
-        $gateHash = Get-TreeHash $gatePath
-        if (Test-Receipt -PackageName $gateName -RepoPath $gatePath -Check "review" -TreeHash $gateHash) {
-            Write-Success "Review receipt valid: $gateName@$gateHash"
-        } else {
+        $gateHash = $gateVerdict.Hash
+        if ($gateVerdict.Missing -contains 'review') {
             $reviewMissing += "$gateName@$gateHash"
+        } else {
+            Write-Success "Review receipt valid: $gateName@$gateHash"
         }
         if ($SkipTestsReceipt) {
             $testsBypassed += "$gateName@$gateHash"
-        } elseif (Test-Receipt -PackageName $gateName -RepoPath $gatePath -Check "tests" -TreeHash $gateHash) {
-            Write-Success "Tests receipt valid: $gateName@$gateHash"
-        } else {
+        } elseif ($gateVerdict.Missing -contains 'tests') {
             $testsMissing += "$gateName@$gateHash"
+        } else {
+            Write-Success "Tests receipt valid: $gateName@$gateHash"
         }
     }
     if ($testsBypassed.Count -gt 0) {
@@ -2591,20 +2833,16 @@ if ($Merge -and $Strict -and -not $SkipReview) {
         foreach ($ln in $liveNames) {
             $lp = Join-Path $Root $ln
             if (-not (Test-Path $lp)) { continue }
-            $recent = Get-RecentlyModifiedFiles -RepoPath $lp -WithinMinutes 15
+            # @(): Windows PowerShell gives a lone PSCustomObject no .Count, so one
+            # fresh file read as none and the banner below never showed for it.
+            $recent = @(Get-RecentlyModifiedFiles -RepoPath $lp -WithinMinutes 15)
             if ($recent.Count -gt 0) {
                 if (-not $liveFound) {
                     Write-Host ""
                     Write-Host "  Another session may be editing these trees RIGHT NOW:" -ForegroundColor Red
                     $liveFound = $true
                 }
-                Write-Host "    $ln - $($recent.Count) file(s) changed in the last 15 min:" -ForegroundColor Yellow
-                foreach ($r in ($recent | Select-Object -First 8)) {
-                    Write-Host "      $($r.Minutes.ToString().PadLeft(5)) min ago  $($r.Path)" -ForegroundColor DarkGray
-                }
-                if ($recent.Count -gt 8) {
-                    Write-Host "      ... and $($recent.Count - 8) more" -ForegroundColor DarkGray
-                }
+                Write-ChangedFiles "$ln - $($recent.Count) file(s) changed in the last 15 min:" $recent
             }
         }
         if ($liveFound) {
@@ -2666,10 +2904,25 @@ foreach ($repo in $reposToProcess) {
 
     # 1. Finalize (entry): complete a previous run's merged-but-unfinished release
     #    BEFORE preparing anything new, so the version map and tags are truthful.
+    #    When its publish CONCLUDED red and dev carries a delta that reaches main,
+    #    that delta is the likely fix: merge it (Prepare -> Push -> Merge) and
+    #    finalize once more at exit, instead of stopping here on every re-run
+    #    (uitk 1.7.2, 2026-10-12: a test that failed only on the runner, fixed on
+    #    dev, recovered by a hand-made PR). A wait that merely ran out never takes
+    #    this path: that run may still publish the merged version, and a release
+    #    merged on top would then carry code PyPI's copy of it lacks.
     $finalizedOnEntry = $false
+    $finishOnExit = $false
     if ($Strict -and $isStrictPackage -and $Merge -and -not $DryRun) {
         $entry = Invoke-FinalizePhase $pkgName $repoPath $publishedVersions
-        if ($entry -eq "failed") {
+        if ($entry -eq "publish-failed") {
+            $pending = Get-GateVerdict $pkgName $repoPath $publishedVersions
+            if ($pending.HasDelta -and $pending.Class -in @('artifact', 'must-reach-main')) {
+                Write-Step "dev holds a delta origin/main lacks ($($pending.Class)): merging it, then finalizing $pkgName again"
+                $finishOnExit = $true
+            }
+        }
+        if (($entry -eq "failed" -or $entry -eq "publish-failed") -and -not $finishOnExit) {
             $results[$pkgName] = "workflow-failed"
             $anyErrors = $true
             Write-Err "A previously merged release could not be finalized - aborting remaining packages"
@@ -2685,6 +2938,7 @@ foreach ($repo in $reposToProcess) {
             $prepared = Invoke-PreparePhase $pkgName $repoPath $publishedVersions
             if (-not $prepared) {
                 $results[$pkgName] = "prepare-failed"
+                if ($TREE_REFUSED.ContainsKey($pkgName)) { $results[$pkgName] = "tree-moved" }
                 $anyErrors = $true
                 if ($stopOnFailure) { break }
                 continue
@@ -2732,6 +2986,12 @@ foreach ($repo in $reposToProcess) {
     if ($Merge -and $aheadOfMain -gt 0 -and $prepared.Class -eq 'rides-along') {
         Write-Skip "Dev is ahead of main by sidecars/CHANGELOG only (rides along with the next release)"
     }
+    if ($finishOnExit -and -not $needsMerge) {
+        $results[$pkgName] = "workflow-failed"
+        $anyErrors = $true
+        Write-Err "A previously merged release could not be finalized, and nothing on dev is left to merge - aborting remaining packages"
+        break
+    }
 
     if (-not $hasChanges -and -not $needsMerge) {
         if ($finalizedOnEntry) { $results[$pkgName] = "finalized" }
@@ -2745,6 +3005,14 @@ foreach ($repo in $reposToProcess) {
         if ($DryRun) {
             Write-Step "[DryRun] Would push dev branch"
         } else {
+            # Push-DevBranch absorbs a dirty tree as "Update" -- after Test-Build, the
+            # longest wait between the Release commit and the push.
+            if (-not (Assert-GatedTree $pkgName $repoPath $publishedVersions)) {
+                $results[$pkgName] = "tree-moved"
+                $anyErrors = $true
+                if ($stopOnFailure) { break }
+                continue
+            }
             if (-not (Push-DevBranch $repoPath)) {
                 $results[$pkgName] = "push-failed"
                 $anyErrors = $true
@@ -2788,9 +3056,13 @@ foreach ($repo in $reposToProcess) {
     }
 
     # 5. Finalize (exit): this run's own release — wait for publish, PyPI, tag, Release.
-    if ($Strict -and $isStrictPackage -and $Merge -and -not $DryRun -and $prepared.Class -eq 'artifact' -and $needsMerge) {
+    #    After a recovery merge too, whatever its class: main still carries the
+    #    unpublished version, and a must-reach-main merge triggers no publish.yml
+    #    (paths-filtered), which Wait-ForWorkflow dispatches when no run appears.
+    $releasing = ($prepared.Class -eq 'artifact') -or $finishOnExit
+    if ($Strict -and $isStrictPackage -and $Merge -and -not $DryRun -and $releasing -and $needsMerge) {
         $exit = Invoke-FinalizePhase $pkgName $repoPath $publishedVersions
-        if ($exit -eq "failed") {
+        if ($exit -eq "failed" -or $exit -eq "publish-failed") {
             $results[$pkgName] = "workflow-failed"
             $anyErrors = $true
             Write-Err "Workflow failed or timed out - aborting remaining packages"
@@ -2823,6 +3095,7 @@ foreach ($repo in $reposToProcess) {
         "prepare-failed" { Write-Err "$pkg - Release preparation failed" }
         "build-failed" { Write-Err "$pkg - Build failed" }
         "push-failed" { Write-Err "$pkg - Push failed" }
+        "tree-moved" { Write-Err "$pkg - Changed after the release gate passed it; nothing committed (see above)" }
         "merge-dead" { Write-Err "$pkg - PR cannot merge (conflict, a red REQUIRED check, or a missing review; see above)" }
         "merge-failed" { Write-Err "$pkg - Merge failed" }
         "merge-conflict" { Write-Err "$pkg - Merge conflicts" }

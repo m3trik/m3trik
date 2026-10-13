@@ -1520,6 +1520,8 @@ class TestPushScriptRegressions(unittest.TestCase):
     # `release upload` its file (into _bin/uploads), at call time, because
     # push.ps1 deletes both temp files in `finally`. `release view` of an existing
     # Release prints release_assets.json when present: the asset list gh reports.
+    # `run list` asks runlist.py when a test installed one (_install_stub_workflow:
+    # a publish.yml whose answer depends on origin's head), else prints runs.json.
     # .cmd + CRLF: cmd.exe rejects LF-only batch files, and PATHEXT resolution
     # makes `gh` find it from PowerShell.
     _GH_SHIM_LINES = [
@@ -1612,6 +1614,12 @@ class TestPushScriptRegressions(unittest.TestCase):
         "exit /b 0",
         "",
         ":runlist",
+        'if not exist "%HERE%runlist.py" goto :runstatic',
+        'set /p PY=<"%HERE%python_exe.txt"',
+        '"%PY%" "%HERE%runlist.py"',
+        "exit /b 0",
+        "",
+        ":runstatic",
         'if exist "%HERE%runs.json" (type "%HERE%runs.json") else (echo [])',
         "exit /b 0",
         "",
@@ -1727,6 +1735,212 @@ class TestPushScriptRegressions(unittest.TestCase):
             "0",
             *extra,
         )
+
+    def _run_push_stubbed(self, root: Path, *args, env=None, timeout=300):
+        """Run push.ps1 against a scripted PyPI index, with the clock stubbed.
+
+        Finalize's publish wait is reachable only WITHOUT -SkipPypiCheck, which
+        would otherwise read the real index. PowerShell resolves a function
+        before a cmdlet, so a global ``Invoke-RestMethod`` answers push.ps1's
+        simple-index reads from ``_pypi/<name>.txt`` (one version per line; a
+        missing file is an unreachable index), and a global ``Start-Sleep``
+        makes every poll loop instant. Before answering, the index runs
+        ``_pypi/hook.ps1`` when present: a test's way to act at the moment
+        push.ps1 asks the index something (the hook decides whether to act, and
+        deletes itself when it does). Exit status is the script's ``$?``:
+        ``$LASTEXITCODE`` would be whatever git last returned.
+        """
+        fake = root / "_pypi"
+        fake.mkdir(exist_ok=True)
+        harness = root / "_push_stubbed.ps1"
+        harness.write_text(
+            "function global:Start-Sleep { param([int]$Seconds, [int]$Milliseconds) }\n"
+            "function global:Invoke-RestMethod {\n"
+            "    param([string]$Uri, $Method, $Headers)\n"
+            f"    $hook = '{fake / 'hook.ps1'}'\n"
+            "    if (Test-Path -LiteralPath $hook) { & $hook }\n"
+            "    if ($Uri -notmatch '/simple/(?<name>[^/]+)/') { throw \"unexpected $Uri\" }\n"
+            f"    $file = Join-Path '{fake}' ($Matches['name'] + '.txt')\n"
+            '    if (-not (Test-Path -LiteralPath $file)) { throw "unreachable $Uri" }\n'
+            "    $listed = @(Get-Content -LiteralPath $file | Where-Object { $_ })\n"
+            "    return [pscustomobject]@{ versions = $listed }\n"
+            "}\n"
+            f"& '{M3TRIK_DIR / 'push.ps1'}' @args\n"
+            "if ($?) { exit 0 } else { exit 1 }\n",
+            # Windows PowerShell reads a BOM-less script as the ANSI code page.
+            encoding="utf-8-sig",
+        )
+        return self._run(
+            [
+                POWERSHELL,
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(harness),
+                "-Root",
+                str(root),
+                *args,
+            ],
+            cwd=root,
+            timeout=timeout,
+            env=env,
+        )
+
+    #: `gh run list` for a stub publish.yml whose push trigger is paths-filtered,
+    #: as every cascade package's is. Each run of the head in failing_head.txt
+    #: fails, one listed per `gh workflow run` made since that head appeared
+    #: (mode "fail"); "uploads" fails the same way after its re-dispatched run
+    #: uploaded; "lost" never lists the re-dispatched run; "hang" never
+    #: finishes. Any other head gets NO run until a `gh workflow run` is logged
+    #: after it appears, and that dispatched run succeeds. A run that uploads
+    #: adds the head's own __version__ to the stub index.
+    _RUNLIST_PY = r"""
+import json, pathlib, re, subprocess
+here = pathlib.Path(__file__).resolve().parent
+remote = (here / "run_remote.txt").read_text(encoding="utf-8").strip()
+package = (here / "publishes.txt").read_text().strip()
+mode = (here / "run_mode.txt").read_text().strip()
+
+
+def git(*args):
+    return subprocess.run(
+        ["git", "-C", remote, *args], capture_output=True, text=True
+    ).stdout
+
+
+sha = git("rev-parse", "main").strip()
+log = here / "gh_calls.log"
+dispatches = log.read_text(errors="replace").count("workflow run") if log.exists() else 0
+seen = here / ("seen_" + sha + ".txt")
+if not seen.exists():
+    seen.write_text(str(dispatches))
+since = dispatches - int(seen.read_text())
+
+
+def publish():
+    init = git("show", sha + ":" + package + "/__init__.py")
+    version = re.search(r'__version__ = "([^"]+)"', init).group(1)
+    index = here.parent / "_pypi" / (package + ".txt")
+    if version not in index.read_text().split():
+        index.write_text(index.read_text() + version + "\n")
+
+
+def runs(*states):
+    print(json.dumps([
+        {"status": s, "conclusion": c, "headSha": sha, "displayTitle": "Publish",
+         "createdAt": "2026-10-12T00:%02d:00Z" % i}
+        for i, (s, c) in enumerate(states)
+    ]))
+
+
+if sha == (here / "failing_head.txt").read_text().strip():
+    if mode == "hang":
+        runs(("in_progress", None))
+    elif mode == "lost":
+        runs(("completed", "failure"))
+    else:
+        if mode == "uploads" and since:
+            publish()
+        runs(*[("completed", "failure")] * (1 + since))
+elif since:
+    publish()
+    runs(("completed", "success"))
+else:
+    print("[]")
+"""
+
+    def _install_stub_workflow(self, root, origin, failing_head, mode="fail"):
+        """Make the fake gh's `run list` a stateful publish.yml (_RUNLIST_PY).
+
+        Parameters:
+            root (Path): The test root holding ``_bin`` and ``_pypi``.
+            origin (Path): The bare pythontk remote whose ``main`` is being run.
+            failing_head (str): The sha whose publish fails (or hangs).
+            mode (str): ``"fail"``, ``"uploads"``, ``"lost"`` or ``"hang"``.
+        """
+        bin_dir = root / "_bin"
+        (bin_dir / "runlist.py").write_text(self._RUNLIST_PY, encoding="utf-8")
+        (bin_dir / "python_exe.txt").write_text(sys.executable, encoding="ascii")
+        (bin_dir / "run_remote.txt").write_text(str(origin), encoding="utf-8")
+        (bin_dir / "failing_head.txt").write_text(failing_head, encoding="ascii")
+        (bin_dir / "run_mode.txt").write_text(mode, encoding="ascii")
+        (bin_dir / "publishes.txt").write_text("pythontk", encoding="ascii")
+
+    def _failed_release_on_main(self, root: Path, fix: str):
+        """pythontk with Release 0.1.1 merged to main, unpublished, and *fix*.
+
+        *fix* (a repo-relative file) is committed on dev and pushed. Returns
+        ``(repo, origin, failing_head, env)`` with the fake gh installed and
+        0.1.0 alone on the stub index.
+        """
+        repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+        self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+        self._git(repo, "checkout", "dev")
+        (repo / "pythontk" / "__init__.py").write_text(
+            '__package__ = "pythontk"\n__version__ = "0.1.1"\n', encoding="utf-8"
+        )
+        entry = f"- **{self._commit_date(repo, 'v0.1.0')} -- the fix.**"
+        (repo / "CHANGELOG.md").write_text(f"# log\n\n{entry}\n", encoding="utf-8")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-m", "Release 0.1.1")
+        self._git(repo, "checkout", "main")
+        self._git(repo, "merge", "--no-ff", "dev", "-m", "Merge dev")
+        self._git(repo, "push", "origin", "main")
+        failing_head = self._git(origin, "rev-parse", "main").stdout.strip()
+        self._git(repo, "checkout", "dev")
+        (repo / fix).parent.mkdir(parents=True, exist_ok=True)
+        (repo / fix).write_text("x = 1\n", encoding="utf-8")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-m", "the fix")
+        self._git(repo, "push", "origin", "dev")
+        env = self._install_fake_gh(root, "{}")
+        (root / "_pypi").mkdir()
+        (root / "_pypi" / "pythontk.txt").write_text("0.1.0\n", encoding="ascii")
+        return repo, origin, failing_head, env
+
+    #: Lifts push.ps1's script-level constants into a _run_push_functions body,
+    #: so a function-level test reads them instead of re-declaring them.
+    _PUSH_CONSTANTS = (
+        "$constants = 'API_SIDECARS', 'GENERATED_PATHS', 'GENERATED_PATHSPEC',"
+        " 'MUST_REACH_MAIN_PATHS', 'ARTIFACT_EXCEPTIONS', 'RIDES_ALONG_PATHS',"
+        " 'GATED_TREES', 'TREE_REFUSED'\n"
+        "foreach ($st in $pushAst.EndBlock.Statements) {\n"
+        "    if ($st -is [System.Management.Automation.Language.AssignmentStatementAst]"
+        " -and $constants -contains $st.Left.VariablePath.UserPath) {\n"
+        "        . ([scriptblock]::Create($st.Extent.Text))\n"
+        "    }\n"
+        "}\n"
+        "$ReceiptMaxAgeDays = 7\n"
+        "$SkipTestsReceipt = $false\n"
+    )
+
+    def _commit_receipted_feature(self, root: Path, repo: Path, name: str):
+        """Push a code delta to *repo*'s dev and record review + tests for it."""
+        self._git(repo, "checkout", "dev")
+        (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-m", "feature")
+        self._git(repo, "push", "origin", "dev")
+        recorded = self._run(
+            self._push_cmd(root, "-Packages", name, "-RecordReceipt", "review,tests"),
+            cwd=root,
+        )
+        self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+
+    def _assert_late_edit_refused(self, result, repo: Path, origin: Path, rel: str):
+        """The run refused *rel*, named it, and committed and pushed none of it."""
+        out = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, out)
+        self.assertIn("changed after the release gate passed it", out)
+        self.assertIn("min ago  " + rel, out)  # named, with its age
+        status = self._git(repo, "status", "--porcelain").stdout
+        self.assertIn("?? " + rel, status, "the edit must stay uncommitted\n" + out)
+        for branch in ("dev", "main"):
+            tree = self._git(origin, "ls-tree", "-r", "--name-only", branch).stdout
+            self.assertNotIn(rel, tree, f"origin/{branch} carries the edit\n{out}")
+        return out
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_tests_receipt_is_a_hard_release_gate(self):
@@ -3033,6 +3247,525 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("ahead only by push.ps1's own Release commit (exempt)", out2)
             self.assertNotIn("No review receipt", out2)
             self.assertIn("PR #7 merged", out2)
+
+    @staticmethod
+    def _results(result):
+        """The ``RESULT:<key>=<value>`` lines a function-level body printed."""
+        return dict(
+            line[len("RESULT:") :].split("=", 1)
+            for line in result.stdout.splitlines()
+            if line.startswith("RESULT:")
+        )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_an_edit_during_an_upstream_publish_wait_is_not_absorbed(self):
+        """The gate judges every tree ONCE, before the run's minutes of publish
+        waits; an edit landing in one of them must not be absorbed and shipped.
+
+        2026-09-26 (uitk 1.5.3) and 2026-10-12 (mayatk 0.24.0): a session edited
+        a package while push.ps1 sat in another package's Finalize, and the
+        absorb before sync (`git add -A`) committed the work into a release no
+        receipt covered. Here uitk is clean when the gate runs -- nothing to
+        judge, so exempt -- and is edited while pythontk's publish is awaited.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            pythontk, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            uitk, uitk_origin = self._init_dummy_repo(
+                root, "uitk", "0.2.0", ["qtpy", "pythontk==0.1.0"]
+            )
+            self._commit_receipted_feature(root, pythontk, "pythontk")
+            (root / "_pypi").mkdir()
+            (root / "_pypi" / "pythontk.txt").write_text("0.1.0\n", encoding="ascii")
+            (root / "_pypi" / "uitk.txt").write_text("0.2.0\n", encoding="ascii")
+            # Fires on pythontk's post-merge publish probe: the upstream wait.
+            (root / "_pypi" / "hook.ps1").write_text(
+                f"if ((git -C '{pythontk}' log -1 --format=%s) -match '^Release ') {{\n"
+                f"    Set-Content -LiteralPath '{uitk / 'uitk' / 'late.py'}' -Value 'x = 2'\n"
+                "    Remove-Item -LiteralPath $PSCommandPath\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            result = self._run_push_stubbed(
+                root,
+                "-Packages",
+                "pythontk,uitk",
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+            )
+            out = self._assert_late_edit_refused(
+                result, uitk, uitk_origin, "uitk/late.py"
+            )
+            self.assertIn("Committed 'Release 0.1.1'", out)  # pythontk went through
+            self.assertNotIn("Release 0.2.1", out)
+            self.assertIn("No review receipt for the current tree of: uitk@", out)
+            self.assertIn("uitk - Changed after the release gate passed it", out)
+
+    def _release_with_a_generator_edit(self, root: Path, edit: str):
+        """Release a receipted pythontk whose registry generator also runs
+        *edit* (Python, ``pkg`` = the package source dir) -- another session
+        landing a change while Prepare's generators run."""
+        repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+        self._commit_receipted_feature(root, repo, "pythontk")
+        scripts = root / "m3trik" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "generate_api_registry.py").write_text(
+            "import pathlib, sys\n"
+            "if '--semver' in sys.argv:\n"
+            "    sys.exit(0)\n"
+            "repo = pathlib.Path(__file__).resolve().parents[2] / sys.argv[1]\n"
+            "(repo / 'API_INDEX.md').write_text('# index\\n')\n"
+            "pkg = repo / sys.argv[1]\n" + edit + "\n",
+            encoding="utf-8",
+        )
+        result = self._run(
+            self._push_cmd(
+                root,
+                "-Packages",
+                "pythontk",
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+                "-SkipPypiCheck",
+            ),
+            cwd=root,
+            timeout=180,
+        )
+        return repo, origin, result
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_an_edit_during_the_registry_regen_stays_out_of_the_release(self):
+        """Prepare's own generators run between the absorb and the Release
+        commit, and that commit is `git add -A` too: only push.ps1's own edits
+        (the version line, the floors, the sidecars) may ride in it."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin, result = self._release_with_a_generator_edit(
+                root, "(pkg / 'late.py').write_text('x = 2\\n')"
+            )
+            out = self._assert_late_edit_refused(
+                result, repo, origin, "pythontk/late.py"
+            )
+            self.assertNotIn("Committed 'Release", out)
+            self.assertIn("pythontk - Changed after the release gate passed it", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_an_edit_to_a_file_push_ps1_also_writes_is_still_judged(self):
+        """push.ps1's own edits (the version line, the floors) must not bless
+        whatever else lands in the same file: an exemption by PATH let a foreign
+        line written into __init__.py during the generators ride the Release
+        commit to main."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin, result = self._release_with_a_generator_edit(
+                root,
+                "init = pkg / '__init__.py'\n"
+                "init.write_text(init.read_text() + 'FOREIGN = 1\\n')",
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("changed after the release gate passed it", out)
+            self.assertIn("min ago  pythontk/__init__.py", out)
+            self.assertNotIn("Committed 'Release", out)
+            self.assertIn("pythontk - Changed after the release gate passed it", out)
+            for branch in ("dev", "main"):
+                init = self._git(origin, "show", f"{branch}:pythontk/__init__.py")
+                self.assertNotIn("FOREIGN", init.stdout, f"origin/{branch}\n{out}")
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_an_edit_after_the_release_commit_is_not_absorbed_as_update(self):
+        """Push-DevBranch absorbs a dirty tree as "Update", and Test-Build sits
+        between it and the Release commit -- how mayatk 0.24.0 shipped a test
+        edit (0372d571 "Update", 23 s after `Release 0.24.0`). Here the edit
+        lands during the upstream-floor PyPI check that follows the commit."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            uitk, uitk_origin = self._init_dummy_repo(
+                root, "uitk", "0.2.0", ["qtpy", "pythontk==0.1.0"]
+            )
+            self._commit_receipted_feature(root, uitk, "uitk")
+            (root / "_pypi").mkdir()
+            (root / "_pypi" / "pythontk.txt").write_text("0.1.0\n", encoding="ascii")
+            (root / "_pypi" / "uitk.txt").write_text("0.2.0\n", encoding="ascii")
+            (root / "_pypi" / "hook.ps1").write_text(
+                f"if ((git -C '{uitk}' log -1 --format=%s) -match '^Release ') {{\n"
+                f"    Set-Content -LiteralPath '{uitk / 'uitk' / 'late.py'}' -Value 'x = 2'\n"
+                "    Remove-Item -LiteralPath $PSCommandPath\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            result = self._run_push_stubbed(
+                root,
+                "-Packages",
+                "uitk",
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                "-SkipWorkflowWait",
+            )
+            out = self._assert_late_edit_refused(
+                result, uitk, uitk_origin, "uitk/late.py"
+            )
+            self.assertIn("Committed 'Release 0.2.1'", out)
+            self.assertNotIn("Staging uncommitted changes", out)
+            self.assertIn("uitk - Changed after the release gate passed it", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_an_edit_right_after_the_release_commit_gets_no_receipt(self):
+        """The receipts are carried across the Release commit onto the tree
+        that commit holds -- never onto a fresh hash of the working tree, which
+        an edit landing right after `git commit` would already be in. Carried
+        there, the absorb before push re-judged the edit as receipted and
+        shipped it as "Update"."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._commit_receipted_feature(root, repo, "pythontk")
+            # Lands the instant push.ps1's Release commit exists.
+            (repo / ".git" / "hooks" / "post-commit").write_bytes(
+                b"#!/bin/sh\n"
+                b'case "$(git log -1 --format=%s)" in\n'
+                b"  Release*) echo 'x = 2' > pythontk/late.py; rm -f \"$0\" ;;\n"
+                b"esac\n"
+            )
+
+            result = self._run(
+                self._push_cmd(
+                    root,
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ),
+                cwd=root,
+                timeout=180,
+            )
+            out = self._assert_late_edit_refused(
+                result, repo, origin, "pythontk/late.py"
+            )
+            self.assertIn("Committed 'Release 0.1.1'", out)
+            self.assertNotIn("Staging uncommitted changes", out)
+            self.assertIn("No review receipt for the current tree of: pythontk@", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_moved_tree_is_judged_again_by_the_gate(self):
+        """Assert-GatedTree re-applies the gate's own rule, not a stricter one:
+        a tree that moved stays committable while the gate would still pass it
+        (an exempt delta, or receipts recorded for the NEW tree), and an
+        unreceipted artifact refuses."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            body = (
+                self._PUSH_CONSTANTS + f"$RECEIPTS_PATH = '{root / 'receipts.json'}'\n"
+                f"$repo = '{repo}'\n"
+                "$GATED_TREES['pythontk'] = Get-TreeHash $repo\n"
+                '"RESULT:unchanged=$(Assert-GatedTree pythontk $repo $null)"\n'
+                "New-Item -ItemType Directory -Force (Join-Path $repo 'test') | Out-Null\n"
+                "Set-Content -LiteralPath (Join-Path $repo 'test\\test_new.py') -Value 'x = 1'\n"
+                '"RESULT:exempt=$(Assert-GatedTree pythontk $repo $null)"\n'
+                "Set-Content -LiteralPath (Join-Path $repo 'pythontk\\late.py') -Value 'x = 2'\n"
+                '"RESULT:unreceipted=$(Assert-GatedTree pythontk $repo $null)"\n'
+                "Write-ReceiptEntry pythontk $repo @('review', 'tests') | Out-Null\n"
+                '"RESULT:receipted=$(Assert-GatedTree pythontk $repo $null)"\n'
+            )
+            result = self._run_push_functions(root, body)
+            out = result.stdout + result.stderr
+            expected = {
+                "unchanged": "True",
+                "exempt": "True",
+                "unreceipted": "False",
+                "receipted": "True",
+            }
+            self.assertEqual(self._results(result), expected, out)
+            self.assertIn("delta is must-reach-main (exempt)", out)
+            self.assertIn("min ago  pythontk/late.py", out)
+            self.assertEqual(out.count("changed after the gate ran"), 2, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_an_unhashable_tree_fails_closed_and_says_why(self):
+        """A `git add` that cannot read a file (one a sync client holds) must
+        not hash as the EMPTY tree: a receipt recorded for that hash would
+        cover nothing, and the gate's re-check would report every file as
+        deleted. No hash, no receipt, no commit -- and the reason, named."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            body = (
+                self._PUSH_CONSTANTS + f"$RECEIPTS_PATH = '{root / 'receipts.json'}'\n"
+                f"$repo = '{repo}'\n"
+                "$GATED_TREES['pythontk'] = Get-TreeHash $repo\n"
+                "$held = Join-Path $repo 'pythontk\\__init__.py'\n"
+                "$lock = [IO.File]::Open($held, 'Open', 'Read', 'None')\n"
+                "try {\n"
+                '    "RESULT:hash=[$(Get-TreeHash $repo)]"\n'
+                "    $key = Write-ReceiptEntry pythontk $repo @('review', 'tests')\n"
+                '    "RESULT:recorded=[$key]"\n'
+                '    "RESULT:assert=$(Assert-GatedTree pythontk $repo $null)"\n'
+                "} finally { $lock.Close() }\n"
+                "\"RESULT:keys=[$(@((Read-Receipts).Keys) -join ',')]\"\n"
+            )
+            result = self._run_push_functions(root, body)
+            out = result.stdout + result.stderr
+            expected = {
+                "hash": "[]",
+                "recorded": "[]",
+                "assert": "False",
+                "keys": "[]",
+            }
+            self.assertEqual(self._results(result), expected, out)
+            self.assertIn("Cannot hash the source tree", out)
+            self.assertIn("Permission denied", out)  # git's own reason
+            self.assertNotIn("deleted  ", out)
+
+    def test_a_local_version_already_on_the_index_is_stepped_past(self):
+        """`__version__` above the run's published map is a deliberate bump
+        only while the index lacks it. Once it is there -- it reached PyPI
+        after the map was read -- the release steps past it; stepping from the
+        stale map lands back ON it, merging code PyPI's copy lacks."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo = root / "pythontk"
+            (repo / "pythontk").mkdir(parents=True)
+            (repo / "pythontk" / "__init__.py").write_text(
+                '__version__ = "0.1.1"\n', encoding="utf-8"
+            )
+            body = (
+                "$SkipPypiCheck = $false\n"
+                "function Test-PypiHasVersion { param($Name, $Version) $global:onIndex }\n"
+                f"$repo = '{repo}'\n"
+                "$global:onIndex = $true\n"
+                "\"RESULT:on_index=$(Resolve-ReleaseVersion pythontk $repo @{ pythontk = '0.1.0' })\"\n"
+                "$global:onIndex = $false\n"
+                "\"RESULT:hand_bump=$(Resolve-ReleaseVersion pythontk $repo @{ pythontk = '0.1.0' })\"\n"
+            )
+            result = self._run_push_functions(root, body)
+            out = result.stdout + result.stderr
+            expected = {"on_index": "0.1.2", "hand_bump": "0.1.1"}
+            self.assertEqual(self._results(result), expected, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_one_fresh_file_still_raises_the_concurrent_writer_banner(self):
+        """Windows PowerShell 5.1 gives a lone PSCustomObject no `.Count`, so a
+        one-file answer from Get-RecentlyModifiedFiles read as zero and the
+        "another session may be editing" banner never showed for it."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            result = self._run(
+                self._push_cmd(
+                    root,
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ),
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("No review receipt for the current tree", out)
+            self.assertIn("Another session may be editing these trees RIGHT NOW", out)
+            self.assertIn("1 file(s) changed in the last 15 min", out)
+            self.assertIn("min ago  feature.py", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_floor_ratchet_releases_through_every_gated_tree_check(self):
+        """A clean dependent the gate exempts, whose floor must ratchet, gets
+        push.ps1's own version and floor edits past all three checks with the
+        gate on: they move the pinned tree, they are not a concurrent edit."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            pythontk, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            _, uitk_origin = self._init_dummy_repo(
+                root, "uitk", "0.2.0", ["qtpy", "pythontk==0.1.0"]
+            )
+            self._commit_receipted_feature(root, pythontk, "pythontk")
+
+            result = self._run(
+                self._push_cmd(
+                    root,
+                    "-Packages",
+                    "pythontk",
+                    "-Strict",
+                    "-Merge",
+                    "-SkipBuild",
+                    "-SkipWorkflowWait",
+                    "-SkipPypiCheck",
+                ),
+                cwd=root,
+                timeout=240,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertNotIn("changed after", out)
+            self.assertIn("Committed 'Release 0.2.1'", out)
+            self.assertIn("uitk - Released", out)
+            toml = self._git(uitk_origin, "show", "main:pyproject.toml").stdout
+            self.assertIn('"pythontk>=0.1.1"', toml, out)
+            init = self._git(uitk_origin, "show", "main:uitk/__init__.py").stdout
+            self.assertIn('__version__ = "0.2.1"', init, out)
+
+    @unittest.skipUnless(os.name == "nt", "the stub workflow runs from gh.cmd")
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_failed_publish_is_finished_by_merging_the_fix_on_dev(self):
+        """A merged release whose publish CONCLUDES red finishes on a re-run
+        once dev carries the fix.
+
+        uitk 1.7.2 (2026-10-12): publish.yml failed on a test that fails only on
+        the runner; the fixed test sat on dev, and every re-run stopped in the
+        entry Finalize, before Prepare could merge it -- recovered by a
+        hand-made PR. The fix here is test-only, so it merges WITHOUT a version
+        and, publish.yml being paths-filtered, triggers no run: the exit
+        Finalize must dispatch one on the new head.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin, failing_head, env = self._failed_release_on_main(
+                root, "test/test_runner_only.py"
+            )
+            self._install_stub_workflow(root, origin, failing_head)
+
+            result = self._run_push_stubbed(
+                root,
+                "-Packages",
+                "pythontk",
+                "-Strict",
+                "-Merge",
+                "-SkipBuild",
+                env=env,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("Workflow concluded with 'failure'", out)  # entry failed
+            self.assertIn("dev holds a delta origin/main lacks (must-reach-main)", out)
+            self.assertIn("Tagged v0.1.1", out)
+            self.assertIn("GitHub Release v0.1.1 created", out)
+            self.assertIn("pythontk - Released", out)
+            tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
+            self.assertIn("test/test_runner_only.py", tree, out)
+            main_init = self._git(origin, "show", "main:pythontk/__init__.py").stdout
+            self.assertIn('__version__ = "0.1.1"', main_init, out)  # no version step
+            self.assertIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
+            # One re-dispatch of the failed head, one dispatch of the fixed head.
+            self.assertEqual(self._gh_calls(root).count("workflow run"), 2, out)
+
+    def _assert_not_merged_over(self, result, origin: Path, failing_head: str):
+        """The run stopped in the entry Finalize and merged nothing."""
+        out = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, out)
+        self.assertIn("could not be finalized - aborting", out)
+        self.assertNotIn("origin/main lacks", out)
+        main = self._git(origin, "rev-parse", "main").stdout.strip()
+        self.assertEqual(main, failing_head, out)
+        return out
+
+    @unittest.skipUnless(os.name == "nt", "the stub workflow runs from gh.cmd")
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_publish_that_never_finishes_is_not_merged_over(self):
+        """Only a CONCLUDED red run is a verdict on the merged head. A wait that
+        ran out is not: that run may still publish 0.1.1, and a fix merged on
+        top would ship as 0.1.1 with code PyPI's 0.1.1 lacks. The run stops."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _, origin, failing_head, env = self._failed_release_on_main(
+                root, "pythontk/fix.py"
+            )
+            self._install_stub_workflow(root, origin, failing_head, mode="hang")
+
+            result = self._run_push_stubbed(
+                root,
+                "-Packages",
+                "pythontk",
+                "-Strict",
+                "-Merge",
+                "-SkipReview",
+                "-SkipBuild",
+                "-WorkflowTimeoutSeconds",
+                "60",
+                env=env,
+            )
+            out = self._assert_not_merged_over(result, origin, failing_head)
+            self.assertIn("Timeout waiting for workflow", out)
+
+    @unittest.skipUnless(os.name == "nt", "the stub workflow runs from gh.cmd")
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_re_dispatch_that_never_appears_is_not_a_failed_publish(self):
+        """After a red run push.ps1 re-dispatches publish.yml once. Until that
+        run is LISTED, the newest completed run is still the old failure; a
+        verdict read from it after a fixed grace called a run that may still be
+        queued -- and may still publish 0.1.1 -- failed, and a recovery merged
+        the fix under 0.1.1. Unlisted to the end is a timeout."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _, origin, failing_head, env = self._failed_release_on_main(
+                root, "pythontk/fix.py"
+            )
+            self._install_stub_workflow(root, origin, failing_head, mode="lost")
+
+            result = self._run_push_stubbed(
+                root,
+                "-Packages",
+                "pythontk",
+                "-Strict",
+                "-Merge",
+                "-SkipReview",
+                "-SkipBuild",
+                "-WorkflowTimeoutSeconds",
+                "300",
+                env=env,
+            )
+            out = self._assert_not_merged_over(result, origin, failing_head)
+            self.assertIn("re-dispatching publish.yml once", out)
+            self.assertIn("Timeout waiting for workflow", out)
+
+    @unittest.skipUnless(os.name == "nt", "the stub workflow runs from gh.cmd")
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_publish_that_failed_after_uploading_is_tagged_not_merged_over(self):
+        """A run can upload and then fail a later step: the index, not the
+        run's colour, says whether 0.1.1 is published. It is, so 0.1.1 is
+        tagged where it was built, and dev's code fix ships as 0.1.2 -- not
+        merged under a 0.1.1 that PyPI already holds without it."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _, origin, failing_head, env = self._failed_release_on_main(
+                root, "pythontk/fix.py"
+            )
+            self._install_stub_workflow(root, origin, failing_head, mode="uploads")
+
+            result = self._run_push_stubbed(
+                root,
+                "-Packages",
+                "pythontk",
+                "-Strict",
+                "-Merge",
+                "-SkipReview",
+                "-SkipBuild",
+                env=env,
+            )
+            out = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, out)
+            self.assertIn("pythontk==0.1.1 is on PyPI despite", out)
+            self.assertNotIn("origin/main lacks", out)
+            tagged = self._git(origin, "rev-parse", "v0.1.1^{commit}").stdout.strip()
+            self.assertEqual(tagged, failing_head, out)
+            self.assertIn("Tagged v0.1.2", out)
+            main_init = self._git(origin, "show", "main:pythontk/__init__.py").stdout
+            self.assertIn('__version__ = "0.1.2"', main_init, out)
 
     def test_zero_poll_interval_is_refused_at_bind_time(self):
         """A 0 poll interval must be rejected, never accepted into a spin loop.

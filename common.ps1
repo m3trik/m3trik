@@ -53,11 +53,23 @@ $CHANGELOG_BULLET = '^[-*+]\s+(\*\*)?(?<date>\d{4}-\d{2}-\d{2})'
 # body. git's own soft limit; the real headlines here run 61-184 characters.
 $COMMIT_SUBJECT_MAX = 72
 
+function Get-VersionFile {
+    # The file that carries __version__, relative to the repo: src/__init__.py when
+    # there is one, else <pkg>/__init__.py. $null when neither exists. The one answer
+    # every reader and writer of the version uses, on the working tree or a ref.
+    param([string]$RepoPath)
+    foreach ($rel in @("src/__init__.py", "$(Split-Path $RepoPath -Leaf)/__init__.py")) {
+        if (Test-Path (Join-Path $RepoPath $rel)) { return $rel }
+    }
+    return $null
+}
+
 function Get-PackageVersion {
-    param([string]$PackagePath)
-    $initFile = Join-Path $PackagePath "__init__.py"
-    if (Test-Path $initFile) {
-        $content = Get-Content $initFile -Raw
+    # __version__ in $RepoPath's working tree, or "unknown".
+    param([string]$RepoPath)
+    $rel = Get-VersionFile $RepoPath
+    if ($rel) {
+        $content = Get-Content (Join-Path $RepoPath $rel) -Raw
         if ($content -match $VERSION_LINE) {
             return $Matches['ver']
         }

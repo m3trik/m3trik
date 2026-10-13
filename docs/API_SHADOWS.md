@@ -111,7 +111,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotManifest` — mayatk, pythontk
 
 - `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L116)
-- `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L102)
+- `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L103)
 
 ### `ShotSequencer` — blendertk, mayatk, pythontk
 
@@ -122,7 +122,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `ShotStore` — mayatk, pythontk
 
 - `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L385)
-- `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L424)
+- `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L428)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
 

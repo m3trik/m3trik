@@ -110,7 +110,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotManifest` — mayatk, pythontk
 
-- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L116)
+- `mayatk` — [`ShotManifest`](mayatk/anim_utils/shots/shot_manifest/_shot_manifest.py#L118)
 - `pythontk` — [`ShotManifest`](pythontk/core_utils/engines/shots/manifest/manifest_engine.py#L103)
 
 ### `ShotSequencer` — blendertk, mayatk, pythontk

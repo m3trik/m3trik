@@ -162,11 +162,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `main` — blendertk, extapps, mayatk, pythontk
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L42)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L57)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L64)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1259)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1123)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L289)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L313)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L314)
 - `blendertk` — [`main`](blendertk/env_utils/pm_doctor.py#L56)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/bake.py#L662)
 - `blendertk` — [`main`](blendertk/mat_utils/marmoset_bridge/templates/import.py#L35)

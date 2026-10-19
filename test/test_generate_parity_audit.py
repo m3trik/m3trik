@@ -15,6 +15,8 @@ That reported "13 hollow handlers" in PARITY_AUDIT.md's headline scorecard where
 none. These tests pin both directions: the metric must still fire on a genuinely dead
 visible control, and must stay silent on the two false-positive shapes."""
 
+import contextlib
+import io
 import os
 import shutil
 import sys
@@ -202,6 +204,44 @@ class TestRegistryFreshnessGuard(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             gpa.check_registry_freshness("probetk")
         self.assertIn("missing", str(cm.exception))
+
+
+class TestCli(unittest.TestCase):
+    """`--help` once fell through the hand-parsed argv and regenerated the doc."""
+
+    def _run(self, *args, out_text=None):
+        """Run ``main`` on *args* against a temp doc; return (doc path, freshness mock, exit code)."""
+        d = Path(tempfile.mkdtemp(prefix="gpa_cli_"))
+        self.addCleanup(shutil.rmtree, d, True)
+        out = d / "PARITY_AUDIT.md"
+        if out_text is not None:
+            out.write_text(out_text, encoding="utf-8")
+        code = None
+        with mock.patch.object(gpa, "OUT", str(out)), mock.patch.object(
+            gpa, "build", return_value="report\n"
+        ), mock.patch.object(gpa, "check_registry_freshness") as fresh, mock.patch.object(
+            sys, "argv", ["generate_parity_audit.py", *args]
+        ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                gpa.main()
+            except SystemExit as e:
+                code = e.code
+        return out, fresh, code
+
+    def test_help_exits_zero_and_writes_nothing(self):
+        out, _, code = self._run("--help")
+        self.assertEqual(code, 0)
+        self.assertFalse(out.exists())
+
+    def test_check_and_allow_stale_still_parse(self):
+        _, fresh, code = self._run("--check", "--allow-stale", out_text="report\n")
+        self.assertIsNone(code)
+        fresh.assert_not_called()
+
+    def test_unknown_flag_is_a_usage_error(self):
+        out, _, code = self._run("--chek")
+        self.assertEqual(code, 2)
+        self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":

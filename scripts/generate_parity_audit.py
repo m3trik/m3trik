@@ -27,6 +27,7 @@ package source (regenerate via generate_api_registry.py first). Maya-only panel 
 from tentacle/docs/parity_map.py (the shared ledger), not a local table.
 """
 from __future__ import annotations
+import argparse
 import ast
 import glob
 import json
@@ -441,19 +442,24 @@ def build():
     return "\n".join(L) + "\n"
 
 
-def main():
-    if "--allow-stale" not in sys.argv:
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--check", action="store_true", help="exit 1 if PARITY_AUDIT.md is stale (CI)")
+    ap.add_argument("--allow-stale", action="store_true", help="skip the registry-freshness guard")
+    args = ap.parse_args(argv)
+    if not args.allow_stale:
         for pkg in ("mayatk", "blendertk"):
             check_registry_freshness(pkg)
     report = build()
-    if "--check" in sys.argv:
+    if args.check:
         cur = read(OUT) if os.path.isfile(OUT) else ""
         if cur.strip() != report.strip():
             print("STALE: PARITY_AUDIT.md differs from generator output. Re-run generate_parity_audit.py.")
             sys.exit(1)
         print("Up to date:", OUT)
         return
-    open(OUT, "w", encoding="utf-8").write(report)
+    with open(OUT, "w", encoding="utf-8") as fh:
+        fh.write(report)
     print("Wrote", OUT)
 
 

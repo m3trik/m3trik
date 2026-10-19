@@ -275,13 +275,75 @@ LEDGER: List[TwinSpec] = [
             "LightmapBaker.peak_level",
             "LightmapBaker.plan_sizes",
             "LightmapBaker.preset_store",
+            "LightmapBaker._claimed_by",
+            "LightmapBaker._edges_in_atlas",
+            "LightmapBaker._merge_result",
+            "LightmapBaker._probe_folder",
+            "LightmapBaker._to_region_rect",
+            "LightmapBaker.rebake_changed",
+            "_InPlacePlan.placed",
         ),
         note=(
-            "The result class whole, fields included, plus 5 host-free baker "
-            "helpers identical on both sides (re-measured 2026-10-12): the atlas "
+            "The result class whole, fields included, plus the host-free baker "
+            "helpers identical on both sides (re-measured 2026-10-19): the atlas "
             "gutter, the safe move into place, the brightest-map level, the "
-            "atlas plan's pixel sizes and the preset store. The two engines "
-            "differ throughout otherwise (Arnold vs Cycles)."
+            "atlas plan's pixel sizes, the preset store, and the in-place / "
+            "Changed-scope helpers. The two engines differ throughout "
+            "otherwise (Arnold vs Cycles)."
+        ),
+    ),
+    TwinSpec(
+        rel="light_utils/lightmap_baker/lightmap_records.py",
+        reason=(
+            "The lightmap record's bake-state and probe bookkeeping: one rule "
+            "in both packages so a scene baked in either reads the same; the "
+            "markers themselves are host attributes, so the class stays per host."
+        ),
+        symbols=(
+            "LightmapRecords._advance_bake_state",
+            "LightmapRecords._own_probe_file",
+            "LightmapRecords._probe_ref",
+        ),
+        note="Measured identical 2026-10-19; the rest read host markers.",
+    ),
+    TwinSpec(
+        rel="uv_utils/texture_combine/texture_combine.py",
+        reason=(
+            "Texture Combine's record format (fingerprint, array encode, file "
+            "stamp) and its record queries: one text in both packages so a "
+            "combine recorded in either host reads the same. Host-free, but "
+            "a record-only type has no pythontk home yet (FUTURE.md: a ptk "
+            "CombineRecord would end the copy)."
+        ),
+        symbols=(
+            "_TextureCombineInternal._fingerprint",
+            "_TextureCombineInternal._encode",
+            "_TextureCombineInternal._decode",
+            "_TextureCombineInternal._stamp",
+            "TextureCombine.names",
+            "TextureCombine.entry",
+            "TextureCombine.stale",
+            "TextureCombine.plan",
+            "TextureCombine._entry",
+        ),
+        note="Measured identical 2026-10-19; the gather and write-back read host meshes.",
+    ),
+    TwinSpec(
+        rel="uv_utils/texture_combine/_transfer_mode.py",
+        reason=(
+            "Transfer mode's host-free decisions (which passes run, Auto "
+            "source, pairing, the gate): tentacle's UvMixin carried them once; "
+            "each panel now carries them, so they are guarded to stay one rule."
+        ),
+        symbols=(
+            "_TransferMode.passes",
+            "_TransferMode.resolve_auto",
+            "_TransferMode.pair",
+        ),
+        note=(
+            "Measured identical 2026-10-19. auto_source and gate share their "
+            "logic but word it per host (UV Set vs UV Map); the scene reads and "
+            "writes differ."
         ),
     ),
     # Seeded 2026-09-26 after the auto-instancer's DCC-free merge/format moved
@@ -701,6 +763,47 @@ LEDGER: List[TwinSpec] = [
         note=(
             "30 of 38 shared methods. The rest differ on host vocabulary: the scope "
             "scan, the file browser, Locators vs Empties, the find/select report."
+        ),
+    ),
+    TwinSpec(
+        rel="rig_utils/articulated_rig/articulated_rig_slots.py",
+        reason=(
+            "The Articulated Rig panel: Qt glue over each host's ArticulatedRig "
+            "engine (the plan edits and the table's limits / give text are pythontk's "
+            "ArticulationPlan). uitk names no rig and pythontk hosts no Qt, so the "
+            "glue is mirrored in both DCC packages over one .ui (mayatk's, byte for "
+            "byte)."
+        ),
+        symbols=(
+            "ArticulatedRigSlots._entry",
+            "ArticulatedRigSlots._init_table",
+            "ArticulatedRigSlots._on_end_control_toggled",
+            "ArticulatedRigSlots._on_item_changed",
+            "ArticulatedRigSlots._reporting",
+            "ArticulatedRigSlots._retype",
+            "ArticulatedRigSlots._selected_joints",
+            "ArticulatedRigSlots._selected_rig",
+            "ArticulatedRigSlots._set_give",
+            "ArticulatedRigSlots._set_limits",
+            "ArticulatedRigSlots._sync_adjust",
+            "ArticulatedRigSlots.btn_clear_limits",
+            "ArticulatedRigSlots.btn_fold",
+            "ArticulatedRigSlots.btn_grab",
+            "ArticulatedRigSlots.btn_ik_fk",
+            "ArticulatedRigSlots.btn_ik_fk_init",
+            "ArticulatedRigSlots.btn_limits_from_pose",
+            "ArticulatedRigSlots.btn_rebuild",
+            "ArticulatedRigSlots.btn_remove",
+            "ArticulatedRigSlots.btn_rest",
+            "ArticulatedRigSlots.match_end_control",
+            "ArticulatedRigSlots.parse_limits",
+        ),
+        note=(
+            "22 of 36 shared methods (measured 2026-10-17). The rest speak host "
+            "vocabulary: Maya selects a control transform, Blender a bone in Pose "
+            "Mode (blendertk's _selection / _select / _parts_of); a Blender part is "
+            "named by its object, not a DAG path; blendertk defers its Qt imports, "
+            "arms the selection-order tracker on open, and its help says Auto Keying."
         ),
     ),
     # Seeded 2026-09-26 after the scene-export engine pass: SceneExporterBase and

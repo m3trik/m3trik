@@ -2,15 +2,15 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (26)
+## Genuine cross-layer collisions (27)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `AudioUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L73)
+- `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L75)
 - `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L88)
-- `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L14)
+- `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L24)
 
 ### `Behaviors` — blendertk, mayatk, pythontk
 
@@ -20,7 +20,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L427)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L462)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
@@ -57,9 +57,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
-- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L75)
-- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L75)
-- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L75)
+- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
+- `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L76)
+- `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk
 
@@ -81,13 +81,19 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Parameters`](extapps/photogrammetry/metashape_workflow/parameters.py#L373)
 - `extapps` — [`Parameters`](extapps/photogrammetry/realityscan_workflow/parameters.py#L164)
 - `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L126)
-- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L356)
-- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L462)
+- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L392)
+- `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L508)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L165)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L402)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L504)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
+
+### `ProbePlacement` — blendertk, mayatk, pythontk
+
+- `blendertk` — [`ProbePlacement`](blendertk/light_utils/lightmap_baker/_probe_placement.py#L68)
+- `mayatk` — [`ProbePlacement`](mayatk/light_utils/lightmap_baker/_probe_placement.py#L95)
+- `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L208)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
 
@@ -121,7 +127,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `ShotStore` — mayatk, pythontk
 
-- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L385)
+- `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L382)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L428)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
@@ -156,7 +162,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `close_plugin` — blendertk, extapps, mayatk
 
 - `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L81)
-- `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L124)
+- `extapps` — [`close_plugin`](extapps/substance_workflow/plugins/startup/substance_workflow_bridge/__init__.py#L126)
 - `mayatk` — [`close_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L81)
 
 ### `main` — blendertk, extapps, mayatk, pythontk
@@ -179,10 +185,10 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`main`](extapps/photogrammetry/realityscan_workflow/run_combined.py#L116)
 - `extapps` — [`main`](extapps/photogrammetry/sugar_mesh_workflow/run_combined.py#L37)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_bake_scene.py#L222)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1232)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1579)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene.py#L1251)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_import_scene_usd.py#L1598)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/_save_scene.py#L138)
-- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L641)
+- `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/bake_lightmaps.py#L770)
 - `mayatk` — [`main`](mayatk/env_utils/blender_bridge/templates/import.py#L120)
 - `mayatk` — [`main`](mayatk/env_utils/pm_doctor.py#L56)
 - `mayatk` — [`main`](mayatk/mat_utils/marmoset_bridge/templates/bake.py#L662)
@@ -193,19 +199,19 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `set_resolution` — blendertk, extapps, mayatk
 
 - `blendertk` — [`set_resolution`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L169)
-- `extapps` — [`set_resolution`](extapps/substance_workflow/bake_utils.py#L349)
+- `extapps` — [`set_resolution`](extapps/substance_workflow/bake_utils.py#L444)
 - `extapps` — [`set_resolution`](extapps/substance_workflow/texture_set_utils.py#L21)
 - `mayatk` — [`set_resolution`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/ops/setup_ops.py#L169)
 
 ### `start_plugin` — blendertk, extapps, mayatk
 
 - `blendertk` — [`start_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L74)
-- `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/substance_workflow_bridge/__init__.py#L112)
+- `extapps` — [`start_plugin`](extapps/substance_workflow/plugins/startup/substance_workflow_bridge/__init__.py#L114)
 - `mayatk` — [`start_plugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L74)
 
 ---
 
-## Intentional mayatk↔blendertk port parity (229)
+## Intentional mayatk↔blendertk port parity (237)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -216,6 +222,9 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ApplyStatus`
 - `ArnoldBridge`
 - `ArnoldBridgeSlots`
+- `ArticulatedRig`
+- `ArticulatedRigGrab`
+- `ArticulatedRigSlots`
 - `AssemblyReconstructor`
 - `AudioClipsSlots`
 - `AudioSegment`
@@ -242,6 +251,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ClipMotionMixin`
 - `ColorId`
 - `ColorIdSlots`
+- `CombineInputs`
 - `ControlNodes`
 - `Controls`
 - `Creator`
@@ -301,6 +311,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `LightmapBaker`
 - `LightmapBakerSlots`
 - `LightmapExcludeSet`
+- `LightmapIsolateSet`
 - `LightmapRecords`
 - `MacroManager`
 - `Macros`
@@ -388,6 +399,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `TelescopeRigBundle`
 - `TelescopeRigSlots`
 - `TextureBaker`
+- `TextureCombine`
+- `TextureCombineSlots`
 - `TexturePathEditorSlots`
 - `TextureTransfer`
 - `TransformDiagnostics`
@@ -401,6 +414,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UiMacros`
 - `UiUtils`
 - `UndoLedgerMixin`
+- `Units`
 - `UnityBridge`
 - `UnityBridgeSlots`
 - `UsdUtils`

@@ -1,6 +1,6 @@
 # Code standard — the rules behind the root one-liners
 
-The root [`CLAUDE.md`](../../CLAUDE.md) states every cross-repo rule in one line because it is paid for on every query. §0 is the shape every unit shares; the rest is the long form: the rationale, the worked shape of each rule, and the rules that are needed less often (formatter, docstrings, deprecation, vendoring, performance, repo hygiene, dead code, scratch files, package architecture). Read it before a refactor, a new module, or a public-API change. Package-specific rules stay in each package's `CLAUDE.md`.
+The root [`CLAUDE.md`](../../CLAUDE.md) states every cross-repo rule in one line because it is paid for on every query. §0 is the shape every unit shares; the rest is the long form: the rationale, the worked shape of each rule, and the rules that are needed less often (style, docstrings, deprecation, vendoring, performance, repo hygiene, dead code, scratch files, export, package architecture, tool behavior). Read it before a refactor, a new module or tool, or a public-API change. Package-specific rules stay in each package's `CLAUDE.md`.
 
 **Nav**: [← m3trik](../CLAUDE.md) · [Docs standard](DOCS_STANDARD.md) · [Context budget](CONTEXT_BUDGET.md) · [Test badge standard](TEST_BADGE_STANDARD.md)
 
@@ -27,48 +27,19 @@ Each classic pattern governs one relationship, and the shape assigns it at every
 - **Growth** is the §3 triggers at every scale; a subpackage becomes a repo only on a release cadence, toolchain or consumer set its parent cannot serve. A holon that stops earning its boundary merges back.
 - **Working independently**: work inside one holon; land a cross-holon contract first, then build each side against it; seam changes and moves are their own commits, announced to concurrent sessions.
 
-**Declared and checked.** [`m3trik/workspace.json`](../workspace.json) declares the cascade and each unit's release mode and domain; `push.ps1` and the generators read it, and `sync_workspace.py --check` holds the root Dispatch table, the CI sibling lists and every unit's charter to it. Membership stays measured (a folder holding `.git` belongs). Each package declares its parts' order in `[tool.m3trik.layers]` of its `pyproject.toml`, and `check_layers.py --check` holds both scales (an ecosystem import must be a declared dependency; imports point down the order -- a served ES module's relative imports too, a `"<folder>/*"` part making each child a peer) against a frozen baseline. A contract other languages read is declared once in Python -- a scene record's payload and web manifest as typed `SchemaSpec`s (`RecordSpec.shape`, `WebProjection`) -- and `sync_scene_records.py --check` holds the generated JavaScript typedefs and C# record types to it; a model ported to another runtime is pinned by the golden cases its reference generates (`ptk.Conformance`); `check_js_types.py` type-checks the JavaScript (`tsc --checkJs`). Where each host spells the anatomy: [the WebXR runtime](../../pythontk/docs/webxr_preview.md#the-runtimes-anatomy), [the Unity package](../../unitytk/unitytk/templates/README.md#extending-the-package-its-anatomy).
+**Declared and checked.** [`m3trik/workspace.json`](../workspace.json) declares the cascade and each unit's release mode and domain; `push.ps1` and the generators read it, and `sync_workspace.py --check` holds the root Dispatch table, the CI sibling lists and every unit's charter to it. A package's pyproject `[project]` table is the one declaration of its public metadata, and `sync_github_about.py --check` holds the repo's GitHub About box (description, topics, PyPI homepage) to it. Membership stays measured (a folder holding `.git` belongs). Each package declares its parts' order in `[tool.m3trik.layers]` of its `pyproject.toml`, and `check_layers.py --check` holds both scales (an ecosystem import must be a declared dependency; imports point down the order -- a served ES module's relative imports too, a `"<folder>/*"` part making each child a peer) against a frozen baseline. A contract other languages read is declared once in Python -- a scene record's payload and web manifest as typed `SchemaSpec`s (`RecordSpec.shape`, `WebProjection`) -- and `sync_scene_records.py --check` holds the generated JavaScript typedefs and C# record types to it; a model ported to another runtime is pinned by the golden cases its reference generates (`ptk.Conformance`); `check_js_types.py` type-checks the JavaScript (`tsc --checkJs`). Where each host spells the anatomy: [the WebXR runtime](../../pythontk/docs/webxr_preview.md#the-runtimes-anatomy), [the Unity package](../../unitytk/unitytk/templates/README.md#extending-the-package-its-anatomy).
 
-## 1. Formatter and lint — `ruff`
+## 1. Style — an established standard, applied at review
 
-One tool for both: `ruff format` (black-compatible, 88 columns — the codebase's de-facto style: two thirds of the tree is already clean at 88, and 100/120 make it *worse*) and `ruff check` with the default rule set (`E4`, `E7`, `E9`, `F`). Each ecosystem package carries the same block in its `pyproject.toml`:
+Style is PEP 8 as `ruff` applies it: `ruff format` (Black-compatible, 88 columns) and `ruff check` (`E4`, `E7`, `E9`, `F`), from the same `[tool.ruff]` block in every package's `pyproject.toml` (its comments say why each ignore exists), pinned in CI (`ruff==0.15.17`: unpinned, an upstream rule addition turns a PR red that nobody changed). It is a review concern, not a prototyping one:
 
-```toml
-[tool.ruff]
-line-length = 88
-target-version = "py39"          # blendertk: "py310"
-
-[tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
-ignore = ["E402"]                 # house pattern: try-guarded DCC imports precede other imports
-
-[tool.ruff.lint.per-file-ignores]
-"**/templates/**" = ["F821"]      # exec-templates carry __PLACEHOLDER__ tokens substituted at run time
-```
-
-- `E402` is off because the DCC layers deliberately guard `import maya.cmds` in a `try:` block at the top of the module (§4) and import `pythontk` after it.
-- `**/templates/**` is exempt from undefined-name checks because those files are *not* importable modules: they are handed to a host interpreter (Toolbag, Blender, Maya) after token substitution. This mirrors what `mayatk/test/test_static_analysis.py` already excludes.
-- **`ruff check` is CI-gated in 5 of 7 repos** (2026-09-16): pythontk and extapps at whole-repo scope (`ruff check .`), uitk / blendertk / unitytk at **package** scope, because their `test/` trees still carry findings (27 / 326 / 29, re-measured 2026-09-17) and gating on `.` would have made the job red on arrival. mayatk (25 in-package, 119 repo-wide) and tentacle (36 in-package, 89 repo-wide) are not gated yet — both are auto-fixable, so the burn-down is `ruff check --fix` plus review in an isolated commit with a `.git-blame-ignore-revs` entry, then widen the gate. The version is pinned (`ruff==0.15.17`): an unpinned ruff turns an upstream rule addition into a red PR nobody changed.
-- **Everywhere, gated or not**: run `ruff check` on the files you touch and fix what you introduced; `ruff format` new files, and existing files only when you are already rewriting most of them — never a drive-by reformat (it buries the real change and invites merge conflicts with concurrent work). The one-time whole-tree *format* pass (`ruff format`, a separate question from `check` — 114 files predate the current ruff) stays a tree-idle job per repo, tracked in [`.claude/FUTURE.md`](../../.claude/FUTURE.md) — not `BACKLOG.md`, whose bar drops S3 hygiene work, which is why the entry cycled into the archive twice before landing there.
+- **While building**, don't hand-police style. `ruff check --select E9,F82` is still worth a run before a slow DCC test: it catches syntax errors and undefined names, and stays quiet on legacy findings.
+- **Before it lands** (commit, release review): `ruff format` the files you created and fix the `ruff check` findings you introduced (an "unused" import can be load-bearing: `.ui` headers, `DEFAULT_INCLUDE`). Reformat an existing file only when you are rewriting most of it, never as a drive-by: it buries the real change and collides with concurrent sessions.
+- CI gates `ruff check` in pythontk, uitk, blendertk, unitytk and extapps; the mayatk/tentacle gate and the whole-tree format pass wait on an idle tree ([`.claude/FUTURE.md`](../../.claude/FUTURE.md), 2026-08-22).
 
 ## 2. Docstrings and type hints
 
-House layout is Google-style sections with `Parameters:` (not `Args:`), `Returns:`, `Raises:`, `Yields:`; one-line summary first, blank line, then detail:
-
-```python
-def leaf_name(node: str, strip_namespace: bool = True) -> str:
-    """Return the last path component of a node name.
-
-    Parameters:
-        node: Long or short DAG path.
-        strip_namespace: Drop a `ns:` prefix from the result.
-
-    Returns:
-        The leaf name.
-    """
-```
-
-Type-hint public signatures (essential for OpenMaya interop and for the API registry, which prints them). Private helpers may skip hints when the types are obvious.
+Docstrings are Google style with the house `Parameters:` heading in place of `Args:` (plus `Returns:`, `Raises:`, `Yields:`): one-line summary, blank line, detail. ruff's argument-coverage check (`D417`) reads only `Args:`, so coverage stays a review question until the headings converge. Type-hint public signatures (the API registry prints them; OpenMaya interop needs them); private helpers may skip obvious ones.
 
 Which type for which need -- the Python spelling of a toolbox each host spells its own way ([the WebXR runtime](../../pythontk/docs/webxr_preview.md#the-runtimes-anatomy), [the Unity package](../../unitytk/unitytk/templates/README.md#extending-the-package-its-anatomy)):
 
@@ -216,3 +187,18 @@ Do not create the folder, the empty modules or the abstract base ahead of a seco
 4. Regenerate the registry (`API_CHANGES.md` should show only the path change) and, in pythontk, the surface snapshot (`python test/test_surface_snapshot.py --update`: it records each name's module, so a move fails it by design); run the package runner, and add a `CHANGELOG.md` line.
 
 A move is its own commit, never folded into a behavior change. It rewrites import lines in files other sessions may have open, so coordinate with any session working in that tree before starting (§10).
+
+## 15. Tool behavior — work the way users and other programs expect
+
+Our users live in Maya, Blender, Unity, Substance and a browser, and every surprise a tool adds over the host's own behavior is a cost (Jakob's law). [Nielsen's ten heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/) are the checklist; in DCC terms:
+
+- **Speak the host.** Terms, hotkeys and option layout match the host: Maya's option box (Apply, Reset), Blender's operator conventions (an undo push, Adjust Last Operation). A surface shared across hosts (tentacle's `.ui`, the mayatk mirror) keeps mayatk's wording, but text that is false in one host is a bug, not parity. A payload for another app (Marmoset, Painter, Unity) uses that app's terms.
+- **Selection in, explicit arguments underneath.** Called bare, a tool acts on the selection; headless, it takes arguments; either way it returns what it made (the engine/panel split, §14).
+- **One action, one undo step**, in both hosts; a cancel leaves the scene as it was.
+- **Show status, allow cancel.** Anything that can take seconds reports progress and can be stopped; nothing freezes the host silently.
+- **Preview before destroy; touch only the target** (§13).
+- **Re-runnable and deterministic.** Same input, same output; running a tool twice is safe.
+- **A control does what it says.** A button performs its op (entering the mode it needs, warning on a wrong state) and never punts to a hotkey; a control with no equivalent in the host is hidden, never a stub. Errors say what failed, why and what to do (§8).
+- **Respect the host's settings**: units, up-axis, colour management, project layout (§10).
+- **Interchange: open formats, validated.** Write Khronos and ASWF formats (glTF, USD, OpenEXR, OCIO, OTIO) as their specs define, extend them through their extension mechanisms before `extras` or a sidecar, and prove the output with the format's reference validator (Khronos glTF-Validator, `pxr.UsdUtils.ComplianceChecker`), not our own reader: a GLB the validator rejects shipped because three.js never reads the field (2026-09-14), and Maya-namespaced names missed Unity's lightmap lookup (2026-08-10). New surfaces conform; an existing one migrates whole, on a version bump (§0), and only when a consumer pays.
+- **Deviate on purpose.** A knowing break of a convention carries its reason where the surface is declared.

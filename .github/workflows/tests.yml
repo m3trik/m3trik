@@ -244,6 +244,17 @@ jobs:
       - name: Workspace manifest and its restatements in sync
         run: python m3trik/scripts/sync_workspace.py --check
 
+      # GitHub About boxes: ONE declaration (each package's pyproject
+      # description + keywords) restated as the repo's About text, topics and
+      # homepage. Measured 2026-10-17: every About text was older than its
+      # pyproject and no repo carried a topic. Read-only here -- writing topics
+      # needs admin rights no Actions token has -- so a drift names the local
+      # --apply. A sibling whose pyproject declares no keywords is skipped.
+      - name: GitHub About boxes match their pyproject
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python m3trik/scripts/sync_github_about.py --check
+
       # Layer order (CODE_STANDARD section 0, Parts): every ecosystem import is a
       # declared pyproject dependency, and each package that declares
       # [tool.m3trik.layers] imports only downward. Today's exceptions are frozen

@@ -13,6 +13,8 @@ Regression coverage for two things the sweep must not get wrong:
 
 import sys
 import ast
+import contextlib
+import io
 import unittest
 from pathlib import Path
 
@@ -117,6 +119,15 @@ class TestPanelResolution(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             cps._resolve("no_such_panel")
         self.assertIn("no_such_panel", str(ctx.exception.code))
+
+
+class TestCli(unittest.TestCase):
+    def test_help_prints_usage_and_exits_zero(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cps.main(["--help"])
+        self.assertEqual(rc, 0)
+        self.assertIn("--all --write", buf.getvalue())
 
 
 if __name__ == "__main__":

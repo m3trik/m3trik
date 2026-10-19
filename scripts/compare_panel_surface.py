@@ -1244,6 +1244,9 @@ def _sweep_report(ledger):
 def main(argv):
     if hasattr(sys.stdout, "reconfigure"):  # Windows console defaults to cp1252
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if argv and argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
     ledger = load_ledger()
     if argv and argv[0] == "--all":
         rc, text = _sweep_report(ledger)

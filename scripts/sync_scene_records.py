@@ -70,10 +70,7 @@ FBX_UTILS = {
 }
 #: Records one DCC produces and the other deliberately does not: spec attribute
 #: name -> (the DCC that lacks it, why). Delete a row when the port lands.
-PRODUCER_DIVERGENCES = {
-    "AUDIO": ("blendertk", "the Blender audio panel is VSE-only; port pending"),
-    "ARTICULATION": ("blendertk", "ArticulatedRig is mayatk-only; twin pending"),
-}
+PRODUCER_DIVERGENCES = {}
 
 #: ``Audio,      // "audio_manifest" channel -> AudioEventController``
 _UNITY_CHANNEL = re.compile(

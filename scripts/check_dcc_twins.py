@@ -281,6 +281,8 @@ LEDGER: List[TwinSpec] = [
             "LightmapBaker._probe_folder",
             "LightmapBaker._to_region_rect",
             "LightmapBaker.rebake_changed",
+            "LightmapBaker._lit_as",
+            "LightmapBaker._light_rule",
             "_InPlacePlan.placed",
         ),
         note=(

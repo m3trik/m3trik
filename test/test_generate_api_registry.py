@@ -1769,6 +1769,19 @@ class TestTheStaticGateCountsTheCalendarWindow(unittest.TestCase):
         self.assertEqual([r[2:] for r in rows], [("0.18.0", "2026-09-04")])
         self.assertEqual(g._expired(rows, "0.18.0", datetime.date(2026, 9, 19)), [])
 
+    def test_a_retired_class_attribute_is_read_by_the_gate_too(self):
+        """``Deprecation.class_attribute`` (2026-10-19) is a retirement with a
+        ``remove_in`` like the others; one the gate cannot see ships past its
+        window, as blendertk's ``smart_bake=`` once did."""
+        pkg = self._write_pkg(
+            "0.18.0",
+            "OLD = Deprecation.class_attribute({}, 'nothing', remove_in='0.18.0', "
+            "since='2026-09-04')",
+        )
+        rows = g.retired_forms(pkg, "pythontk")
+        self.assertEqual([r[2:] for r in rows], [("0.18.0", "2026-09-04")])
+        self.assertEqual(g._expired(rows, "0.18.0", datetime.date(2026, 10, 4)), rows)
+
     def test_the_date_never_reaches_the_registry_sidecar(self):
         """Carried beside the record, not in it: a new field would churn every
         committed ``API_REGISTRY.json`` for a value only the gate reads."""

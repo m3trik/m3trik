@@ -73,20 +73,20 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L149)
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L163)
-- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L402)
+- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L266)
-- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L510)
+- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L526)
 - `extapps` — [`Parameters`](extapps/marmoset_workflow/parameters.py#L53)
 - `extapps` — [`Parameters`](extapps/photogrammetry/gaussian_splat_workflow/parameters.py#L118)
 - `extapps` — [`Parameters`](extapps/photogrammetry/metashape_workflow/parameters.py#L373)
 - `extapps` — [`Parameters`](extapps/photogrammetry/realityscan_workflow/parameters.py#L164)
 - `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L126)
-- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L392)
+- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L371)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L508)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L165)
-- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L402)
+- `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
-- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L504)
+- `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L520)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
 
 ### `ProbePlacement` — blendertk, mayatk, pythontk
@@ -132,9 +132,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `TemplateParams` — blendertk, extapps, mayatk
 
-- `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L97)
-- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L97)
-- `mayatk` — [`TemplateParams`](mayatk/mat_utils/marmoset_bridge/template_params.py#L97)
+- `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L101)
+- `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L101)
+- `mayatk` — [`TemplateParams`](mayatk/mat_utils/marmoset_bridge/template_params.py#L101)
 
 ### `TestSandbox` — pythontk, uitk
 

@@ -1,5 +1,8 @@
 # m3trik — Changelog
 
+- **2026-10-19 - The registry's deprecation-expiry gate reads `Deprecation.class_attribute`, and CODE_STANDARD section 5 lists the shape (`scripts/generate_api_registry.py` `_RETIREMENT_CALLS`, `docs/CODE_STANDARD.md`).**
+  - Test(s): `test_generate_api_registry.py` (red first; 119 passed).
+- **2026-10-19 - The lightmap baker's recorded-lighting helpers are drift-guarded (`scripts/check_dcc_twins.py`: `LightmapBaker._lit_as`, `_light_rule`).**
 - **2026-10-19 - The new host-free lightmap and Texture Combine twin methods are drift-guarded (`scripts/check_dcc_twins.py`).** `LightmapBaker` gains 7 guarded symbols (the in-place and Changed-scope helpers), and new entries guard `LightmapRecords` (3), `TextureCombine` (9) and `_TransferMode` (3). Moving them down to pythontk is ledgered in FUTURE.md.
   - Test(s): `test_check_dcc_twins.py` 25 passed; `check_dcc_twins.py --check` clean.
 - **2026-10-17 - `sync_github_about.py` holds each package repo's GitHub About box to its pyproject (`scripts/sync_github_about.py`, `.github/workflows/tests.yml`, `docs/CODE_STANDARD.md` §0, `scripts/CLAUDE.md`).** The pyproject `description` and `keywords` are the declaration; GitHub restates them as the About text, the topics and a homepage (the package's PyPI page). Measured: every About text was older than its pyproject and no repo carried a topic. `--check` (a CI step, read-only) exits 1 on drift and names `--apply`, which writes with the maintainer's `gh` login because topic writes need admin rights no Actions token has; topics are written as an exact set, so a stale one is removed. A repo whose pyproject declares no keywords is skipped. Applied to the six public packages.

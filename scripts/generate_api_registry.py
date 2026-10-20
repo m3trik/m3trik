@@ -287,12 +287,12 @@ def _expired(rows, version: str, today: datetime.date | None = None) -> list[tup
 
 
 #: The ``Deprecation`` calls that retire something smaller than a symbol -- a
-#: keyword, a value, a code path, a moved module attribute.  The registry never
-#: marks a symbol for them (:data:`_DEPRECATION_DECORATORS` says why), but their
-#: ``remove_in`` is the same one-release promise, so the expiry gate reads them
-#: too: blendertk's ``smart_bake=`` keyword (``remove_in="0.7.0"``) shipped in
-#: 0.8.0 because nothing did.
-_RETIREMENT_CALLS = ("parameter", "values", "warn", "attributes")
+#: keyword, a value, a code path, a moved module attribute, a class constant.
+#: The registry never marks a symbol for them (:data:`_DEPRECATION_DECORATORS`
+#: says why), but their ``remove_in`` is the same one-release promise, so the
+#: expiry gate reads them too: blendertk's ``smart_bake=`` keyword
+#: (``remove_in="0.7.0"``) shipped in 0.8.0 because nothing did.
+_RETIREMENT_CALLS = ("parameter", "values", "warn", "attributes", "class_attribute")
 
 
 def _string_constants(tree: ast.AST) -> dict[str, str | None]:

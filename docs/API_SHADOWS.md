@@ -8,7 +8,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `AudioUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L73)
+- `blendertk` — [`AudioUtils`](blendertk/audio_utils/_audio_utils.py#L75)
 - `mayatk` — [`AudioUtils`](mayatk/audio_utils/_audio_utils.py#L88)
 - `pythontk` — [`AudioUtils`](pythontk/audio_utils/_audio_utils.py#L24)
 
@@ -20,7 +20,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L427)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L462)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
@@ -57,7 +57,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MarmosetEngine` — blendertk, extapps, mayatk
 
-- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L75)
+- `blendertk` — [`MarmosetEngine`](blendertk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L75)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
 
@@ -73,9 +73,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L149)
 - `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L163)
-- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L402)
+- `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L266)
-- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L510)
+- `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L526)
 - `extapps` — [`Parameters`](extapps/marmoset_workflow/parameters.py#L53)
 - `extapps` — [`Parameters`](extapps/photogrammetry/gaussian_splat_workflow/parameters.py#L118)
 - `extapps` — [`Parameters`](extapps/photogrammetry/metashape_workflow/parameters.py#L373)
@@ -89,8 +89,9 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L520)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
 
-### `ProbePlacement` — mayatk, pythontk
+### `ProbePlacement` — blendertk, mayatk, pythontk
 
+- `blendertk` — [`ProbePlacement`](blendertk/light_utils/lightmap_baker/_probe_placement.py#L68)
 - `mayatk` — [`ProbePlacement`](mayatk/light_utils/lightmap_baker/_probe_placement.py#L95)
 - `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L208)
 
@@ -131,7 +132,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `TemplateParams` — blendertk, extapps, mayatk
 
-- `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L97)
+- `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L101)
 - `extapps` — [`TemplateParams`](extapps/marmoset_workflow/template_params.py#L97)
 - `mayatk` — [`TemplateParams`](mayatk/mat_utils/marmoset_bridge/template_params.py#L101)
 
@@ -210,7 +211,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (229)
+## Intentional mayatk↔blendertk port parity (237)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -221,6 +222,9 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ApplyStatus`
 - `ArnoldBridge`
 - `ArnoldBridgeSlots`
+- `ArticulatedRig`
+- `ArticulatedRigGrab`
+- `ArticulatedRigSlots`
 - `AssemblyReconstructor`
 - `AudioClipsSlots`
 - `AudioSegment`
@@ -247,6 +251,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ClipMotionMixin`
 - `ColorId`
 - `ColorIdSlots`
+- `CombineInputs`
 - `ControlNodes`
 - `Controls`
 - `Creator`
@@ -306,6 +311,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `LightmapBaker`
 - `LightmapBakerSlots`
 - `LightmapExcludeSet`
+- `LightmapIsolateSet`
 - `LightmapRecords`
 - `MacroManager`
 - `Macros`
@@ -393,6 +399,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `TelescopeRigBundle`
 - `TelescopeRigSlots`
 - `TextureBaker`
+- `TextureCombine`
+- `TextureCombineSlots`
 - `TexturePathEditorSlots`
 - `TextureTransfer`
 - `TransformDiagnostics`
@@ -406,6 +414,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UiMacros`
 - `UiUtils`
 - `UndoLedgerMixin`
+- `Units`
 - `UnityBridge`
 - `UnityBridgeSlots`
 - `UsdUtils`

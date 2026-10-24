@@ -31,7 +31,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `HierarchyBaseline` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L45)
+- `blendertk` — [`HierarchyBaseline`](blendertk/env_utils/hierarchy_sync/hierarchy_baseline.py#L43)
 - `mayatk` — [`HierarchyBaseline`](mayatk/env_utils/hierarchy_sync/hierarchy_baseline.py#L50)
 - `pythontk` — [`HierarchyBaseline`](pythontk/core_utils/engines/scene_export/hierarchy_baseline.py#L51)
 
@@ -216,7 +216,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (236)
+## Intentional mayatk↔blendertk port parity (237)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -333,6 +333,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `MatUpdater`
 - `MatUpdaterSlots`
 - `MatUtils`
+- `MaterialRecords`
 - `Matrices`
 - `MeshDiagnostics`
 - `MirrorSlots`

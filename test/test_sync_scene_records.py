@@ -5,11 +5,12 @@
 The declaration is pythontk's; the owner doc's records table and unitytk's
 importer channel list are derived from it. These tests pin that the doc region
 exists and is current, that the Unity channels match the records declared for
-Unity and accept their declared versions (the same checks as ``--check``),
-and that the splice refuses a doc
+Unity and each declares the shape its generated reader reads (the same checks
+as ``--check``), and that the splice refuses a doc
 without its markers instead of guessing where the table goes.
 """
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -37,22 +38,41 @@ class TestSceneRecordsDerivedSurfaces(unittest.TestCase):
 
     def test_unity_reads_exactly_the_records_declared_for_it(self):
         self.assertEqual(
-            s.unity_mismatch(), {"undeclared": [], "unread": [], "version": []}
+            s.unity_mismatch(), {"undeclared": [], "unread": [], "shapeless": []}
         )
 
-    def test_a_version_the_unity_importer_does_not_accept_is_reported(self):
-        """A record bumped without its importer: Unity would refuse the payload."""
-        bumped = [
+    def test_a_unity_record_without_a_shape_is_reported(self):
+        """A record Unity reads declares its shape: its importer reads it
+        through the generated type, and the one version it reads is that
+        type's (``<Shape>.CurrentVersion``). One declaring none is said under
+        ``shapeless`` -- whatever else is out of step, which the test above
+        reports. Added: 2026-10-20"""
+        shadows = s._records().SHADOWS.key
+        stripped = [
             SimpleNamespace(
                 key=spec.key,
                 consumers=spec.consumers,
-                version=spec.version + (spec.key == "shadow_metadata"),
+                shape=None if spec.key == shadows else spec.shape,
             )
             for spec in s._records().deliverable()
         ]
-        mismatch = s.unity_mismatch(SimpleNamespace(deliverable=lambda: bumped))
-        self.assertEqual(len(mismatch["version"]), 1, mismatch)
-        self.assertIn("ShadowPlaneController", mismatch["version"][0])
+        before = s.unity_mismatch()["shapeless"]
+        after = s.unity_mismatch(SimpleNamespace(deliverable=lambda: stripped))
+        self.assertEqual(
+            [key for key in after["shapeless"] if key not in before], [shadows]
+        )
+
+    def test_a_channel_line_spells_its_key_once(self):
+        """A carrier key's one spelling in unitytk is its ``UnitytkRecords``
+        constant; the line's comment names only the importer that reads it.
+        Added: 2026-10-20"""
+        line = 'public const string Shadows = "shadows";  // channel → ShadowPlaneController'
+        found = s._UNITY_CHANNEL.search(line)
+        self.assertEqual(
+            (found["key"], found["reader"]), ("shadows", "ShadowPlaneController")
+        )
+        unread = s._UNITY_CHANNEL.search('public const string Handoff = "handoff";')
+        self.assertIsNone(unread, "a constant with no channel comment is no channel")
 
     def test_the_two_dcc_producer_tables_agree_modulo_the_ledger(self):
         self.assertEqual(s.producer_parity(), [])
@@ -96,11 +116,60 @@ class TestGeneratedTypes(unittest.TestCase):
             "stale kernel/records.js -- run m3trik/scripts/sync_scene_records.py",
         )
 
-    def test_every_web_projected_record_is_in_it(self):
+    def test_every_glb_block_is_in_it(self):
+        """Each block a GLB carries -- every record's (``RecordSpec.glb``) and
+        the handoff -- under its record's key, at the version the page reads,
+        and every one in ``BLOCKS``. Added: 2026-10-20"""
+        records, handoff = s._records(), s._handoff()
+        names = s._spec_names(records)
         text = s.render_records_js()
-        for spec in s._records().web_projected():
-            self.assertIn(f"key: '{spec.key}'", text)
-            self.assertIn(f"webKey: '{spec.web.key}'", text)
+        blocks = [
+            (names[id(spec)], spec.key, spec.glb.version)
+            for spec in records.glb_records()
+        ]
+        blocks.append(("HANDOFF", handoff.KEY, handoff.VERSION))
+        for name, key, version in blocks:
+            with self.subTest(block=key):
+                self.assertIn(
+                    f"export const {name} = Object.freeze({{ key: '{key}', "
+                    f"version: {version} }});",
+                    text,
+                )
+        self.assertIn(
+            "export const BLOCKS = Object.freeze(["
+            + ", ".join(name for name, _key, _version in blocks)
+            + "]);",
+            text,
+        )
+        self.assertNotIn("webKey", text)
+
+    def test_the_retired_block_keys_are_in_it(self):
+        """The root-extras keys a GLB written before the current blocks
+        carries (``SceneRecords.RETIRED_BLOCKS``: the ``*_web`` blocks, the
+        ``scene_sidecar`` envelope) are exported as ``RETIRED_BLOCK_KEYS``,
+        so the viewer names a file holding one stale instead of loading it
+        unlit and unrigged without a word. None is a current block's key.
+        Added: 2026-10-24"""
+        records, handoff = s._records(), s._handoff()
+        retired = records.RETIRED_BLOCKS
+        self.assertTrue(
+            {"lightmap_web", "shadow_web", "animation_web", "articulation_web",
+             "scene_sidecar"} <= set(retired)
+        )
+        current = {spec.key for spec in records.glb_records()} | {handoff.KEY}
+        self.assertFalse(current & set(retired), "a retired key is current")
+        self.assertIn(
+            "export const RETIRED_BLOCK_KEYS = Object.freeze(["
+            + ", ".join(f"'{key}'" for key in retired)
+            + "]);",
+            s.render_records_js(),
+        )
+
+    def test_the_policy_states_its_settings_alone(self):
+        """The handoff's version is its shape's (``HandoffBlock.CurrentVersion``,
+        generated with it), so the policy repeats no number of it.
+        Added: 2026-10-20"""
+        self.assertNotIn("HandoffVersion", s.render_policy_cs())
 
     def test_the_csharp_record_types_are_current(self):
         targets = s.record_cs_targets()
@@ -110,17 +179,167 @@ class TestGeneratedTypes(unittest.TestCase):
                 self.assertEqual(_text(path), s.render_record_cs(spec, shape))
                 meta = path.with_name(path.name + ".meta")
                 self.assertEqual(_text(meta), s.record_cs_meta(spec))
-                # Beside the importer that reads it: the hand-written half of
-                # the partial class sits in the same feature folder.
-                self.assertTrue(
-                    any(
-                        f"partial class {shape.__name__}"
-                        in p.read_text(encoding="utf-8")
-                        for p in path.parent.glob("*.cs")
-                        if p != path
-                    ),
-                    f"no hand-written partial {shape.__name__} beside {path}",
+
+    def test_a_record_type_states_its_version_first(self):
+        """Each generated record type states the version a reader reads -- its
+        record's declared one -- before its shape, so no importer spells it.
+        Added: 2026-10-20"""
+        records = s._records()
+        for spec in records.deliverable():
+            shape = records.shape(spec)
+            if shape is None:
+                continue
+            with self.subTest(record=spec.key):
+                text = s.render_record_cs(spec, shape)
+                body = text.split(f"public static partial class {shape.__name__}", 1)
+                members = [
+                    line.strip()
+                    for line in body[1].splitlines()
+                    if line.strip().startswith("public ")
+                ]
+                self.assertRegex(
+                    members[0], rf"^public const int \w*Version = {spec.version};$"
                 )
+
+    def test_a_record_types_read_refuses_what_its_shape_refuses(self):
+        """A generated ``Read`` throws ``FormatException`` where the declared
+        shape refuses: a required key absent (``Wire.Require``), a nested
+        value or a list item that is no object (``Wire.Obj`` / ``Wire.Objs``),
+        a value outside its choices (``Wire.Choice``). Added: 2026-10-20"""
+        for helper in ("Require", "Obj", "Objs", "Choice"):
+            with self.subTest(helper=helper):
+                body = re.search(
+                    rf"public static [^\n]*\b{helper}\b[^\n]*\n(.*?)\n    }}",
+                    s.CS_WIRE,
+                    re.S,
+                )
+                self.assertIsNotNone(body, f"no Wire.{helper}")
+                self.assertIn("throw new FormatException", body.group(1))
+        self.assertNotIn(" Items(", s.CS_WIRE, "a list's items read by their spec")
+        records = s._records()
+        rendered = {
+            spec.key: s.render_record_cs(spec, records.shape(spec))
+            for spec in (records.HANDOFF, records.EMISSIVE_GROUPS)
+        }
+        for key, line in (
+            (
+                records.HANDOFF.key,
+                'Wire.Require(o, "Payload", "version", "instructions", '
+                '"assembly", "rendering");',
+            ),
+            (
+                records.HANDOFF.key,
+                'assembly = Wire.Objs(o, "assembly", HandoffPart.Read),',
+            ),
+            (
+                records.HANDOFF.key,
+                'extras = Wire.Obj(o, "extras", HandoffExtras.Read),',
+            ),
+            (
+                records.EMISSIVE_GROUPS.key,
+                'Wire.Choice(o, "encoding", "vertex-color", "channels");',
+            ),
+            (
+                records.EMISSIVE_GROUPS.key,
+                'Wire.Choice(o, "slot", "0", "1", "2", "3");',
+            ),
+        ):
+            with self.subTest(record=key, line=line):
+                self.assertIn(line, rendered[key])
+
+    def test_a_value_of_another_kind_is_refused_not_read_as_null(self):
+        """A present, non-null array or free object of another kind throws
+        ``FormatException`` (``Wire.Elements`` under ``Nums`` / ``Strs`` /
+        ``Objs``, ``Wire.Dict``) -- it read as null past ``Require`` and
+        ``NotNull``, and the importer then crashed on it (``"shots": {}``: a
+        NullReferenceException out of ``OnPostprocessModel``). A tuple of
+        another length is refused (pythontk's validate: "expected N items"),
+        and so is an integer past an int's range, which read wrapped
+        (``1e12`` as 0). Added: 2026-10-24"""
+        def body(helper):
+            found = re.search(
+                rf"public static [^\n]*\b{helper}(?:<T>)?\(.*?\n    \{{\n(.*?)\n    \}}\n",
+                s.CS_WIRE,
+                re.S,
+            )
+            self.assertIsNotNone(found, f"no Wire.{helper}")
+            return found.group(1)
+
+        elements = body("Elements")
+        self.assertIn("is not an array", elements)
+        self.assertIn("list.Count != length", elements)
+        self.assertIn("is not an object", body("Dict"))
+        self.assertIn("int.MaxValue", body("Int"))
+        for helper in ("Nums", "Strs", "Objs"):
+            with self.subTest(helper=helper):
+                self.assertIn("Elements(o, key, length)", body(helper))
+                self.assertNotIn("is IList<object> list)) return null", body(helper))
+
+        records = s._records()
+        for spec, line in (
+            (records.SHOTS, 'shots = Wire.Objs(o, "shots", Shot.Read),'),
+            (records.LIGHTMAPS, 'scaleOffset = Wire.Nums(o, "scaleOffset", 4),'),
+            (records.LIGHTMAPS, 'hierarchy = Wire.Strs(o, "hierarchy"),'),
+            (records.SHADOWS, 'canvas = Wire.Nums(o, "canvas", 4),'),
+            (records.HANDOFF, 'rendering = Wire.Dict(o, "rendering", objectValues: true),'),
+        ):
+            with self.subTest(record=spec.key, line=line):
+                self.assertIn(line, s.render_record_cs(spec, records.shape(spec)))
+        for spec, shape, _path in s.record_cs_targets():
+            with self.subTest(record=spec.key):
+                self.assertNotRegex(
+                    s.render_record_cs(spec, shape),
+                    r"= Wire\.Get\([^\n]*\) as ",
+                    "a member read unchecked through a cast",
+                )
+
+    def test_every_array_and_free_object_shape_reads_checked(self):
+        """``_cs_member`` over the shapes no current record declares: a mixed
+        tuple reads through ``Wire.Elements`` with its length, a string tuple
+        through ``Wire.Strs`` with its, a free object with free values through
+        ``Wire.Dict`` alone. Added: 2026-10-24"""
+        cases = (
+            (
+                {"type": "array", "prefixItems": [{"type": "string"}, {"type": "number"}]},
+                ("IList<object>", 'Wire.Elements(o, "k", 2)'),
+            ),
+            (
+                {"type": "array", "prefixItems": [{"type": "string"}] * 2},
+                ("List<string>", 'Wire.Strs(o, "k", 2)'),
+            ),
+            (
+                {"type": "array", "items": {"type": "number"}},
+                ("double[]", 'Wire.Nums(o, "k")'),
+            ),
+            (
+                {"type": "object", "additionalProperties": {"type": "number"}},
+                ("IDictionary<string, object>", 'Wire.Dict(o, "k")'),
+            ),
+            (
+                {"anyOf": [{"type": "object"}, {"type": "null"}]},
+                ("IDictionary<string, object>", 'Wire.Dict(o, "k")'),
+            ),
+        )
+        for node, expected in cases:
+            with self.subTest(node=node):
+                self.assertEqual(s._cs_member("k", node, "TestRecord"), expected)
+
+    def test_the_deliverable_format_reference_is_current(self):
+        """``DELIVERABLE_FORMAT.md`` is generated whole from the declarations
+        (the same check as ``--check``): a row and a section per record, each
+        at the version every file states it in. Added: 2026-10-20"""
+        text = s.render_format_md()
+        for spec in s._records().deliverable():
+            with self.subTest(record=spec.key):
+                self.assertIn(f"\n## {spec.key}\n", text)
+                self.assertIn(f"`data_export.{spec.key}` v{spec.version}", text)
+                if spec.glb:
+                    self.assertIn(f"`extras.{spec.key}` v{spec.glb.version}", text)
+        self.assertEqual(
+            _text(s.FORMAT_MD),
+            text,
+            "stale DELIVERABLE_FORMAT.md -- run m3trik/scripts/sync_scene_records.py",
+        )
 
     def test_a_record_types_guid_is_its_records_alone(self):
         records = s._records()

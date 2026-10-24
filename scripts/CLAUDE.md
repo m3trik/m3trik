@@ -4,16 +4,18 @@
 
 **Nav**: [← parent](../CLAUDE.md) · [← root](../../CLAUDE.md) · standards: [CODE_STANDARD](../docs/CODE_STANDARD.md) · [DOCS_STANDARD](../docs/DOCS_STANDARD.md) · [CONTEXT_BUDGET](../docs/CONTEXT_BUDGET.md)
 
+**Everyday**: `affected_tests.py <files> [--run]` — the tests a change reaches, run headless one package at a time (CODE_STANDARD §9). `ledger_drift.py check` — ledger entries whose named code moved.
+
 ## Generators (fix the generator, never the output)
 
 | Script | Emits | Notes |
 |:--|:--|:--|
 | `generate_api_registry.py [pkg…]` | per package `API_INDEX.md` / `API_REGISTRY.md` / `API_REGISTRY.json` / `API_CHANGES.md` + `docs/API_SHADOWS.md` | Package set: `../workspace.json` (via `sync_workspace`) — never re-list. Single-package runs still refresh the whole shadow report; `API_CHANGES` diffs vs `origin/main`'s sidecar. `--check` = CI staleness gate. |
-| `compare_panel_surface.py --all --write` / `--panel <name>` | `tentacle/docs/PARITY_SURFACE.md` | Static mayatk↔blendertk + tentacle maya↔blender control-surface diff (loop-unrolled, `.ui` XML, defaults, combos, dead handlers). UNTRIAGED rows in `tentacle/docs/parity_map.py` ⇒ exit 1 (CI gate). |
+| `compare_panel_surface.py --all --write` / `--panel <name>` | `tentacle/docs/PARITY_SURFACE.md` | Static mayatk↔blendertk + tentacle maya↔blender control-surface diff. UNTRIAGED rows in `tentacle/docs/parity_map.py` ⇒ exit 1 (CI gate). |
 | `generate_parity_audit.py` | `tentacle/docs/PARITY_AUDIT.md` | Coarse depth scoreboard; refuses stale registry input (`--allow-stale`); `--check` exits 1 if stale. Trust its `surface` column over line ratios. |
 | `generate_dcc_coverage.py` | `tentacle/docs/DCC_COVERAGE.md` | tentacle DCC slot-coverage report. |
 | `generate_workspace_inventory.py` (+ `Generate-WorkspaceInventory.ps1`) | `docs/workspace_repo_inventory.{md,json}` | Direct child repos: package/code roots, tracked LOC. |
-| `build_stingray_ao_presets.py [--check]` | `mayatk/mat_utils/shaderfx/Standard_{Masked,Transparent}_AO.sfx` | Maya's opacity presets + the opaque preset's AO chain, spliced as text (ShaderFX has no `saveGraph`); `preset_path=Custom` keeps the graph self-contained in scenes. `--check` = drift gate; pinned by `m3trik/test/test_build_stingray_ao_presets.py`. |
+| `build_stingray_ao_presets.py [--check]` | `mayatk/mat_utils/shaderfx/Standard_{Masked,Transparent}_AO.sfx` | Maya's opacity presets + the opaque preset's AO chain, spliced as text (ShaderFX has no `saveGraph`). `--check` = drift gate. Tested. |
 
 ## Gates (exit 0 or the build is red)
 

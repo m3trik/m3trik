@@ -46,6 +46,18 @@ SIBLINGS = (
 # Scripts that legitimately run on demand rather than on a gate.  Each entry is
 # a REASON, not a name: "it isn't wired yet" is not one.
 WIRING_EXEMPT = {
+    "affected_tests": (
+        "A local test planner, not a gate: it maps a working tree's uncommitted "
+        "edits to the tests they reach and runs them headless (CODE_STANDARD "
+        "section 9). Its callers are the workspace's .claude hooks (post-edit "
+        "marker, Stop critique), outside any repo's workflows; CI runs each "
+        "package's whole suite instead, so there is no delta for it to plan."
+    ),
+    "ledger_drift": (
+        "Reads .claude/BACKLOG.md and FUTURE.md, which are not version "
+        "controlled, so a runner has no ledger to check. Called by the /backlog "
+        "skill at SELECT and when stamping a verification."
+    ),
     "build_stingray_ao_presets": (
         "Needs a Maya install even to --check: main() calls build(args.maya) "
         "BEFORE the --check branch, and stock_presets_dir() sys.exits with 'no "

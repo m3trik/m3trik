@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (27)
+## Genuine cross-layer collisions (28)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -27,7 +27,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `Finding` — mayatk, pythontk
 
 - `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L113)
-- `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L40)
+- `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L43)
 
 ### `HierarchyBaseline` — blendertk, mayatk, pythontk
 
@@ -61,6 +61,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L76)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
 
+### `MaterialRecord` — mayatk, pythontk
+
+- `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L85)
+- `pythontk` — [`MaterialRecord`](pythontk/core_utils/engines/scene_export/material_record.py#L123)
+
 ### `OpRegistry` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`OpRegistry`](blendertk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L84)
@@ -81,7 +86,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Parameters`](extapps/photogrammetry/metashape_workflow/parameters.py#L373)
 - `extapps` — [`Parameters`](extapps/photogrammetry/realityscan_workflow/parameters.py#L164)
 - `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L126)
-- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L371)
+- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L360)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L508)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L165)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L418)
@@ -307,7 +312,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Keyframes`
 - `LightUtils`
 - `LightmapBakeResult`
-- `LightmapBakeSet`
 - `LightmapBaker`
 - `LightmapBakerSlots`
 - `LightmapExcludeSet`
@@ -329,6 +333,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `MatUpdater`
 - `MatUpdaterSlots`
 - `MatUtils`
+- `MaterialRecords`
 - `Matrices`
 - `MeshDiagnostics`
 - `MirrorSlots`

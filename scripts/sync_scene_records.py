@@ -14,23 +14,31 @@ records when measured 2026-09-18):
    Everything outside the markers is hand-written; a missing marker pair is
    refused rather than guessed.
 2. **The Unity importers' channel list.**  ``unitytk``'s
-   ``UnitytkSettings.cs`` names one import channel per record it reads
-   (``Audio, // "audio_manifest" channel -> AudioEventController``).  That
+   ``UnitytkSettings.cs`` declares each record it reads once, as a
+   ``UnitytkRecords`` constant on a line naming its importer
+   (``public const string Audio = "audio"; // channel -> AudioEventController``).  That
    set must equal the deliverable records declared with the ``"unity"``
    consumer -- a record Unity reads but pythontk does not declare (or the
-   reverse) is a contract nobody owns -- and each named importer's
-   ``SUPPORTED_*VERSION`` must equal its record's declared version: Unity
-   refuses a newer payload at import, which no DCC-free check would see.
+   reverse) is a contract nobody owns -- and each must declare its shape, so
+   its importer reads it through a generated reader and the one version
+   that reader names (``<Shape>.CurrentVersion``), never a hand-typed one.
 3. **The two DCC producer tables.**  ``mtk.FbxUtils.PRODUCERS`` and
    ``btk.FbxUtils.PRODUCERS`` must name the same records, except the ones
    :data:`PRODUCER_DIVERGENCES` ledgers with a reason (read from source by
    AST, so neither DCC needs to be importable here).
 4. **The WebXR runtime's records module.**  ``kernel/records.js`` in
-   pythontk's preview (:data:`WEB_RECORDS`) is generated whole: every record a
-   GLB publishes for the web (``RecordSpec.web``) with its keys and versions,
+   pythontk's preview (:data:`WEB_RECORDS`) is generated whole: every block a
+   GLB carries (``RecordSpec.glb``, and the handoff) with its key and version,
+   the keys of the blocks retired before them (``SceneRecords.RETIRED_BLOCKS``),
    and a JSDoc typedef for each declared manifest shape
-   (``WebProjection.shape``), so the page's features read a manifest by the
+   (``GlbBlock.shape``), so the page's features read a block by the
    declaration and ``tsc --checkJs`` holds them to its fields.
+
+5. **The deliverable format reference.**  ``DELIVERABLE_FORMAT.md`` beside
+   the declarations (:data:`FORMAT_MD`) is generated whole: every record a
+   deliverable carries -- its key and versions in each file, what it makes of
+   the scene there, and each declared shape's fields -- the reference an
+   outside reader is handed, which cannot drift from what the readers enforce.
 
 Usage:
     python sync_scene_records.py            # rewrite the derived files (idempotent)
@@ -56,6 +64,15 @@ WEB_RECORDS = (
     / "kernel"
     / "records.js"
 )
+FORMAT_MD = (
+    REPO_ROOT
+    / "pythontk"
+    / "pythontk"
+    / "core_utils"
+    / "engines"
+    / "scene_export"
+    / "DELIVERABLE_FORMAT.md"
+)
 BEGIN = "<!-- scene-records:begin -->"
 END = "<!-- scene-records:end -->"
 #: What every generated file opens with -- the reader's cue not to edit it.
@@ -72,12 +89,12 @@ FBX_UTILS = {
 #: name -> (the DCC that lacks it, why). Delete a row when the port lands.
 PRODUCER_DIVERGENCES = {}
 
-#: ``Audio,      // "audio_manifest" channel -> AudioEventController``
+#: ``public const string Audio = "audio";  // channel -> AudioEventController``
+#: -- the key's one spelling in unitytk, and the importer that reads it.
 _UNITY_CHANNEL = re.compile(
-    r'//\s*"(?P<key>\w+)"\s+channel\b(?:[^\w\n]+(?P<reader>\w+))?'
+    r'const[ \t]+string[ \t]+\w+[ \t]*=[ \t]*"(?P<key>\w+)";[ \t]*'
+    r"//[ \t]*channel\b(?:[^\w\n]+(?P<reader>\w+))?"
 )
-#: ``const int SUPPORTED_SCHEMA_VERSION = 2;`` -- one per importer.
-_UNITY_SUPPORTED = re.compile(r"\bconst\s+int\s+SUPPORTED_\w*VERSION\s*=\s*(\d+)")
 
 
 def _records():
@@ -90,6 +107,14 @@ def _records():
     return SceneRecords
 
 
+def _handoff():
+    """``HandoffRecord`` from the same checkout as :func:`_records`."""
+    _records()  # puts the checkout on sys.path
+    from pythontk import HandoffRecord
+
+    return HandoffRecord
+
+
 #: How a record's ``Merge`` rule reads in the table's *Crosses* column.
 MERGE_LABELS = {
     "derive": "re-derived",
@@ -100,45 +125,62 @@ MERGE_LABELS = {
 
 
 def render_table(records=None) -> str:
-    """The generated region's body: one row per declared record.  *Crosses*
-    is what another scene's copy becomes beside this one's (the record's
-    ``Merge`` rule) and whether it rides a DCC hand-off (``portable``)."""
+    """The generated region's body: one table per carrier, a row per declared
+    record.  A deliverable row says who reads it and what it is computed
+    from; a private row says what another scene's copy becomes beside this
+    one's (*Crosses*: the record's ``Merge`` rule, and ``portable`` -- it
+    rides a DCC hand-off).  Every deliverable is re-derived on a crossing, so
+    its table leaves that column out."""
     records = records or _records()
-    lines = [
-        "| Record | Carrier | Version | Kind | Owner | Reads | Read by | Web | Crosses | Holds |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+    deliverable = [
+        "**`data_export`** -- the deliverable records:",
+        "",
+        "| Record | Version | Kind | Owner | Reads | Read by | GLB block | Holds |",
+        "|---|---|---|---|---|---|---|---|",
     ]
-    names = {"private": "`data_internal`", "deliverable": "`data_export`"}
+    private = [
+        "**`data_internal`** -- the private records:",
+        "",
+        "| Record | Version | Owner | Crosses | Holds |",
+        "|---|---|---|---|---|",
+    ]
     for row in records.describe():
-        holds = row["description"]
-        if row["deprecated_by"]:
-            holds += f" -- *legacy: superseded by `{row['deprecated_by']}`*"
-        # `.get`: a pythontk that predates the crossing columns (the CI gate
-        # runs against the siblings' pushed branches) must read as drift in
-        # the rendered table, not as a traceback.
+        version = row["version"] if row["envelope"] else f"{row['version']} (bare)"
+        holds = row["description"].replace("|", "/")
+        if row["scope"] == "deliverable":
+            # `.get`: a pythontk that predates a column (the CI gate runs
+            # against the siblings' pushed branches) must read as drift in
+            # the rendered table, not as a traceback.
+            glb = row.get("glb")
+            transient = row.get("transient")
+            deliverable.append(
+                "| `{key}` | {version} | {kind} | {owner} | {reads} | {consumers} | {glb} | {holds} |".format(
+                    key=row["key"],
+                    version=version,
+                    # Written for one write and cleared after it.
+                    kind=row["kind"] + (", transient" if transient else ""),
+                    owner=row["owner"],
+                    reads=", ".join(f"`{k}`" for k in row["after"]) or "--",
+                    consumers=", ".join(row["consumers"]) or "--",
+                    glb=f"v{glb}" if glb else "--",
+                    holds=holds,
+                )
+            )
+            continue
         merge = row.get("merge", "")
         crosses = MERGE_LABELS.get(merge, merge)
         if row.get("portable"):
             crosses += ", hand-off"
-        # `.get` for the same reason as `merge` above.
-        web = row.get("web")
-        lines.append(
-            "| `{key}` | {carrier} | {version} | {kind} | {owner} | {reads} | {consumers} | {web} | {crosses} | {holds} |".format(
+        private.append(
+            "| `{key}` | {version} | {owner} | {crosses} | {holds} |".format(
                 key=row["key"],
-                carrier=names[row["scope"]],
-                version=row["version"]
-                if row["envelope"]
-                else f"{row['version']} (bare)",
-                kind=row["kind"],
+                version=version,
                 owner=row["owner"],
-                reads=", ".join(f"`{k}`" for k in row["after"]) or "--",
-                consumers=", ".join(row["consumers"]) or "--",
-                web=f"`{web}`" if web else "--",
                 crosses=crosses,
-                holds=holds.replace("|", "/"),
+                holds=holds,
             )
         )
-    return "\n".join(lines)
+    return "\n".join(deliverable + [""] + private)
 
 
 def splice(text: str, body: str) -> str:
@@ -158,44 +200,24 @@ def unity_reader(reader):
     return found[0] if len(found) == 1 else None
 
 
-def unity_reader_version(reader):
-    """The version *reader*'s importer accepts (its one ``SUPPORTED_*VERSION``
-    in its ``<reader>.cs``), or ``None`` when that cannot be read."""
-    path = unity_reader(reader)
-    if path is None:
-        return None
-    found = _UNITY_SUPPORTED.findall(path.read_text(encoding="utf-8"))
-    return int(found[0]) if len(found) == 1 else None
-
-
 def unity_mismatch(records=None) -> dict:
-    """``{"undeclared": [...], "unread": [...], "version": [...]}`` -- channels
-    Unity reads that no record declares for it, records declared for Unity it
-    does not read, and channels whose importer accepts another version than
-    the record declares (as lines)."""
+    """``{"undeclared": [...], "unread": [...], "shapeless": [...]}`` --
+    channels Unity reads that no record declares for it, records declared for
+    Unity it does not read, and records it reads that declare no shape: their
+    importer would have no generated reader, nor the generated version it
+    reads alone (``<Shape>.CurrentVersion``)."""
     records = records or _records()
     readers = {
         m["key"]: m["reader"]
         for m in _UNITY_CHANNEL.finditer(UNITY_SETTINGS.read_text(encoding="utf-8"))
     }
     specs = {s.key: s for s in records.deliverable() if "unity" in s.consumers}
-    version = []
-    for key in sorted(readers.keys() & specs.keys()):
-        reader, declared = readers[key], specs[key].version
-        accepts = unity_reader_version(reader)
-        if accepts is None:
-            version.append(
-                f"{key}: no single SUPPORTED_*VERSION in the importer its channel"
-                f" line names ({reader or 'none'})"
-            )
-        elif accepts != declared:
-            version.append(
-                f"{key}: declared v{declared}, {reader}.cs accepts v{accepts}"
-            )
     return {
         "undeclared": sorted(readers.keys() - specs.keys()),
         "unread": sorted(specs.keys() - readers.keys()),
-        "version": version,
+        "shapeless": sorted(
+            k for k in readers.keys() & specs.keys() if not specs[k].shape
+        ),
     }
 
 
@@ -232,7 +254,7 @@ def producer_parity() -> list:
     return problems
 
 
-# ----------------------------------------------------- the web runtime's records
+# ------------------------------------------------- the web runtime's blocks
 def _spec_names(records) -> dict:
     """``{id(spec): attribute}`` -- SceneRecords' own name for each declaration
     (``ARTICULATION``), the name a generated reader uses for it."""
@@ -303,47 +325,54 @@ def render_typedef(name: str, schema: dict) -> list:
 
 
 def render_records_js(records=None) -> str:
-    """``kernel/records.js``: every record a GLB publishes for the web, and the
-    JSDoc typedefs of each declared manifest shape (:data:`WEB_RECORDS`)."""
+    """``kernel/records.js``: every block a GLB carries -- each record's
+    (``RecordSpec.glb``) and the handoff -- and the JSDoc typedefs of each
+    declared block shape (:data:`WEB_RECORDS`)."""
     records = records or _records()
     names = _spec_names(records)
     lines = ["/*", f"  {_wrap(GENERATED, 72)[0]}"]
     lines += [f"  {line}" for line in _wrap(GENERATED, 72)[1:]]
     lines += [
         "",
-        "  The scene records a deliverable publishes for the glTF runtimes: each",
-        "  record's key and schema version, the root-extras key its manifest ships",
-        "  under and that manifest's own version -- and, where it is declared, the",
-        "  manifest's shape. A feature reads a manifest by these, never by a",
-        "  spelling of its own.",
+        "  The blocks a deliverable GLB carries in its root extras: each one's key",
+        "  -- its record's own -- and the schema version this page reads, and,",
+        "  where it is declared, its shape. A feature reads a block by these,",
+        "  never by a spelling of its own.",
         "*/",
         "",
         "/**",
-        " * A scene record a GLB conversion publishes for the glTF runtimes.",
-        " * @typedef {object} WebRecord",
-        " * @property {string} key The record's channel on the `data_export` carrier.",
-        " * @property {number} version The record's schema version.",
-        " * @property {string} webKey The root-extras key its manifest ships under.",
-        " * @property {number} webVersion The manifest's own schema version.",
+        " * A block a GLB carries in its root extras.",
+        " * @typedef {object} GlbBlock",
+        " * @property {string} key Its key in the root extras: its record's own.",
+        " * @property {number} version Its schema version: the one this page reads.",
         " */",
         "",
     ]
-    shapes = []
-    for spec in records.web_projected():
+    blocks = [
+        (names[id(spec)], spec.key, spec.glb.version) for spec in records.glb_records()
+    ]
+    blocks.append(("HANDOFF", _handoff().KEY, _handoff().VERSION))
+    for name, key, version in blocks:
         lines += [
-            f"/** `{spec.key}`, published as `{spec.web.key}`. @type {{Readonly<WebRecord>}} */",
-            f"export const {names[id(spec)]} = Object.freeze({{ key: '{spec.key}', "
-            f"version: {spec.version}, webKey: '{spec.web.key}', "
-            f"webVersion: {spec.web.version} }});",
+            f"/** The `{key}` block. @type {{Readonly<GlbBlock>}} */",
+            f"export const {name} = Object.freeze({{ key: '{key}', version: {version} }});",
         ]
-        shape = records.web_shape(spec)
-        if shape is not None:
-            shapes.append(shape)
+    lines += [
+        "/** Every block above, for a pass over all of them. @type {ReadonlyArray<Readonly<GlbBlock>>} */",
+        f"export const BLOCKS = Object.freeze([{', '.join(name for name, _key, _version in blocks)}]);",
+        "/** Root-extras keys of blocks a GLB written before these carries, which",
+        " * nothing reads (SceneRecords.RETIRED_BLOCKS): a file holding one is",
+        " * re-exported. @type {ReadonlyArray<string>} */",
+        f"export const RETIRED_BLOCK_KEYS = Object.freeze([{', '.join(repr(key) for key in records.RETIRED_BLOCKS)}]);",
+    ]
+    shapes = [records.glb_shape(spec) for spec in records.glb_records()]
+    shapes.append(records.shape(records.HANDOFF))
+    shapes = [shape for shape in shapes if shape is not None]
     for shape in shapes:
         schema = shape.json_schema()
         lines += [
             "",
-            f"/* {'-' * 12} the `{shape.__name__}` manifest, declared in pythontk {'-' * 12} */",
+            f"/* {'-' * 12} the `{shape.__name__}` block, declared in pythontk {'-' * 12} */",
         ]
         lines += [""] + render_typedef(shape.__name__, schema)
         for name, node in schema.get("$defs", {}).items():
@@ -387,17 +416,23 @@ def _cs_member(key: str, node: dict, root: str) -> tuple:
         node = options[0] if len(options) == 1 else {}
     if "$ref" in node:
         cls = _cs_name(node["$ref"].rsplit("/", 1)[-1], root)
-        return cls, f'{cls}.Read(Wire.Get(o, "{key}"))'
+        return cls, f'Wire.Obj(o, "{key}", {cls}.Read)'
     kind = node.get("type")
     if kind == "array":
-        items = node.get("prefixItems") or [node.get("items", {})]
+        prefix = node.get("prefixItems")
+        items = prefix or [node.get("items", {})]
+        # A tuple's length is part of its type: pythontk's validate refuses
+        # another ("expected 3 items, got 4"), so the reader does too.
+        fixed = f", {len(prefix)}" if prefix else ""
         if all(item.get("type") == "number" for item in items):
-            return "double[]", f'Wire.Nums(o, "{key}")'
+            return "double[]", f'Wire.Nums(o, "{key}"{fixed})'
         item = items[0]
         if "$ref" in item:
             cls = _cs_name(item["$ref"].rsplit("/", 1)[-1], root)
-            return f"List<{cls}>", f'Wire.Items(o, "{key}", {cls}.Read)'
-        return "IList<object>", f'Wire.Get(o, "{key}") as IList<object>'
+            return f"List<{cls}>", f'Wire.Objs(o, "{key}", {cls}.Read{fixed})'
+        if all(item.get("type") == "string" for item in items):
+            return "List<string>", f'Wire.Strs(o, "{key}"{fixed})'
+        return "IList<object>", f'Wire.Elements(o, "{key}"{fixed})'
     simple = {
         "string": ("string", "Str"),
         "integer": ("int?", "Int"),
@@ -408,10 +443,11 @@ def _cs_member(key: str, node: dict, root: str) -> tuple:
         cs, reader = simple[kind]
         return cs, f'Wire.{reader}(o, "{key}")'
     if kind == "object":
-        return (
-            "IDictionary<string, object>",
-            f'Wire.Get(o, "{key}") as IDictionary<string, object>',
-        )
+        # A free object (no spec of its own); where its values are declared
+        # objects ({section: {setting: value}}), each is held to that too.
+        values = node.get("additionalProperties")
+        objects = ", objectValues: true" if isinstance(values, dict) and values.get("type") == "object" else ""
+        return "IDictionary<string, object>", f'Wire.Dict(o, "{key}"{objects})'
     return "object", f'Wire.Get(o, "{key}")'
 
 
@@ -433,9 +469,9 @@ def _cs_summary(text: str, indent: str) -> list:
 #: (``Convert``, invariant culture), so a value that is not one fails loudly
 #: rather than reading as null.
 CS_WIRE = """\
-// The JSON tree's values as the fields' types. A number converts the way the
-// hand-written readers always did (Convert, invariant culture), so a value that
-// is not one fails loudly rather than reading as null.
+// The JSON tree's values as the fields' types, each taken as the JSON type its
+// shape declares -- never converted from another -- so a value that is not one
+// fails loudly (FormatException) rather than reading as something it is not.
 static class Wire
 {
     public static object Get(IDictionary<string, object> o, string key)
@@ -444,42 +480,151 @@ static class Wire
     public static string Str(IDictionary<string, object> o, string key)
     {
         object v = Get(o, key);
-        return v == null ? null : v as string ?? Convert.ToString(v, CultureInfo.InvariantCulture);
+        if (v == null) return null;
+        return v as string ?? throw new FormatException($"'{key}' is not a string");
+    }
+
+    // A JSON number: what the parser gives it as (double, or an integer type),
+    // never a string or a boolean.
+    static double Number(object v, string where)
+    {
+        if (v is string || v is bool || !(v is IConvertible))
+            throw new FormatException($"{where} is not a number");
+        return Convert.ToDouble(v, CultureInfo.InvariantCulture);
     }
 
     public static double? Num(IDictionary<string, object> o, string key)
     {
         object v = Get(o, key);
-        return v == null ? (double?)null : Convert.ToDouble(v, CultureInfo.InvariantCulture);
+        return v == null ? (double?)null : Number(v, $"'{key}'");
     }
 
+    // An integer an int holds. A fraction is refused, as pythontk's validate
+    // refuses a number that is not an integer; so is a value past an int's
+    // range (1e12, an infinity) -- never truncated or wrapped into another.
+    // The JSON reader gives every number as a double, so 2.0 reads as 2.
     public static int? Int(IDictionary<string, object> o, string key)
     {
         double? v = Num(o, key);
-        return v.HasValue ? (int?)(int)v.Value : null;
+        if (!v.HasValue) return null;
+        double d = v.Value;
+        if (d != Math.Floor(d))
+            throw new FormatException($"'{key}': {d.ToString(CultureInfo.InvariantCulture)} is not an integer");
+        if (d < int.MinValue || d > int.MaxValue)
+            throw new FormatException($"'{key}': {d.ToString(CultureInfo.InvariantCulture)} is past an integer's range");
+        return (int)d;
     }
 
     public static bool? Bool(IDictionary<string, object> o, string key)
     {
         object v = Get(o, key);
-        return v == null ? (bool?)null : Convert.ToBoolean(v, CultureInfo.InvariantCulture);
+        if (v == null) return null;
+        return v is bool b ? b : throw new FormatException($"'{key}' is not a boolean");
     }
 
-    public static double[] Nums(IDictionary<string, object> o, string key)
+    // An array: null when absent or null, and a FormatException when it is
+    // something else -- or, where the shape fixes its length (a tuple, its
+    // length passed), when it holds another number of items.
+    public static IList<object> Elements(IDictionary<string, object> o, string key, int length = -1)
     {
-        if (!(Get(o, key) is IList<object> list)) return null;
+        object v = Get(o, key);
+        if (v == null) return null;
+        if (!(v is IList<object> list))
+            throw new FormatException($"'{key}' is not an array");
+        if (length >= 0 && list.Count != length)
+            throw new FormatException($"'{key}' holds {list.Count} items, not {length}");
+        return list;
+    }
+
+    public static double[] Nums(IDictionary<string, object> o, string key, int length = -1)
+    {
+        var list = Elements(o, key, length);
+        if (list == null) return null;
         var items = new double[list.Count];
         for (int i = 0; i < list.Count; i++)
-            items[i] = Convert.ToDouble(list[i], CultureInfo.InvariantCulture);
+            items[i] = Number(list[i], $"'{key}'[{i}]");
         return items;
     }
 
-    public static List<T> Items<T>(IDictionary<string, object> o, string key, Func<object, T> read)
+    public static List<string> Strs(IDictionary<string, object> o, string key, int length = -1)
     {
-        if (!(Get(o, key) is IList<object> list)) return null;
-        var items = new List<T>(list.Count);
-        foreach (object item in list) items.Add(read(item));
+        var list = Elements(o, key, length);
+        if (list == null) return null;
+        var items = new List<string>(list.Count);
+        for (int i = 0; i < list.Count; i++)
+            items.Add(list[i] as string ?? throw new FormatException($"'{key}'[{i}] is not a string"));
         return items;
+    }
+
+    // An object a declared spec reads; null when absent or null, and a
+    // FormatException when it is something else.
+    public static T Obj<T>(IDictionary<string, object> o, string key, Func<object, T> read)
+        where T : class
+    {
+        object v = Get(o, key);
+        if (v == null) return null;
+        if (!(v is IDictionary<string, object>))
+            throw new FormatException($"'{key}' is not an object");
+        return read(v);
+    }
+
+    // An object the shape leaves free (no spec of its own): null when absent
+    // or null, and a FormatException when it is something else -- or, where
+    // the shape declares each of its values an object, when one is not.
+    public static IDictionary<string, object> Dict(IDictionary<string, object> o, string key,
+                                                   bool objectValues = false)
+    {
+        object v = Get(o, key);
+        if (v == null) return null;
+        if (!(v is IDictionary<string, object> d))
+            throw new FormatException($"'{key}' is not an object");
+        if (objectValues)
+            foreach (var pair in d)
+                if (!(pair.Value is IDictionary<string, object>))
+                    throw new FormatException($"'{key}'.{pair.Key} is not an object");
+        return d;
+    }
+
+    // A list of objects a declared spec reads, every item one.
+    public static List<T> Objs<T>(IDictionary<string, object> o, string key, Func<object, T> read,
+                                  int length = -1)
+    {
+        var list = Elements(o, key, length);
+        if (list == null) return null;
+        var items = new List<T>(list.Count);
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (!(list[i] is IDictionary<string, object>))
+                throw new FormatException($"'{key}'[{i}] is not an object");
+            items.Add(read(list[i]));
+        }
+        return items;
+    }
+
+    // Each key the shape requires is present.
+    public static void Require(IDictionary<string, object> o, string owner, params string[] keys)
+    {
+        foreach (string key in keys)
+            if (!o.ContainsKey(key))
+                throw new FormatException($"{owner}: missing required '{key}'");
+    }
+
+    // Each key the shape never writes null for, when present, is not null.
+    public static void NotNull(IDictionary<string, object> o, string owner, params string[] keys)
+    {
+        foreach (string key in keys)
+            if (o.TryGetValue(key, out object v) && v == null)
+                throw new FormatException($"{owner}: '{key}' is null");
+    }
+
+    // A value the shape enumerates is one of its choices.
+    public static void Choice(IDictionary<string, object> o, string key, params string[] allowed)
+    {
+        object v = Get(o, key);
+        if (v == null) return;
+        string s = v as string ?? Convert.ToString(v, CultureInfo.InvariantCulture);
+        if (Array.IndexOf(allowed, s) < 0)
+            throw new FormatException($"'{key}': {s} is not one of {string.Join(", ", allowed)}");
     }
 }
 """
@@ -488,8 +633,10 @@ static class Wire
 def render_record_cs(spec, shape) -> str:
     """The C# types of record *spec*'s declared *shape*: one class per
     declared object, nested in ``<shape>.Shape`` of ``public static partial
-    class <shape>``, whose other half -- the reader's policy: its channel, the
-    versions it reads -- is hand-written beside it."""
+    class <shape>``, and the version a reader reads (``<shape>.CurrentVersion``,
+    *spec*'s declared one -- no importer spells it). The other half -- the
+    reader's policy: its channel, what a null means -- is hand-written beside
+    it."""
     schema = shape.json_schema()
     root = shape.__name__
     objects = [(root, schema)] + list(schema.get("$defs", {}).items())
@@ -497,13 +644,17 @@ def render_record_cs(spec, shape) -> str:
         f"The `{spec.key}` record's payload as pythontk declares it ({root}): "
         "one class per declared object, a field per key. Read takes the parsed "
         "JSON tree -- an object as IDictionary<string, object>, an array as "
-        "IList<object>, a number as double -- and reads the way a record reader "
-        "must: a key left out, or null, reads as null; a key it does not declare "
-        "is ignored; an entry of a list that is not an object reads as null in "
-        "its place, so indices keep. Not JsonUtility, which cannot say null (a "
-        "channel with no limit). The policy -- which versions are read, what a "
-        "null means -- is the reader's own, in the hand-written half of this "
-        "partial class."
+        "IList<object>, a number as double -- and reads as pythontk validates: "
+        "a required key left out, a null the shape does not admit, a value that "
+        "is not of its type (an array or object that is something else, an "
+        "integer with a fraction or past an int's range, an item of a list of "
+        "objects that is not one), a tuple of another length, or a value "
+        "outside its declared choices throws a FormatException, so a reader "
+        "refuses the record; an optional key left out reads as null, and a key "
+        "the shape does not declare is ignored. Not JsonUtility, which cannot "
+        "say null (a channel with no limit). CurrentVersion is the one version "
+        "a reader reads. The policy -- what a null means -- is the reader's "
+        "own, in the hand-written half of this partial class."
     )
     lines = ["// <auto-generated>"]
     lines += [f"// {line}" for line in _wrap(GENERATED, 76)]
@@ -516,6 +667,9 @@ def render_record_cs(spec, shape) -> str:
         "",
         f"public static partial class {root}",
         "{",
+        f"    /// <summary>The `{spec.key}` record's schema version: the one read.</summary>",
+        f"    public const int CurrentVersion = {spec.version};",
+        "",
         f"    /// <summary>The `{spec.key}` record's declared shape ({root}).</summary>",
         "    public static class Shape",
         "    {",
@@ -537,6 +691,29 @@ def render_record_cs(spec, shape) -> str:
             f"            public static {cls} Read(object value)",
             "            {",
             "                if (!(value is IDictionary<string, object> o)) return null;",
+        ]
+        required = node.get("required", [])
+        if required:
+            keys = ", ".join(json.dumps(key) for key in required)
+            lines.append(f'                Wire.Require(o, "{cls}", {keys});')
+        # A key whose shape admits no null (no "null" in its anyOf) is refused
+        # as null wherever it appears, as pythontk's validate refuses it.
+        valued = [
+            key
+            for key, prop in node.get("properties", {}).items()
+            if not any(n.get("type") == "null" for n in prop.get("anyOf", []))
+        ]
+        if valued:
+            keys = ", ".join(json.dumps(key) for key in valued)
+            lines.append(f'                Wire.NotNull(o, "{cls}", {keys});')
+        for key, prop in node.get("properties", {}).items():
+            choices = prop.get("enum") or next(
+                (n["enum"] for n in prop.get("anyOf", []) if n.get("enum")), None
+            )
+            if choices:
+                allowed = ", ".join(json.dumps(str(c)) for c in choices)
+                lines.append(f'                Wire.Choice(o, "{key}", {allowed});')
+        lines += [
             f"                return new {cls}",
             "                {",
         ]
@@ -588,6 +765,141 @@ def record_cs_targets(records=None) -> list:
     return targets
 
 
+# ----------------------------------------------- the lighting recipe's numbers
+#: unitytk's copy of the lighting recipe every deliverable publishes
+#: (``HandoffRecord.RENDERING_POLICY``): the defaults its ``DeliverableRecipe``
+#: falls back to for a file that publishes none, and the handoff version its
+#: importer reads -- generated, so the Unity half cannot drift from the
+#: declaration the GLB, the FBX handoff and the WebXR viewer read.
+POLICY_CS = (
+    REPO_ROOT
+    / "unitytk"
+    / "unitytk"
+    / "templates"
+    / "LightmapMetadata"
+    / "RenderingPolicy.g.cs"
+)
+
+
+def _policy() -> dict:
+    """The recipe's settings (``HandoffRecord.rendering_values``: every number,
+    number list and identifier string of ``RENDERING_POLICY``) from the
+    sibling pythontk checkout."""
+    return _handoff().rendering_values()
+
+
+def _pascal(name: str) -> str:
+    return name[:1].upper() + name[1:]
+
+
+def render_policy_cs(policy=None) -> str:
+    """``RenderingPolicy.g.cs``: every setting of the recipe (:func:`_policy`)
+    as a C# constant named ``<Section><Field>`` -- a number a float, a number
+    triple a ``Vector3``, an identifier a string; prose, which no runtime
+    reads, never reaches here. The handoff's version is its shape's
+    (``HandoffBlock.CurrentVersion``), never repeated here."""
+    policy = policy if policy is not None else _policy()
+
+    lines = ["// <auto-generated>"]
+    lines += [f"// {line}" for line in _wrap(GENERATED, 76)]
+    lines += ["// </auto-generated>", "//"]
+    about = (
+        "The lighting recipe every deliverable publishes in its handoff "
+        "(pythontk HandoffRecord.RENDERING_POLICY), as the defaults a reader "
+        "falls back to for a file that publishes none: one declaration, read "
+        "by the GLB, the FBX handoff, the WebXR viewer and this package."
+    )
+    lines += [f"// {line}" for line in _wrap(about, 76)]
+    lines += ["using UnityEngine;", "", "public static class RenderingPolicy", "{"]
+    for section, fields in policy.items():
+        for field, value in (fields or {}).items():
+            name = _pascal(section) + _pascal(field)
+            address = f"{section}.{field}"
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                lines.append(f"    /// <summary>{address}</summary>")
+                lines.append(f"    public const float {name} = {float(value)!r}f;")
+            elif (
+                isinstance(value, (list, tuple))
+                and len(value) == 3
+                and all(
+                    isinstance(v, (int, float)) and not isinstance(v, bool)
+                    for v in value
+                )
+            ):
+                x, y, z = (repr(float(v)) + "f" for v in value)
+                lines.append(f"    /// <summary>{address}</summary>")
+                lines.append(
+                    f"    public static readonly Vector3 {name} = new Vector3({x}, {y}, {z});"
+                )
+            elif isinstance(value, str):
+                lines.append(f"    /// <summary>{address}</summary>")
+                lines.append(f'    public const string {name} = "{value}";')
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+ABSENCE_CS = POLICY_CS.with_name("MapAbsence.g.cs")
+
+#: The record's scalar maps, by the C# name and the map type whose absent
+#: value a reader takes for one it cannot find.
+ABSENT_MAPS = (
+    ("Metallic", "Metallic"),
+    ("Roughness", "Roughness"),
+    ("Occlusion", "Ambient_Occlusion"),
+)
+
+
+def render_absence_cs() -> str:
+    """``MapAbsence.g.cs``: what a map that is not there stands for
+    (pythontk ``MapRegistry.absent_value``) -- the value unitytk takes for a
+    metal, roughness or occlusion map the materials record names and the
+    project does not hold, as the GLB build does."""
+    _records()  # puts the checkout on sys.path
+    from pythontk import MapRegistry
+
+    lines = ["// <auto-generated>"]
+    lines += [f"// {line}" for line in _wrap(GENERATED, 76)]
+    lines += ["// </auto-generated>", "//"]
+    about = (
+        "What a map that is not there stands for (pythontk "
+        "MapRegistry.absent_value: dielectric, matte, unoccluded) -- the "
+        "value a reader takes for a map the materials record names and "
+        "cannot find, and what every packing fills an absent channel with."
+    )
+    lines += [f"// {line}" for line in _wrap(about, 76)]
+    lines += ["public static class MapAbsence", "{"]
+    for name, map_type in ABSENT_MAPS:
+        lines.append(f"    /// <summary>{map_type}</summary>")
+        lines.append(
+            f"    public const float {name} = {float(MapRegistry.absent_value(map_type))!r}f;"
+        )
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def policy_cs_meta(name: str = "rendering_policy") -> str:
+    """The ``.meta`` of a generated script: a GUID derived from *name*, so
+    regenerating never mints a new one."""
+    import uuid
+
+    guid = uuid.uuid5(uuid.NAMESPACE_URL, CS_GUID_NAMESPACE + name).hex
+    return (
+        "fileFormatVersion: 2\n"
+        f"guid: {guid}\n"
+        "MonoImporter:\n"
+        "  externalObjects: {}\n"
+        "  serializedVersion: 2\n"
+        "  defaultReferences: []\n"
+        "  executionOrder: 0\n"
+        "  icon: {instanceID: 0}\n"
+        "  userData: \n"
+        "  assetBundleName: \n"
+        "  assetBundleVariant: \n"
+    )
+
+
 def sync_text(path: Path, wanted: str, check: bool, what: str) -> bool:
     """Hold *path* to *wanted* (LF text; the file's own newline style is
     kept). Returns whether it drifted; writes the fix unless *check*."""
@@ -605,6 +917,97 @@ def sync_text(path: Path, wanted: str, check: bool, what: str) -> bool:
     path.write_bytes(wanted.replace("\n", nl).encode("utf-8"))
     print(f"wrote {path.relative_to(REPO_ROOT)}")
     return False
+
+
+# ------------------------------------------------- the format reference
+def _assembly_md(text: str, clauses) -> list:
+    """A record's or block's assembly as the reference prints it: what every
+    file states, then each clause under when a file states it (a file
+    carries only the clauses its own record calls for)."""
+    lines = ["", text] if text else []
+    for clause in clauses:
+        lines += ["", f"*{clause.condition[:1].upper()}{clause.condition[1:]}:* {clause.text}"]
+    return lines
+
+
+def render_format_md(records=None) -> str:
+    """``DELIVERABLE_FORMAT.md`` (:data:`FORMAT_MD`): the data a deliverable
+    carries, record by record -- its key and version in each file, what it
+    makes of the approved scene there (``RecordSpec.assembly``,
+    ``GlbBlock.assembly``) and its declared fields
+    (``SchemaSpec.to_markdown``)."""
+    records = records or _records()
+    lines = [
+        "# The data a deliverable carries",
+        "",
+        f"<!-- {GENERATED} -->",
+        "",
+        "Every FBX and GLB a scene exports states itself in-band: the scene's "
+        "records ride the file, and the file's `handoff` says how to read "
+        "them. Everything below is generated from the declarations every "
+        "writer and reader is held to -- `pythontk.SceneRecords`, "
+        "`HandoffRecord` and each record's declared shape -- so it cannot "
+        "drift from what the readers enforce.",
+        "",
+        "- **One shape per block.** `version`, its fundamentals, and anything "
+        "else under `extras`; a reader ignores an extra it does not know.",
+        "- **One key per record, in every file.** The FBX holds a record as "
+        "a JSON string user property on a node named `data_export`; the GLB "
+        "holds its block -- bound to the file's node, texture and buffer "
+        "indices -- as an object in the root `extras`, under the same key.",
+        "- **One version a reader reads.** A record or block of another "
+        "version is refused, with a warning, and the file is re-exported; no "
+        "reader keeps a branch for an older shape.",
+        "",
+        "| Record | In the FBX | In the GLB | Read by | Holds |",
+        "|---|---|---|---|---|",
+    ]
+
+    def in_glb(spec) -> str:
+        if spec is records.HANDOFF:
+            return f"`extras.{spec.key}` v{spec.version}"
+        return f"`extras.{spec.key}` v{spec.glb.version}" if spec.glb else "--"
+
+    deliverable = list(records.deliverable())
+    for spec in deliverable:
+        lines.append(
+            f"| [`{spec.key}`](#{spec.key}) "
+            f"| `data_export.{spec.key}` v{spec.version} | {in_glb(spec)} "
+            f"| {', '.join(spec.consumers) or '--'} "
+            f"| {spec.description.replace('|', '/')} |"
+        )
+    for spec in deliverable:
+        lines += [
+            "",
+            f"## {spec.key}",
+            "",
+            f"{spec.description[:1].upper()}{spec.description[1:]}.",
+        ]
+        shape = records.shape(spec)
+        lines += [
+            "",
+            f"### In the FBX: `data_export.{spec.key}`, version {spec.version}",
+        ]
+        lines += _assembly_md(spec.assembly, spec.clauses)
+        if shape is not None:
+            lines += ["", shape.to_markdown(_level=4)]
+        block_shape = records.glb_shape(spec)
+        if spec.glb:
+            lines += [
+                "",
+                f"### In the GLB: `extras.{spec.key}`, version {spec.glb.version}",
+            ]
+            lines += _assembly_md(spec.glb.assembly, spec.glb.clauses)
+            if block_shape is not None:
+                lines += ["", block_shape.to_markdown(_level=4)]
+        elif spec is records.HANDOFF:
+            lines += [
+                "",
+                f"### In the GLB: `extras.{spec.key}`, version {spec.version}",
+                "",
+                "The same shape, its addresses the GLB's (`extras.<key>`).",
+            ]
+    return "\n".join(lines) + "\n"
 
 
 def main(argv=None) -> int:
@@ -628,6 +1031,25 @@ def main(argv=None) -> int:
         failed |= sync_text(
             meta, record_cs_meta(spec), args.check, "record types' .meta"
         )
+    failed |= sync_text(
+        FORMAT_MD, render_format_md(records), args.check, "deliverable format"
+    )
+    failed |= sync_text(POLICY_CS, render_policy_cs(), args.check, "lighting recipe")
+    failed |= sync_text(
+        POLICY_CS.with_name(POLICY_CS.name + ".meta"),
+        policy_cs_meta(),
+        args.check,
+        "lighting recipe's .meta",
+    )
+    failed |= sync_text(
+        ABSENCE_CS, render_absence_cs(), args.check, "map absent values"
+    )
+    failed |= sync_text(
+        ABSENCE_CS.with_name(ABSENCE_CS.name + ".meta"),
+        policy_cs_meta("map_absence"),
+        args.check,
+        "map absent values' .meta",
+    )
     for problem in producer_parity():
         print(f"PRODUCERS: {problem}")
         failed = True

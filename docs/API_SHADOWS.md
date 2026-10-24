@@ -64,7 +64,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `MaterialRecord` — mayatk, pythontk
 
 - `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L85)
-- `pythontk` — [`MaterialRecord`](pythontk/core_utils/engines/scene_export/material_record.py#L123)
+- `pythontk` — [`MaterialRecord`](pythontk/core_utils/engines/scene_export/material_record.py#L120)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk
 
@@ -86,7 +86,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Parameters`](extapps/photogrammetry/metashape_workflow/parameters.py#L373)
 - `extapps` — [`Parameters`](extapps/photogrammetry/realityscan_workflow/parameters.py#L164)
 - `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L126)
-- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L360)
+- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L371)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L508)
 - `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L165)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L418)
@@ -312,6 +312,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Keyframes`
 - `LightUtils`
 - `LightmapBakeResult`
+- `LightmapBakeSet`
 - `LightmapBaker`
 - `LightmapBakerSlots`
 - `LightmapExcludeSet`
@@ -333,7 +334,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `MatUpdater`
 - `MatUpdaterSlots`
 - `MatUtils`
-- `MaterialRecords`
 - `Matrices`
 - `MeshDiagnostics`
 - `MirrorSlots`

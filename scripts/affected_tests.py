@@ -22,6 +22,9 @@ What a changed file selects, in its own package:
   is exercised through its subclass;
 - an asset (``.ui``, ``.json``, ``.glsl`` ...): the tests of its same-stem module,
   else the tests whose name carries the stem;
+- repo-root packaging metadata (``pyproject.toml``, ``MANIFEST.in``): the
+  packaging suites (``PACKAGING_TESTS``), never a stem match; a license text
+  (``LICENSE``, ``COPYING*``): nothing;
 - anything under a ``GATES`` pattern (tentacle ``ui/`` / ``slots/``, a blendertk
   panel ``.ui``): also that package's structural suites, which read the files
   themselves so no import reaches them -- plus a note naming the host-only manual
@@ -91,6 +94,13 @@ HARNESS_TESTS = ("test_run_tests", "test_base_test", "test_suite_driver")
 TEST_SUBDIRS = {"mayatk": ("mock_tests", "extended"), "tentacle": ("slots",)}
 #: Text the gates own, not the tests.
 DOC_SUFFIXES = {".md", ".rst", ".txt"}
+#: Packaging metadata at a repo root: the packaging suites read it directly, so no
+#: import reaches them -- and its stem names no feature (``MANIFEST.in`` is not a
+#: shot manifest).
+PACKAGING = {"pyproject.toml", "MANIFEST.in", "setup.cfg"}
+PACKAGING_TESTS = ("test_packaging_metadata", "test_package")
+#: License texts at a repo root (``LICENSE``, ``COPYING.LESSER``): no test reads them.
+LICENSE_TEXT = re.compile(r"(LICEN[CS]E|COPYING|NOTICE)(\.[A-Z]+)?$")
 #: A name defined in this many source modules says nothing about one of them.
 GENERIC_SPREAD = 3
 #: How many importer levels a module no test reaches directly (a private
@@ -622,6 +632,17 @@ def _select_one(sel: Selection, pkg: Package, path: Path, workspace: Path, downs
 
     if path.suffix in DOC_SUFFIXES or GENERATED.search(rel):
         sel.docs.append(rel)
+        return
+    if path.parent == pkg.repo.resolve() and LICENSE_TEXT.match(path.name):
+        sel.notes.append(f"license text, no tests: {rel}")
+        return
+    if path.parent == pkg.repo.resolve() and path.name in PACKAGING:
+        stems = {t.path.stem for t in test_files(name, workspace)}
+        picked = [s for s in PACKAGING_TESTS if s in stems]
+        for stem in picked:
+            sel.add(name, stem, f"packaging metadata: {path.name}")
+        if not picked:
+            sel.notes.append(f"packaging metadata, no packaging suite: {rel}")
         return
     if in_tests and path.name in HARNESS:
         stems = {t.path.stem for t in test_files(name, workspace)}

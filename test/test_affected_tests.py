@@ -170,6 +170,31 @@ class TestSelection(_Fixture):
         self.assertEqual(picks, {})
         self.assertTrue(any("no test reaches pythontk.core_utils.lonely" in n for n in sel.notes))
 
+    def test_packaging_metadata_selects_the_packaging_suite_not_its_namesakes(self):
+        """The packaging suite reads ``MANIFEST.in`` / ``pyproject.toml`` directly, so
+        no import reaches it; and ``MANIFEST`` names no feature (blendertk's shot
+        manifest suites were picked for a ``MANIFEST.in`` edit)."""
+        _write(self.ws, {
+            "pythontk/MANIFEST.in": "include LICENSE\n",
+            "pythontk/pyproject.toml": '[project]\nname = "pythontk"\n',
+            "pythontk/test/test_packaging_metadata.py": "def test_m():\n    pass\n",
+            "pythontk/test/test_shot_manifest.py": "def test_n():\n    pass\n",
+        })
+        _clear_caches()
+        for rel in ("pythontk/MANIFEST.in", "pythontk/pyproject.toml"):
+            _, picks = self.picks(rel)
+            self.assertEqual(picks, {"pythontk": {"test_packaging_metadata"}}, rel)
+
+    def test_a_license_text_selects_nothing_and_says_so(self):
+        _write(self.ws, {
+            "mayatk/COPYING.LESSER": "text\n",
+            "mayatk/test/test_copying_tool.py": "def test_o():\n    pass\n",
+        })
+        _clear_caches()
+        sel, picks = self.picks("mayatk/COPYING.LESSER")
+        self.assertEqual(picks, {})
+        self.assertIn("license text, no tests: mayatk/COPYING.LESSER", sel.notes)
+
     def test_a_changed_test_selects_itself(self):
         _, picks = self.picks("pythontk/test/test_generic.py")
         self.assertEqual(picks, {"pythontk": {"test_generic"}})

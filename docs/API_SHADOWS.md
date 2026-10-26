@@ -21,7 +21,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L462)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L280)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L187)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
 ### `Finding` — mayatk, pythontk

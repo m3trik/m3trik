@@ -53,7 +53,7 @@ widget.menu.add(
 | mayatk · edit_utils | [`cut_on_axis.py`](../../mayatk/mayatk/edit_utils/cut_on_axis.py) |
 | mayatk · edit_utils | [`duplicate_grid.py`](../../mayatk/mayatk/edit_utils/duplicate_grid.py) |
 | mayatk · edit_utils | [`duplicate_linear.py`](../../mayatk/mayatk/edit_utils/duplicate_linear.py) |
-| mayatk · edit_utils | [`duplicate_radial.py`](../../mayatk/mayatk/edit_utils/duplicate_radial.py) |
+| tentacle · ui/panels | [`duplicate_radial/duplicate_radial.py`](../../tentacle/tentacle/ui/panels/duplicate_radial/duplicate_radial.py) |
 | mayatk · edit_utils | [`dynamic_pipe.py`](../../mayatk/mayatk/edit_utils/dynamic_pipe.py) |
 | mayatk · edit_utils | [`mirror.py`](../../mayatk/mayatk/edit_utils/mirror.py) |
 | mayatk · edit_utils | [`naming/naming_slots.py`](../../mayatk/mayatk/edit_utils/naming/naming_slots.py) |

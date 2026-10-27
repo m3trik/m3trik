@@ -18,7 +18,9 @@ New names are not failures; ``--update`` freezes them, and its diff is the
 review, as is the reason for a name that goes on purpose. A partial checkout
 judges only what it can see: a stem when every package that carried it at the
 freeze is present, the record keys when pythontk is, and ``--update`` keeps
-each frozen entry it cannot see. A baseline describes the workspace it was
+each frozen entry it cannot see. A run that names packages judges only the
+stems they carry, at the freeze or now, and the record keys when pythontk is
+among them, so another package's uncommitted edit never stops its release. A baseline describes the workspace it was
 frozen from, so ``--workspace`` reads that workspace's own ``m3trik/scripts``
 copy; a workspace that carries saved names without one fails.
 
@@ -60,9 +62,14 @@ def ui_names(path: Path) -> List[str]:
     return sorted({w.get("name") for w in root.iter("widget") if w.get("name")})
 
 
+#: ``SceneRecords`` attributes naming keys an older scene or file may still hold.
+RETIRED_NAMES = ("RETIRED", "RETIRED_BLOCKS")
+
+
 def record_keys(path: Path) -> List[str]:
     """The keys a scene may store records under: each ``RecordSpec("<key>",
-    ...)`` in ``SceneRecords``, with its ``renamed_from`` names."""
+    ...)`` in ``SceneRecords``, a wrapped one (a deprecated record) included,
+    with its ``renamed_from`` names, and the retired keys it still clears."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
@@ -73,17 +80,24 @@ def record_keys(path: Path) -> List[str]:
             continue
         for stmt in node.body:
             value = getattr(stmt, "value", None)
-            if (
-                isinstance(value, ast.Call)
-                and getattr(value.func, "id", None) == "RecordSpec"
-                and value.args
-                and isinstance(value.args[0], ast.Constant)
-                and isinstance(value.args[0].value, str)
-            ):
-                keys.add(value.args[0].value)
-                for keyword in value.keywords:
-                    if keyword.arg == "renamed_from":
-                        keys.update(_strings(keyword.value))
+            if value is None:
+                continue
+            targets = getattr(stmt, "targets", None) or [getattr(stmt, "target", None)]
+            if any(getattr(t, "id", None) in RETIRED_NAMES for t in targets):
+                keys.update(_strings(value))
+                continue
+            for call in ast.walk(value):
+                if (
+                    isinstance(call, ast.Call)
+                    and getattr(call.func, "id", None) == "RecordSpec"
+                    and call.args
+                    and isinstance(call.args[0], ast.Constant)
+                    and isinstance(call.args[0].value, str)
+                ):
+                    keys.add(call.args[0].value)
+                    for keyword in call.keywords:
+                        if keyword.arg == "renamed_from":
+                            keys.update(_strings(keyword.value))
     return sorted(keys)
 
 
@@ -143,22 +157,32 @@ def records_file(workspace: Path) -> Optional[Path]:
     return None
 
 
-def lost(baseline: Dict[str, object], current: Dict[str, object]) -> List[str]:
+def lost(
+    baseline: Dict[str, object],
+    current: Dict[str, object],
+    packages: Optional[Sequence[str]] = None,
+) -> List[str]:
     """Each frozen name *current* no longer carries, judged where *current*
     can see: a stem whose frozen packages are all present, the record keys
-    when a checked-out pythontk declares ``SceneRecords``."""
+    when a checked-out pythontk declares ``SceneRecords``. Naming *packages*
+    narrows it to the stems they carry, at the freeze or now, and to the
+    record keys when pythontk is among them."""
     present = set(current["present"])
     homes = baseline.get("homes", {})
+    run = None if not packages else set(packages)
     found = []
     for stem, names in baseline.get("ui", {}).items():
         if not set(homes.get(stem, ())) <= present:
+            continue
+        carriers = set(homes.get(stem, ())) | set(current["homes"].get(stem, ()))
+        if run is not None and not carriers & run:
             continue
         now = current["ui"].get(stem)
         if now is None:
             found.append(f"{stem}.ui: (the whole panel)")
             continue
         found += [f"{stem}.ui: {name}" for name in names if name not in set(now)]
-    if current["records"] is not None:
+    if current["records"] is not None and (run is None or "pythontk" in run):
         found += [
             f"SceneRecords: {key}"
             for key in baseline.get("records", [])
@@ -254,7 +278,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
         return 1
     baseline = load_baseline(frozen_file)
-    gone = lost(baseline, current)
+    gone = lost(baseline, current, args.packages)
     for line in gone:
         print(f"[FAIL] {line}")
     frozen = sum(len(v) for v in baseline.get("ui", {}).values())

@@ -1316,10 +1316,15 @@ def function_bodies(path: str) -> List[Tuple[int, str, str, Optional[str]]]:
     return found
 
 
-def written_once_violations(workspace: Optional[str] = None) -> List[str]:
+def written_once_violations(
+    workspace: Optional[str] = None, packages: Optional[Sequence[str]] = None
+) -> List[str]:
     """Each body of the new layout that exists twice over one host (or over
-    none), with every place it is written; empty while the layout is empty."""
+    none), with every place it is written; empty while the layout is empty.
+    Naming *packages* keeps the copies one of them writes a place of, so
+    another package's uncommitted work never stops their release."""
     workspace = workspace or REPO
+    run = None if not packages else set(packages)
     groups: Dict[str, List[Tuple[str, Optional[str]]]] = {}
 
     def record(path: str, keep_new: bool) -> None:
@@ -1341,7 +1346,9 @@ def written_once_violations(workspace: Optional[str] = None) -> List[str]:
         for where, host in places:
             by_host.setdefault(host, []).append(where)
         for host, wheres in by_host.items():
-            if len(wheres) > 1:
+            if len(wheres) > 1 and (
+                run is None or {w.split("/", 1)[0] for w in wheres} & run
+            ):
                 lines = text.count("\n") + 1
                 found.append(f"{' = '.join(sorted(wheres))}  ({lines} lines)")
     return sorted(found)
@@ -1373,7 +1380,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.packages and not involved & set(args.packages):
             print("Written once: none of these packages is on the layout or a library.")
             return 0
-        copies = written_once_violations(args.workspace)
+        copies = written_once_violations(args.workspace, args.packages)
         for line in copies:
             print(f"  COPY    {line}")
         print(f"{len(copies)} body(ies) written twice on the new layout.")

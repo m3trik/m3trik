@@ -312,6 +312,17 @@ class WrittenOnceTest(unittest.TestCase):
         os.remove(os.path.join(root, "tentacle", ".gitignore"))
         self.assertEqual(len(gate.written_once_violations(root)), 1)
 
+    def test_a_run_judges_only_copies_its_packages_write(self):
+        """A copy between tentacle's layout and mayatk stops a release of
+        either, never one of blendertk, which wrote no part of it."""
+        root = self.tree({
+            "tentacle/tentacle/tools/spin/model/plan.py": "def plan(count):\n" + self.LOGIC,
+            "mayatk/mayatk/a.py": "def plan(count):\n" + self.LOGIC,
+        })
+        self.assertEqual(gate.written_once_violations(root, ["blendertk"]), [])
+        self.assertEqual(len(gate.written_once_violations(root, ["mayatk"])), 1)
+        self.assertEqual(len(gate.written_once_violations(root, ["tentacle"])), 1)
+
     def test_a_layout_copy_of_library_code_is_a_copy(self):
         root = self.tree({
             "tentacle/tentacle/core/radial/plan.py": "def lay_out(count):\n" + self.LOGIC,

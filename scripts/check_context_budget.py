@@ -365,13 +365,26 @@ def _non_blank(data: bytes) -> int:
     return sum(1 for line in text.split("\n") if line.strip())
 
 
+class UnreadableRepo(RuntimeError):
+    """git cannot read a checkout (a broken ``.git``, a dubious-ownership
+    refusal): its lines are unknown, not zero."""
+
+
+def _git(repo: Path, *args: str, ok=(0,), **kwargs) -> subprocess.CompletedProcess:
+    """``git -C repo *args``; an exit outside *ok* raises :class:`UnreadableRepo`."""
+    done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, **kwargs)
+    if done.returncode not in ok:
+        detail = done.stderr if isinstance(done.stderr, str) else done.stderr.decode(errors="ignore")
+        raise UnreadableRepo(f"cannot read {repo.name}: git {args[0]}: {detail.strip()}")
+    return done
+
+
 def _working_lines(repo: Path) -> int:
     """*repo*'s source lines as a release would commit them: tracked, or new
     and not ignored."""
-    listed = subprocess.run(
-        ["git", "-C", str(repo), "ls-files", "--cached", "--others",
-         "--exclude-standard", "-z", "--", "*.py"],
-        capture_output=True, text=True, encoding="utf-8",
+    listed = _git(
+        repo, "ls-files", "--cached", "--others", "--exclude-standard", "-z",
+        "--", "*.py", text=True, encoding="utf-8",
     ).stdout.split("\0")
     return sum(
         _non_blank((repo / rel).read_bytes())
@@ -382,12 +395,11 @@ def _working_lines(repo: Path) -> int:
 
 def _committed_lines(repo: Path) -> int:
     """*repo*'s source lines as its ``HEAD`` holds them (0 before a commit)."""
-    tree = subprocess.run(
-        ["git", "-C", str(repo), "ls-tree", "-r", "-z", "HEAD"],
-        capture_output=True, text=True, encoding="utf-8",
-    )
+    if _git(repo, "rev-parse", "-q", "--verify", "HEAD", ok=(0, 1)).returncode:
+        return 0  # a repository with no commit yet
+    tree = _git(repo, "ls-tree", "-r", "-z", "HEAD", text=True, encoding="utf-8")
     oids = []
-    for entry in tree.stdout.split("\0") if tree.returncode == 0 else ():
+    for entry in tree.stdout.split("\0"):
         meta, _, rel = entry.partition("\t")
         parts = meta.split()
         if len(parts) == 3 and parts[1] == "blob" and rel.endswith(".py"):
@@ -395,9 +407,8 @@ def _committed_lines(repo: Path) -> int:
                 oids.append(parts[2])
     if not oids:
         return 0
-    blobs = subprocess.run(
-        ["git", "-C", str(repo), "cat-file", "--batch"],
-        input="\n".join(oids).encode() + b"\n", capture_output=True,
+    blobs = _git(
+        repo, "cat-file", "--batch", input="\n".join(oids).encode() + b"\n"
     ).stdout
     lines, at = 0, 0
     for _ in oids:  # each: "<oid> blob <size>\n<content>\n"
@@ -570,7 +581,10 @@ def run_checks(
     check_dispatch(report)
     check_claude_links(report)
     check_nav_deps(report)
-    check_line_budget(report)
+    try:
+        check_line_budget(report)
+    except UnreadableRepo as error:  # advisory here; the release gate fails on it
+        report.warn(f"LINES: {error}")
     if do_registry:
         check_registry_fresh(report)
     if do_runtime:
@@ -602,7 +616,11 @@ def main(argv: list[str] | None = None) -> int:
             print("Line budget: none of these packages is in the registry set.")
             return 0
         report = Report()
-        over = check_line_budget(report, args.workspace, released=args.packages or None)
+        try:
+            over = check_line_budget(report, args.workspace, released=args.packages or None)
+        except UnreadableRepo as error:
+            print(f"  [FAIL] LINES: {error}")
+            return 1
         for m in report.oks + report.warns:
             print(f"  {m}")
         return 1 if over else 0

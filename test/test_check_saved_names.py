@@ -120,6 +120,34 @@ class TestSavedNames(unittest.TestCase):
         dropped = {**self.BEFORE, gate.RECORDS_FILE: renamed.replace(old_name, "")}
         self.assertEqual(gate.lost(after, self.scan(dropped)), ["SceneRecords: shots"])
 
+    def test_a_wrapped_spec_and_a_retired_key_are_frozen(self):
+        """A deprecated record still wraps its spec, and a retired key is one
+        an older scene may hold: both are names a reader still meets."""
+        records = RECORDS + (
+            "    OLD = Deprecation.class_attribute(RecordSpec(\"old_key\", Scope.PRIVATE, 1))\n"
+            "    RETIRED = (\"gone_key\",)\n"
+            "    RETIRED_BLOCKS: Tuple[str, ...] = (\"stale_block\",)\n"
+        )
+        found = self.scan({**self.BEFORE, gate.RECORDS_FILE: records})["records"]
+        self.assertEqual(
+            found, ["gone_key", "materials", "old_key", "shots", "stale_block"]
+        )
+
+    def test_a_run_judges_only_the_names_its_packages_carry(self):
+        """Another package's uncommitted .ui edit never stops this release;
+        the record keys are judged when pythontk is in the run."""
+        after = {
+            **self.BEFORE,
+            "mayatk/mayatk/edit_utils/duplicate_radial.ui": UI.format(
+                stem="duplicate_radial", extra=""
+            ),
+            gate.RECORDS_FILE: RECORDS.replace('"shots"', '"shot_list"'),
+        }
+        frozen, now = self.scan(self.BEFORE), self.scan(after)
+        self.assertEqual(gate.lost(frozen, now, ["tentacle"]), [])
+        self.assertEqual(gate.lost(frozen, now, ["mayatk"]), ["duplicate_radial.ui: s000"])
+        self.assertEqual(gate.lost(frozen, now, ["pythontk"]), ["SceneRecords: shots"])
+
     def test_a_panel_gone_loses_every_name(self):
         after = {**self.LIBRARIES, gate.RECORDS_FILE: RECORDS}
         self.assertIn(

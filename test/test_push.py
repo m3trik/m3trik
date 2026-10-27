@@ -2596,6 +2596,47 @@ else:
             self.assertNotEqual(result.returncode, 0, out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_guardrail_failure_holds_later_packages_after_their_finalize(self):
+        """A cascade stops starting releases at a guardrail failure, but each
+        later package still finishes the merged release an aborted run left:
+        pythontk's dev breaks a guardrail, uitk's Release 1.0.53 is merged and
+        untagged, and the run tags uitk, then holds it."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            ptk, _ = self._init_dummy_repo(root, "pythontk", "0.7.51", ["qtpy"])
+            (ptk / "pythontk" / "bridge.py").write_text(
+                "def f():\n    import tentacle\n", encoding="utf-8"
+            )
+            repo, origin = self._init_dummy_repo(
+                root, "uitk", "1.0.52", ["qtpy", "pythontk>=0.7.51"]
+            )
+            self._retarget_origin_to_github(repo, origin, "m3trik/uitk")
+            self._git(repo, "checkout", "dev")
+            (repo / "uitk" / "__init__.py").write_text(
+                '__package__ = "uitk"\n__version__ = "1.0.53"\n', encoding="utf-8"
+            )
+            entry = f"- **{self._commit_date(repo, 'v1.0.52')} -- the fix.**"
+            (repo / "CHANGELOG.md").write_text(f"# log\n\n{entry}\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "Release 1.0.53")
+            self._git(repo, "checkout", "main")
+            self._git(repo, "merge", "--no-ff", "dev", "-m", "Merge dev")
+            self._git(repo, "push", "origin", "main")
+            self._git(repo, "checkout", "dev")
+            self._git(repo, "push", "origin", "dev")
+            env = self._install_fake_gh(root, "{}", slug="m3trik/uitk")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk,uitk"), cwd=root, timeout=300, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertIn("Layout guardrails failed", out)
+            self.assertIn("Tagged v1.0.53", out)
+            self.assertIn("v1.0.53", self._git(origin, "tag", "--list").stdout)
+            self.assertIn("uitk - Held", out)
+            self.assertNotEqual(result.returncode, 0, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_finalize_creates_a_missing_release_when_the_tag_exists(self):
         """`tag exists` must not hide `Release missing` (the tag is pushed first)."""
         with tempfile.TemporaryDirectory() as td:
@@ -2823,7 +2864,14 @@ else:
         the run's packages (the past-the-budget exit is unit-tested there)."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            self._init_dummy_repo(root, "pythontk", "0.1.0", [])
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", [])
+            # Uncommitted: counted only when the run names pythontk.
+            (repo / "pythontk" / "new.py").write_text("x = 1\n" * 40, encoding="utf-8")
+            sys.path.insert(0, str(M3TRIK_DIR / "scripts"))
+            import check_context_budget as guard
+
+            named = sum(guard.source_lines(root, ["pythontk"]).values())
+            self.assertEqual(named - sum(guard.source_lines(root, ()).values()), 40)
             script = M3TRIK_DIR / "scripts" / "check_context_budget.py"
             result = self._run_push_functions(
                 root,
@@ -2832,7 +2880,7 @@ else:
             )
             out = result.stdout + result.stderr
             self.assertIn("RESULT=True", result.stdout, out)
-            self.assertIn("headroom", out)
+            self.assertIn(f"LINES: {named:,} of", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_the_layout_gate_stops_a_library_that_imports_the_product(self):

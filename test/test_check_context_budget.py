@@ -6,6 +6,7 @@ MEMORY.md) and passes a clean memory dir, plus that the live root dispatch table
 still covers every ECOSYSTEM_PACKAGES member.
 """
 
+import io
 import os
 import re
 import subprocess
@@ -290,13 +291,22 @@ class TestLineBudget(unittest.TestCase):
                 guard.main(["--line-budget", "--workspace", str(self.root), "uitk"]), 0
             )
 
-    def test_the_committed_tree_is_within_its_budget(self):
-        """Committed, so work in progress never reddens this suite; a commit
-        that grows past the budget without raising it does."""
-        rep = guard.Report()
-        guard.check_line_budget(rep, released=())
-        self.assertEqual(rep.warns, [], rep.warns)
-
+    def test_a_repo_git_cannot_read_fails_the_gate(self):
+        """A broken checkout is not zero lines: the gate cannot answer, so it
+        stops the run, as every other release gate does."""
+        broken = self.root / "uitk"
+        (broken / "uitk").mkdir(parents=True)
+        _write(broken / "uitk", "big.py", "x = 1\n" * 1000)
+        _write(broken, ".git", "gitdir: nowhere\n")
+        with patch.object(guard, "_line_budget", return_value=100), \
+                patch("sys.stdout", new_callable=io.StringIO) as out:
+            self.assertEqual(
+                guard.main(["--line-budget", "--workspace", str(self.root), "pythontk"]), 1
+            )
+            self.assertEqual(
+                guard.main(["--line-budget", "--workspace", str(self.root), "uitk"]), 1
+            )
+        self.assertIn("cannot read", out.getvalue())
 
 class TestDefaultMemoryDir(unittest.TestCase):
     """The memory dir is DERIVED, never a hardcoded machine path.

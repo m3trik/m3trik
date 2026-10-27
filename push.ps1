@@ -2912,6 +2912,9 @@ if ($Merge -and $Strict -and -not $SkipReview) {
 $results = @{}
 $anyErrors = $false
 $runNames = @($reposToProcess | ForEach-Object { $_.Name })
+# Set by a guardrail or budget failure in a cascade: later packages still finish a merged release
+# (step 1), but none starts a new one.
+$holdNewReleases = $false
 
 foreach ($repo in $reposToProcess) {
     $pkgName = $repo.Name
@@ -2975,17 +2978,23 @@ foreach ($repo in $reposToProcess) {
     #     so a merged release finishes whatever dev has gained since; after the safety
     #     preflight, since the checks parse pyproject.toml and an unsafe tree is the
     #     preflight's to report. The budget counts every package of the run as the run would
-    #     commit it, the rest as committed (docs/CONTEXT_BUDGET.md).
+    #     commit it, the rest as committed (docs/CONTEXT_BUDGET.md). A failure in a cascade
+    #     holds the packages after it rather than breaking, so each still finishes its own
+    #     merged release first.
+    if ($holdNewReleases) {
+        $results[$pkgName] = "held"
+        continue
+    }
     if (-not (Test-LayoutGuardrails $ROOT @($pkgName))) {
         $results[$pkgName] = "guardrails-failed"
         $anyErrors = $true
-        if ($stopOnFailure) { break }
+        if ($stopOnFailure) { $holdNewReleases = $true }
         continue
     }
     if (-not (Test-LineBudget $ROOT $runNames)) {
         $results[$pkgName] = "line-budget-failed"
         $anyErrors = $true
-        if ($stopOnFailure) { break }
+        if ($stopOnFailure) { $holdNewReleases = $true }
         continue
     }
 
@@ -3159,8 +3168,9 @@ foreach ($repo in $reposToProcess) {
         "merge-conflict" { Write-Err "$pkg - Merge conflicts" }
         "workflow-failed" { Write-Err "$pkg - Workflow failed/timed out" }
         "unsafe-repo" { Write-Err "$pkg - Unsafe repo state" }
-        "guardrails-failed" { Write-Err "$pkg - Layout guardrails failed; nothing committed (see above)" }
-        "line-budget-failed" { Write-Err "$pkg - Past the line budget; nothing committed (see above)" }
+        "guardrails-failed" { Write-Err "$pkg - Layout guardrails failed; no new release prepared (see above)" }
+        "line-budget-failed" { Write-Err "$pkg - Past the line budget; no new release prepared (see above)" }
+        "held" { Write-Err "$pkg - Held: an earlier package failed its guardrails or line budget, so no new release started" }
         "dry-run" { Write-Host "  o $pkg - Dry Run OK" -ForegroundColor Cyan }
         default { Write-Host "  ? $pkg - Not processed" -ForegroundColor DarkGray }
     }

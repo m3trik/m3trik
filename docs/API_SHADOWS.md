@@ -14,7 +14,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Behaviors` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L240)
+- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L242)
 - `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L157)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L110)
 

@@ -147,6 +147,9 @@
   "img_utils/_rasterize.py -> pythontk.geo_utils.shadow_projection",
   "str_utils/_str_utils.py -> pythontk.file_utils._file_utils"
  ],
+ "tentacle": [
+  "slots/blender/settings.py -> tentacle.tcl_blender"
+ ],
  "uitk": [
   "bridge/_output_dir.py -> uitk.widgets.optionBox.options.recent_values",
   "bridge/_param_rows.py -> uitk.widgets.separator",

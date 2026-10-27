@@ -44,6 +44,7 @@ ROOT_CLAUDE = WORKSPACE / "CLAUDE.md"
 WORKFLOWS = M3TRIK / ".github" / "workflows"
 
 RELEASE_MODES = ("cascade", "standalone", "none")
+ROLES = ("product",)
 DISPATCH_HEADING = "## Dispatch"
 SIBLING_LOOP = re.compile(r"for repo in ([\w ]+); do")
 
@@ -63,6 +64,8 @@ def validate(data: dict) -> List[str]:
             )
         if not unit.get("domain"):
             problems.append(f"{unit.get('path')}: no domain line")
+        if "role" in unit and unit["role"] not in ROLES:
+            problems.append(f"{unit.get('path')}: role must be one of {ROLES}")
     cascade = list(data.get("cascade") or [])
     if not cascade:
         # push.ps1 reads it raw: empty, it would release nothing in order.
@@ -96,6 +99,11 @@ def ecosystem_packages(data: Optional[dict] = None) -> Tuple[str, ...]:
     data = data or load()
     standalone = [u["path"] for u in data["units"] if u["release"] == "standalone"]
     return tuple(data["cascade"]) + tuple(standalone)
+
+
+def products(data: Optional[dict] = None) -> Tuple[str, ...]:
+    """The units no other package may import (``"role": "product"``)."""
+    return tuple(u["path"] for u in (data or load())["units"] if u.get("role") == "product")
 
 
 def domains(data: Optional[dict] = None) -> Dict[str, str]:

@@ -30,8 +30,9 @@ def _package(root: Path, files: dict) -> Path:
 
 class TestRealWorkspace(unittest.TestCase):
     def test_no_new_violation_beyond_the_baseline(self):
-        violations, problems = cl.scan()
+        violations, problems, strict = cl.scan()
         self.assertEqual(problems, [])
+        self.assertEqual({k: v for k, v in strict.items() if v}, {})
         baseline = cl.load_baseline()
         new = {
             pkg: [v for v in found if v not in set(baseline.get(pkg, []))]
@@ -90,6 +91,92 @@ class TestRules(unittest.TestCase):
             cl.part_of("core/engines/x", ["core", "core/engines"]), "core/engines"
         )
         self.assertIsNone(cl.part_of("corex/y", ["core"]))
+
+
+class TestProductAndRoles(unittest.TestCase):
+    """The rules strict from their first file: no other package imports the
+    product, and each part of a tool imports only what its role allows."""
+
+    FILES = {
+        "pkg/__init__.py": "",
+        "pkg/tools/__init__.py": "",
+        "pkg/tools/spin/__init__.py": "",
+        "pkg/tools/spin/model/__init__.py": "",
+        "pkg/tools/spin/model/plan.py": (
+            "import pythontk\n"
+            "def f():\n    import maya.cmds\n"  # a host, deferred: still counted
+        ),
+        "pkg/tools/spin/maya.py": "import maya.cmds\nimport mayatk\nimport bpy\n",
+        "pkg/tools/spin/blender.py": "import bpy\nimport blendertk\n",
+        "pkg/ui/__init__.py": "",
+        "pkg/ui/panels/__init__.py": "",
+        "pkg/ui/panels/spin/__init__.py": "",
+        "pkg/ui/panels/spin/slots.py": (
+            "import uitk\nfrom pkg.tools.spin import model\n"
+            "from pkg.tools.spin import maya\n"  # a host half in disguise
+        ),
+        "pkg/slots/__init__.py": "",
+        "pkg/slots/normals.py": "import mayatk\n",  # composed: holds
+        "pkg/slots/maya/__init__.py": "",
+        "pkg/slots/maya/legacy.py": "import maya.cmds\n",  # exempt until merged
+        "lib/__init__.py": "",
+        "lib/core.py": "def f():\n    from pkg.tools.spin import model\n",
+    }
+    ROLES = {
+        "groups": {
+            "maya": ["maya", "pymel", "mayatk"],
+            "blender": ["bpy", "bmesh", "mathutils", "blendertk"],
+            "halves": ["pkg.tools.*.maya", "pkg.tools.*.blender"],
+            "qt": ["qtpy", "uitk"],
+        },
+        "forbid": {
+            "tools/*/model": ["maya", "blender", "halves", "qt"],
+            "tools/*/maya": ["blender", "qt"],
+            "tools/*/blender": ["maya", "qt"],
+            "ui/panels": ["maya", "blender", "halves"],
+            "slots": ["maya", "blender", "halves"],
+            "slots/maya": [],
+        },
+    }
+
+    def test_no_other_package_imports_the_product(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _package(Path(tmp), self.FILES)
+            self.assertEqual(
+                cl.product_violations(repo, "lib", {"pkg"}),
+                {"core.py -> pkg.tools.spin.model"},
+            )
+            self.assertEqual(cl.product_violations(repo, "pkg", {"pkg"}), set())
+
+    def test_each_part_imports_only_what_its_role_allows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _package(Path(tmp), self.FILES)
+            found = cl.role_violations(repo, "pkg", self.ROLES)
+        self.assertEqual(
+            found,
+            {
+                "tools/spin/model/plan.py -> maya.cmds (tools/*/model)",
+                "tools/spin/maya.py -> bpy (tools/*/maya)",
+                "ui/panels/spin/slots.py -> pkg.tools.spin.maya (ui/panels)",
+                "slots/normals.py -> mayatk (slots)",
+            },
+        )
+
+    def test_a_role_naming_no_group_is_a_declaration_problem(self):
+        roles = {"groups": {"qt": ["qtpy"]}, "forbid": {"core": ["qt", "hots"]}}
+        self.assertEqual(
+            cl.role_problems(roles), ["role 'core' forbids unknown group 'hots'"]
+        )
+
+    def test_the_most_specific_role_wins(self):
+        forbid = self.ROLES["forbid"]
+        self.assertEqual(cl.role_of("slots/maya/legacy", forbid), "slots/maya")
+        self.assertEqual(cl.role_of("slots/normals", forbid), "slots")
+        self.assertEqual(cl.role_of("tools/spin/model/plan", forbid), "tools/*/model")
+        self.assertIsNone(cl.role_of("tools/spin", forbid))
+        self.assertTrue(cl.dotted_match("maya.cmds", "maya"))
+        self.assertFalse(cl.dotted_match("mayatk", "maya"))
+        self.assertTrue(cl.dotted_match("pkg.tools.spin.maya", "pkg.tools.*.maya"))
 
 
 class TestWebRuntime(unittest.TestCase):

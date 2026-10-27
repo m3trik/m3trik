@@ -3,7 +3,7 @@
     "The workspace declared as data: what cannot be measured about each unit (CODE_STANDARD section 0).",
     "Membership is measured, not listed here: a folder holding .git belongs (check_temp_artifacts.py).",
     "cascade: the release order push.ps1 walks; blendertk shares mayatk's tier, after it and before tentacle.",
-    "units: every front door with a CLAUDE.md, in root dispatch-table order. release is cascade, standalone (own publish.yml) or none.",
+    "units: every front door with a CLAUDE.md, in root dispatch-table order. release is cascade, standalone (own publish.yml) or none; role product marks the unit no other package may import (check_layers.py).",
     "Readers: push.ps1, generate_api_registry.py, generate_workspace_inventory.py, check_context_budget.py.",
     "Restatements (root CLAUDE.md dispatch table, CI sibling lists) are checked by scripts/sync_workspace.py --check."
   ],
@@ -13,7 +13,7 @@
     {"path": "uitk", "release": "cascade", "domain": "Generic Qt UI library; no DCC/app logic"},
     {"path": "mayatk", "release": "cascade", "domain": "Maya 2025+ host library (UI moving to tentacle)"},
     {"path": "blendertk", "release": "cascade", "domain": "Blender 4.x+ host library, mirrors mayatk (UI moving to tentacle)"},
-    {"path": "tentacle", "release": "cascade", "domain": "The product: every tool, panel and Slots class"},
+    {"path": "tentacle", "release": "cascade", "role": "product", "domain": "The product: every tool, panel and Slots class"},
     {"path": "unitytk", "release": "standalone", "domain": "Unity integration"},
     {"path": "server", "release": "none", "domain": "Linux infra, zero-trust secrets"},
     {"path": "m3trik", "release": "none", "domain": "PowerShell DevOps, release automation"},

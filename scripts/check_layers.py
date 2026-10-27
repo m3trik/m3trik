@@ -25,6 +25,25 @@ only downward. One rule, checked at two scales:
    or any part ranked below it; ``" | "`` joins peers of one rank, which may not
    import each other. Every top-level subpackage must be covered by a part.
 
+Two more rules are strict from their first file and are never frozen (CODE_STANDARD
+section 3):
+
+3. **The product.** No other package imports a unit ``workspace.json`` marks
+   ``"role": "product"`` (tentacle): a library stays usable without it.
+4. **Roles.** A package that declares ``[tool.m3trik.roles]`` names import groups
+   and, per path, the groups that path may not import::
+
+       [tool.m3trik.roles.groups]
+       maya = ["maya", "pymel", "mayatk"]
+       [tool.m3trik.roles.forbid]
+       "tools/*/model" = ["maya", "blender", "qt"]
+       "slots/maya" = []                    # exempt until its category merges
+
+   A path segment ``*`` matches any one segment and the most specific path wins;
+   a group lists dotted roots (``maya`` covers ``maya.cmds``, never ``mayatk``),
+   ``*`` again matching one segment. Imports through a package root name no
+   module and are not counted, as in rule 2.
+
 Counted: every runtime import, deferred ones included (a function-level import is
 still a dependency), except those under ``if TYPE_CHECKING:``. Imports through the
 package root (``from pythontk import X``) name no part and are not counted.
@@ -236,6 +255,45 @@ def expand_order(root: Path, order: List[List[str]]) -> List[List[str]]:
     return expanded
 
 
+def roles(data: dict) -> Optional[dict]:
+    """The declared ``{"groups": {...}, "forbid": {...}}``, or None."""
+    return data.get("tool", {}).get("m3trik", {}).get("roles")
+
+
+def role_problems(declared: dict) -> List[str]:
+    """What is wrong with a roles declaration itself."""
+    groups = declared.get("groups", {})
+    return [
+        f"role {path!r} forbids unknown group {name!r}"
+        for path, names in declared.get("forbid", {}).items()
+        for name in names
+        if name not in groups
+    ]
+
+
+def _segments_match(segments: Sequence[str], pattern: Sequence[str]) -> bool:
+    return len(pattern) <= len(segments) and all(
+        want in ("*", have) for have, want in zip(segments, pattern)
+    )
+
+
+def role_of(relative: str, forbid: dict) -> Optional[str]:
+    """The most specific declared role path *relative* (package-relative posix,
+    no suffix) falls under: most segments, then fewest wildcards."""
+    segments = relative.split("/")
+    matches = [
+        path for path in forbid if _segments_match(segments, path.split("/"))
+    ]
+    if not matches:
+        return None
+    return max(matches, key=lambda p: (p.count("/"), -p.count("*")))
+
+
+def dotted_match(target: str, pattern: str) -> bool:
+    """Whether import *target* is *pattern* or inside it, segment by segment."""
+    return _segments_match(target.split("."), pattern.split("."))
+
+
 def part_of(relative: str, parts: Sequence[str]) -> Optional[str]:
     """The longest declared part that *relative* (package-relative posix) is in."""
     best = None
@@ -309,6 +367,32 @@ def layer_violations(repo: Path, package: str, order: List[List[str]]) -> Set[st
     return found
 
 
+def product_violations(repo: Path, package: str, products: Set[str]) -> Set[str]:
+    """Imports of a product by any package other than that product."""
+    found = set()
+    for path, parts in iter_modules(repo, package):
+        for target in module_imports(repo, path, parts):
+            head = target.split(".")[0]
+            if head in products and head != package:
+                found.add(f"{_rel(repo, package, path)} -> {target}")
+    return found
+
+
+def role_violations(repo: Path, package: str, declared: dict) -> Set[str]:
+    """Imports a module's role forbids, each named with the role that forbids it."""
+    groups, forbid = declared.get("groups", {}), declared.get("forbid", {})
+    found = set()
+    for path, dotted in iter_modules(repo, package):
+        role = role_of(_rel(repo, package, path, suffix=False), forbid)
+        if role is None:
+            continue
+        patterns = [p for name in forbid[role] for p in groups.get(name, [])]
+        for target in module_imports(repo, path, dotted):
+            if any(dotted_match(target, p) for p in patterns):
+                found.add(f"{_rel(repo, package, path)} -> {target} ({role})")
+    return found
+
+
 def _rel(repo: Path, package: str, path: Path, suffix: bool = True) -> str:
     rel = path.relative_to(repo / package)
     if not suffix:
@@ -318,24 +402,37 @@ def _rel(repo: Path, package: str, path: Path, suffix: bool = True) -> str:
     return rel.as_posix()
 
 
-def scan(workspace: Path = WORKSPACE) -> Tuple[Dict[str, List[str]], List[str]]:
-    """({package: sorted violations}, [declaration problems]) over the registry set."""
-    ecosystem = _sync_workspace().ecosystem_packages()
+def scan(
+    workspace: Path = WORKSPACE,
+) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[str]]]:
+    """({package: sorted violations}, [declaration problems], {package: sorted
+    strict violations}) over the registry set. Strict ones are never frozen."""
+    sync = _sync_workspace()
+    ecosystem = sync.ecosystem_packages()
+    products = set(sync.products())
     violations: Dict[str, List[str]] = {}
+    strict: Dict[str, List[str]] = {}
     problems: List[str] = []
     for package in ecosystem:
         repo = workspace / package
         if not (repo / "pyproject.toml").is_file():
             continue  # partial checkout
+        data = pyproject(repo)
         found = chain_violations(repo, package, ecosystem)
-        order = layer_order(pyproject(repo))
+        order = layer_order(data)
         if order is not None:
             problems += [
                 f"{package}: {p}" for p in order_problems(repo, package, order)
             ]
             found |= layer_violations(repo, package, order)
         violations[package] = sorted(found)
-    return violations, problems
+        hard = product_violations(repo, package, products)
+        declared = roles(data)
+        if declared is not None:
+            problems += [f"{package}: {p}" for p in role_problems(declared)]
+            hard |= role_violations(repo, package, declared)
+        strict[package] = sorted(hard)
+    return violations, problems, strict
 
 
 # -------------------------------------------------------------------- CLI
@@ -367,14 +464,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    violations, problems = scan()
+    violations, problems, strict = scan()
     for problem in problems:
         print(f"[FAIL] declaration: {problem}")
+    for package, found in strict.items():
+        for violation in found:
+            print(f"[FAIL] {package}: {violation} (strict: never frozen)")
+    strict_total = sum(len(v) for v in strict.values())
     if args.update:
         write_baseline(violations)
         total = sum(len(v) for v in violations.values())
         print(f"[WROTE] {BASELINE.name}: {total} frozen violation(s)")
-        return 1 if problems else 0
+        return 1 if problems or strict_total else 0
 
     baseline = load_baseline()
     new_total = 0
@@ -391,7 +492,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"[{'FAIL' if new else 'OK'}] {package}: {len(new)} new, "
             f"{len(found) - len(new)} frozen"
         )
-    return 1 if new_total or problems else 0
+    return 1 if new_total or problems or strict_total else 0
 
 
 if __name__ == "__main__":

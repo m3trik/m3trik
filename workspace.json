@@ -4,9 +4,11 @@
     "Membership is measured, not listed here: a folder holding .git belongs (check_temp_artifacts.py).",
     "cascade: the release order push.ps1 walks; blendertk shares mayatk's tier, after it and before tentacle.",
     "units: every front door with a CLAUDE.md, in root dispatch-table order. release is cascade, standalone (own publish.yml) or none; role product marks the unit no other package may import (check_layers.py).",
+    "line_budget: the ceiling on the registry set's source lines -- non-blank lines of the .py files a release would commit, outside test/ (check_context_budget.py counts them; push.ps1 refuses a release past it). Set 2026-10-26 to the count then; raised or lowered as docs/CONTEXT_BUDGET.md says.",
     "Readers: push.ps1, generate_api_registry.py, generate_workspace_inventory.py, check_context_budget.py.",
     "Restatements (root CLAUDE.md dispatch table, CI sibling lists) are checked by scripts/sync_workspace.py --check."
   ],
+  "line_budget": 658865,
   "cascade": ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"],
   "units": [
     {"path": "pythontk", "release": "cascade", "domain": "Core utils — DCC-agnostic, zero-dep"},

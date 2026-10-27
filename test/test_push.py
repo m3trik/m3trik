@@ -938,6 +938,41 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("Conflict markers found in pyproject.toml", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_release_stops_at_the_layout_guardrails_before_committing(self):
+        """The release loop runs ``Test-LayoutGuardrails`` per package after its
+        safety preflight: a library that imports tentacle is refused before
+        Prepare commits anything."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(
+                root, "uitk", "1.0.52", ["qtpy", "pythontk==0.7.51"]
+            )
+            (repo / "uitk" / "bridge.py").write_text(
+                "def f():\n    import tentacle\n", encoding="utf-8"
+            )
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "a library reaches up")
+            head = self._git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            result = self._run(
+                [
+                    POWERSHELL, "-ExecutionPolicy", "Bypass", "-File",
+                    str(M3TRIK_DIR / "push.ps1"), "-Root", str(root),
+                    "-Packages", "uitk", "-Strict", "-Merge", "-SkipReview",
+                    "-SkipBuild", "-SkipWorkflowWait", "-SkipPypiCheck",
+                ],
+                cwd=root,
+                timeout=120,
+            )
+            out = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, out)
+            self.assertIn("bridge.py -> tentacle", out)
+            self.assertIn("Layout guardrails failed", out)
+            self.assertEqual(
+                self._git(repo, "rev-parse", "HEAD").stdout.strip(), head, out
+            )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_fails_when_remote_main_has_conflict_markers(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -2525,6 +2560,42 @@ else:
             self.assertIn("No changes to push and fully merged", out2)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_merged_release_finishes_though_dev_broke_a_guardrail_since(self):
+        """Finalize commits nothing of dev, so the layout's guardrails run after
+        it: a merged-but-untagged release is tagged even when dev has since
+        gained a violation, which then stops only the next release."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._retarget_origin_to_github(repo, origin, "m3trik/pythontk")
+            self._git(repo, "checkout", "dev")
+            (repo / "pythontk" / "__init__.py").write_text(
+                '__package__ = "pythontk"\n__version__ = "0.1.1"\n', encoding="utf-8"
+            )
+            entry = f"- **{self._commit_date(repo, 'v0.1.0')} -- the fix.**"
+            (repo / "CHANGELOG.md").write_text(f"# log\n\n{entry}\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "Release 0.1.1")
+            self._git(repo, "checkout", "main")
+            self._git(repo, "merge", "--no-ff", "dev", "-m", "Merge dev")
+            self._git(repo, "push", "origin", "main")
+            self._git(repo, "checkout", "dev")
+            self._git(repo, "push", "origin", "dev")
+            (repo / "pythontk" / "bridge.py").write_text(
+                "def f():\n    import tentacle\n", encoding="utf-8"
+            )
+            env = self._install_fake_gh(root, "{}")
+
+            result = self._run(
+                self._release_cmd(root, "pythontk"), cwd=root, timeout=240, env=env
+            )
+            out = result.stdout + result.stderr
+            self.assertIn("Tagged v0.1.1", out)
+            self.assertIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
+            self.assertIn("Layout guardrails failed", out)
+            self.assertNotEqual(result.returncode, 0, out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_finalize_creates_a_missing_release_when_the_tag_exists(self):
         """`tag exists` must not hide `Release missing` (the tag is pushed first)."""
         with tempfile.TemporaryDirectory() as td:
@@ -2745,6 +2816,50 @@ else:
             out = foreign.stdout + foreign.stderr
             self.assertIn("RESULT=False", foreign.stdout, out)
             self.assertIn("notes.md", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_the_line_budget_gate_counts_the_released_tree(self):
+        """``Test-LineBudget`` runs check_context_budget.py --line-budget over
+        the run's packages (the past-the-budget exit is unit-tested there)."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.1.0", [])
+            script = M3TRIK_DIR / "scripts" / "check_context_budget.py"
+            result = self._run_push_functions(
+                root,
+                f"$ok = Test-LineBudget '{root}' @('pythontk') -Script '{script}'\n"
+                'Write-Output "RESULT=$ok"\n',
+            )
+            out = result.stdout + result.stderr
+            self.assertIn("RESULT=True", result.stdout, out)
+            self.assertIn("headroom", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_the_layout_gate_stops_a_library_that_imports_the_product(self):
+        """``Test-LayoutGuardrails`` runs check_layers.py and the written-once
+        rule over the packages a run would release, so a library importing
+        tentacle stops the release before anything is pushed."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", [])
+            scripts = M3TRIK_DIR / "scripts"
+            call = (
+                f"$ok = Test-LayoutGuardrails '{root}' @('pythontk') "
+                f"-Layers '{scripts / 'check_layers.py'}' "
+                f"-Twins '{scripts / 'check_dcc_twins.py'}' "
+                f"-Saved '{scripts / 'check_saved_names.py'}'\n"
+                'Write-Output "RESULT=$ok"\n'
+            )
+            clean = self._run_push_functions(root, call)
+            self.assertIn("RESULT=True", clean.stdout, clean.stdout + clean.stderr)
+
+            (repo / "pythontk" / "bridge.py").write_text(
+                "def f():\n    import tentacle\n", encoding="utf-8"
+            )
+            wired = self._run_push_functions(root, call)
+            out = wired.stdout + wired.stderr
+            self.assertIn("RESULT=False", wired.stdout, out)
+            self.assertIn("bridge.py -> tentacle", out)
 
     def test_the_public_hygiene_gate_fails_when_python_cannot_run(self):
         """A stale ``$LASTEXITCODE`` of 0 must not pass a check that never ran.

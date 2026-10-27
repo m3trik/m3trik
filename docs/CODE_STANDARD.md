@@ -35,7 +35,7 @@ Style is PEP 8 as `ruff` applies it: `ruff format` (Black-compatible, 88 columns
 
 - **While building**, don't hand-police style. `ruff check --select E9,F82` is still worth a run before a slow DCC test: it catches syntax errors and undefined names, and stays quiet on legacy findings.
 - **Before it lands** (commit, release review): `ruff format` the files you created and fix the `ruff check` findings you introduced (an "unused" import can be load-bearing: `.ui` headers, `DEFAULT_INCLUDE`). Reformat an existing file only when you are rewriting most of it, never as a drive-by: it buries the real change and collides with concurrent sessions.
-- CI gates `ruff check` in pythontk, uitk, blendertk, unitytk and extapps; the mayatk/tentacle gate and the whole-tree format pass wait on an idle tree ([`.claude/FUTURE.md`](../../.claude/FUTURE.md), 2026-08-22).
+- CI gates `ruff check` in pythontk, uitk, blendertk, tentacle, unitytk and extapps (tentacle's also carries the layout's guardrails, §3); the mayatk gate and the whole-tree format pass wait on an idle tree ([`.claude/FUTURE.md`](../../.claude/FUTURE.md), 2026-08-22).
 
 ## 2. Docstrings and type hints
 
@@ -69,6 +69,7 @@ Which type for which need -- the Python spelling of a toolbox each host spells i
 - **Subpackage shape**: mirror the layout of the existing ones (`file_utils/mesh_convert/`, `engines/textures/map_factory/`, mayatk `anim_utils/smart_bake/`). `__init__.py` is a docstring, plus one `lazy_exports` call when the subpackage publishes names (§4). `_<feature>.py` holds the facade / orchestrator class, so the public name survives the promotion unchanged. Siblings are named for the concept they hold (`glb/reader.py`, `fbx_media.py`), never for a role (`utils.py`, `helpers.py`, `common.py`, `misc.py`): a role name accepts anything, so it becomes the grab-bag. The folder is named for the domain noun. Layouts that predate these rules (`lightmap_baker/lightmap_baker.py` without the `_`) stay until a real change touches them: never a churn-only rename. Moving or promoting a module: §14.
 - **A tool lives in tentacle once.** `tentacle/tools/<tool>/` holds `model/` (host-free, tested in CI without a DCC), the adapter Protocol, and `maya.py` / `blender.py`, the two halves (§0); its panel is `tentacle/ui/panels/<panel>/` (the `.ui` + one Slots class both hosts share); a model several tools share is `tentacle/core/<engine>/`, ranked below `tools/`. A generic tool keeps its operation in mayatk / blendertk and only its panel moves. A tool not yet moved keeps its legacy DCC subpackage (`_<tool>.py` + `<tool>_slots.py` + `<tool>.ui`) and its twin at the same relative path, mapped in [`blendertk/docs/STRUCTURE.md`](../../blendertk/docs/STRUCTURE.md); nothing new is built in that shape.
 - Slots classes are `<Base>Slots`, one per panel or marking-menu category, shared by both hosts: composed, never subclassed per host. Host behavior reaches them through the tool's API or `self.tk`, the toolkit the host's entry point injects. The loader tries `<Base>Slots` before `<Base>`.
+- **The layout's guardrails are checks**, strict on the new layout from its first file and never frozen: small objects (ruff `C901` over 20, `PLR0904` over 60 public methods, `PLR0915` over 100 statements, in tentacle's `pyproject.toml`); each part importing only what its role allows, and no other package importing tentacle (`check_layers.py`, `[tool.m3trik.roles]`); a body of 8+ lines written once (`check_dcc_twins.py --written-once`). They run on each package's pull requests, in m3trik's CI and in `push.ps1`; unmoved code sits in ruff's per-file ignores and the per-host `slots/maya`, `slots/blender` roles, which shrink as each tool or category moves.
 
 ## 4. Encapsulation and imports
 
@@ -89,6 +90,8 @@ Which type for which need -- the Python spelling of a toolbox each host spells i
 Public APIs are contracts; `blendertk` mirrors `mayatk`'s at the name + behavior level so tentacle's shared Slots stay branch-free, and an operation a shared panel calls matches in signature too.
 
 **A name leaving a library for tentacle** gets no alias: the library's moved-names table lists it, and the root resolver turns a lookup of a listed name into an error naming its new home and the version it moved in. One table per library replaces an alias per name, keeps every library from importing tentacle, and never duplicates a class's state. The move is a minor bump with a `CHANGELOG.md` line, and our own callers move in the same change set. Every other rename, move or removal follows the steps below.
+
+**Saved names never move with the code.** A panel's `.ui` stem and widget `objectName`s, which its users' settings and presets are stored under, and the `SceneRecords` keys a scene's records live under (with each key's `renamed_from` names, which older scenes still use), keep their spelling through any move or merge. `check_saved_names.py` freezes them by name, not path, and fails on one that disappears; a name that goes on purpose leaves through its `--update`, with the reason in the commit.
 
 When a public name must be renamed, moved or removed:
 

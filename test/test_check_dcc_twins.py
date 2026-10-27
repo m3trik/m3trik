@@ -297,6 +297,21 @@ class WrittenOnceTest(unittest.TestCase):
         self.assertIn("tools/spin/blender.py:1 plan", found[0])
         self.assertIn("tools/spin/maya.py:1 plan", found[0])
 
+    def test_only_files_a_release_commits_are_compared(self):
+        """A gitignored copy (a generated ``*_ui.py``) is not compared, here or
+        in CI, whose checkout never has it; the same copy committed is."""
+        import subprocess
+
+        root = self.tree({
+            "tentacle/.gitignore": "*_ui.py\n",
+            "tentacle/tentacle/tools/spin/maya.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/tools/spin/spin_ui.py": "def plan(count):\n" + self.LOGIC,
+        })
+        subprocess.run(["git", "init", "-q", os.path.join(root, "tentacle")], check=True)
+        self.assertEqual(gate.written_once_violations(root), [])
+        os.remove(os.path.join(root, "tentacle", ".gitignore"))
+        self.assertEqual(len(gate.written_once_violations(root)), 1)
+
     def test_a_layout_copy_of_library_code_is_a_copy(self):
         root = self.tree({
             "tentacle/tentacle/core/radial/plan.py": "def lay_out(count):\n" + self.LOGIC,

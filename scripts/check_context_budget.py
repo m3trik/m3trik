@@ -22,6 +22,14 @@ Checks
             ecosystem package its pyproject.toml declares (hand-written nav
             must not lag the declared dependency graph).
   REGISTRY  generate_api_registry.py --check (registries fresh vs source).
+  LINES     the registry set's source lines against workspace.json's
+            line_budget: non-blank lines of the .py files outside test/.
+            Reported here (WARN past it) over every working tree; the release
+            gate is ``--line-budget <pkg ...>``, which push.ps1 runs per
+            package and which exits 1 past it, so growth is a decision with a
+            CHANGELOG line. The gate counts the named packages as the release
+            would commit them and every other package as committed, so another
+            session's work in progress never stops a release.
 
 FAIL exits non-zero (CI gate). WARN is advisory and never fails the build.
 
@@ -31,6 +39,7 @@ Usage
   python check_context_budget.py --no-registry    # skip the (slower) registry walk
   python check_context_budget.py --no-memory      # repo-only (e.g. on a CI box)
   python check_context_budget.py --memory-dir PATH
+  python check_context_budget.py --line-budget [pkg ...]   # the release gate
 """
 from __future__ import annotations
 
@@ -41,6 +50,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Iterable
 
 try:
     import tomllib  # 3.11+ (CI and the workspace venv)
@@ -344,6 +354,102 @@ def _ecosystem_packages() -> tuple[str, ...]:
     return _sync_workspace().ecosystem_packages()
 
 
+def _line_budget() -> int | None:
+    """``line_budget`` from ``m3trik/workspace.json``: the ceiling on source lines."""
+    return _sync_workspace().load().get("line_budget")
+
+
+def _non_blank(data: bytes) -> int:
+    """Non-blank lines of a source file's bytes, whatever its line endings."""
+    text = data.decode("utf-8", errors="ignore").replace("\r\n", "\n").replace("\r", "\n")
+    return sum(1 for line in text.split("\n") if line.strip())
+
+
+def _working_lines(repo: Path) -> int:
+    """*repo*'s source lines as a release would commit them: tracked, or new
+    and not ignored."""
+    listed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "--cached", "--others",
+         "--exclude-standard", "-z", "--", "*.py"],
+        capture_output=True, text=True, encoding="utf-8",
+    ).stdout.split("\0")
+    return sum(
+        _non_blank((repo / rel).read_bytes())
+        for rel in listed
+        if rel and rel.split("/")[0] != "test" and (repo / rel).is_file()
+    )
+
+
+def _committed_lines(repo: Path) -> int:
+    """*repo*'s source lines as its ``HEAD`` holds them (0 before a commit)."""
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-r", "-z", "HEAD"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    oids = []
+    for entry in tree.stdout.split("\0") if tree.returncode == 0 else ():
+        meta, _, rel = entry.partition("\t")
+        parts = meta.split()
+        if len(parts) == 3 and parts[1] == "blob" and rel.endswith(".py"):
+            if rel.split("/")[0] != "test":
+                oids.append(parts[2])
+    if not oids:
+        return 0
+    blobs = subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "--batch"],
+        input="\n".join(oids).encode() + b"\n", capture_output=True,
+    ).stdout
+    lines, at = 0, 0
+    for _ in oids:  # each: "<oid> blob <size>\n<content>\n"
+        header_end = blobs.index(b"\n", at)
+        size = int(blobs[at:header_end].split()[2])
+        lines += _non_blank(blobs[header_end + 1:header_end + 1 + size])
+        at = header_end + 1 + size + 1
+    return lines
+
+
+def source_lines(
+    workspace: Path = REPO_ROOT, released: Iterable[str] | None = None
+) -> dict[str, int]:
+    """Non-blank lines of each registry-set package's ``.py`` files outside its
+    ``test/``: a package in *released* (default: every one) as the release
+    would commit it, any other as committed."""
+    released = None if released is None else set(released)
+    counts = {}
+    for pkg in _ecosystem_packages():
+        repo = workspace / pkg
+        if not (repo / ".git").exists():
+            continue  # partial checkout
+        working = released is None or pkg in released
+        counts[pkg] = _working_lines(repo) if working else _committed_lines(repo)
+    return counts
+
+
+def check_line_budget(
+    report: Report,
+    workspace: Path = REPO_ROOT,
+    budget: int | None = None,
+    released: Iterable[str] | None = None,
+) -> int:
+    """Report the source lines (:func:`source_lines`) against the budget;
+    returns how far over it they are (0 within it). Advisory here: the release
+    gate is ``--line-budget``."""
+    budget = _line_budget() if budget is None else budget
+    if budget is None:
+        report.warn("LINES: workspace.json declares no line_budget - skipped")
+        return 0
+    total = sum(source_lines(workspace, released).values())
+    if total <= budget:
+        report.ok(f"LINES: {total:,} of {budget:,} source lines ({budget - total:,} headroom)")
+        return 0
+    report.warn(
+        f"LINES: {total:,} source lines, {total - budget:,} over the line budget "
+        f"({budget:,}): trim, or raise workspace.json line_budget with a CHANGELOG "
+        "line that names the growth"
+    )
+    return total - budget
+
+
 def check_dispatch(report: Report) -> None:
     root = REPO_ROOT / "CLAUDE.md"
     if not root.exists():
@@ -464,6 +570,7 @@ def run_checks(
     check_dispatch(report)
     check_claude_links(report)
     check_nav_deps(report)
+    check_line_budget(report)
     if do_registry:
         check_registry_fresh(report)
     if do_runtime:
@@ -479,7 +586,26 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-registry", action="store_true", help="skip the (slower) registry --check walk")
     ap.add_argument("--no-runtime", action="store_true", help="skip the runtime-vs-static drift check (imports pythontk)")
     ap.add_argument("--no-memory", action="store_true", help="skip memory-dir checks (repo-only)")
+    ap.add_argument(
+        "--line-budget", action="store_true",
+        help="the release gate: only the line budget, exit 1 past it",
+    )
+    ap.add_argument("--workspace", type=Path, default=REPO_ROOT, help="with --line-budget: the monorepo root")
+    ap.add_argument(
+        "packages", nargs="*",
+        help="with --line-budget: check only when one is in the registry set",
+    )
     args = ap.parse_args(argv)
+
+    if args.line_budget:
+        if args.packages and not set(args.packages) & set(_ecosystem_packages()):
+            print("Line budget: none of these packages is in the registry set.")
+            return 0
+        report = Report()
+        over = check_line_budget(report, args.workspace, released=args.packages or None)
+        for m in report.oks + report.warns:
+            print(f"  {m}")
+        return 1 if over else 0
 
     report = run_checks(
         args.memory_dir,

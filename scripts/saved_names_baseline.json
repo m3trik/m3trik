@@ -1,0 +1,2920 @@
+{
+ "_doc": "The names saved data reads, frozen by name (check_saved_names.py): each .ui stem's widget names and the SceneRecords keys with their renamed_from names. A name that goes on purpose leaves with a reason in the commit. Rewrite: check_saved_names.py --update.",
+ "ui": {
+  "add#submenu": [
+   "QtUi",
+   "i003",
+   "widget"
+  ],
+  "animation": [
+   "QtUi",
+   "alignment",
+   "central_widget",
+   "footer",
+   "header",
+   "keys",
+   "list000",
+   "selection",
+   "tb000",
+   "tb001",
+   "tb002",
+   "tb003",
+   "tb004",
+   "tb005",
+   "tb006",
+   "tb007",
+   "tb008",
+   "tb009",
+   "tb010",
+   "tb011",
+   "tb012",
+   "tb013",
+   "tb014",
+   "tb017",
+   "tb018",
+   "tb019",
+   "transform"
+  ],
+  "animation#submenu": [
+   "QtUi",
+   "b005",
+   "i013",
+   "i016",
+   "list000",
+   "tb000",
+   "tb002",
+   "tb006",
+   "tb010",
+   "tb012",
+   "tb017",
+   "tb018",
+   "widget"
+  ],
+  "armature#submenu": [
+   "QtUi",
+   "i007",
+   "widget"
+  ],
+  "arnold#submenu": [
+   "QtUi",
+   "i027",
+   "widget"
+  ],
+  "arnold_bridge": [
+   "QtUi",
+   "b000",
+   "b001",
+   "central_widget",
+   "chk000",
+   "cmb000",
+   "footer",
+   "header"
+  ],
+  "articulated_rig": [
+   "QtUi",
+   "btn_analyze",
+   "btn_build",
+   "btn_clear_limits",
+   "btn_fold",
+   "btn_grab",
+   "btn_ik_fk",
+   "btn_insert",
+   "btn_limits_from_pose",
+   "btn_rebuild",
+   "btn_remove",
+   "btn_rest",
+   "central_widget",
+   "chk_adjust",
+   "chk_end_control",
+   "cmb_insert_type",
+   "cmb_source",
+   "footer",
+   "grp_edit",
+   "grp_pose",
+   "grp_setup",
+   "header",
+   "output_grp",
+   "tbl_joints",
+   "txt003",
+   "txt_name"
+  ],
+  "audio_clips": [
+   "audio_clips",
+   "b003",
+   "b004",
+   "centralwidget",
+   "clips_group",
+   "cmb000",
+   "footer",
+   "header",
+   "key_group",
+   "move_group",
+   "range_group",
+   "s000",
+   "s001",
+   "tb001",
+   "tracks_group",
+   "trim_group"
+  ],
+  "bevel": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "chk000",
+   "duplicate",
+   "footer",
+   "header",
+   "s000",
+   "s001"
+  ],
+  "blender#startmenu": [
+   "QtUi",
+   "i001",
+   "i002",
+   "i003",
+   "i004",
+   "i005",
+   "i006",
+   "i007",
+   "i008",
+   "main",
+   "region_A",
+   "region_B",
+   "staticWindow",
+   "widget",
+   "widget_A",
+   "widget_B"
+  ],
+  "blender_bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "blendshape_animator": [
+   "b000",
+   "b001",
+   "b003",
+   "b004",
+   "b005",
+   "b006",
+   "b007",
+   "b008",
+   "blendshape_animator",
+   "centralwidget",
+   "cmb000",
+   "diagnostics_group",
+   "edit_group",
+   "export_group",
+   "footer",
+   "header",
+   "le000",
+   "le001",
+   "s000",
+   "s001",
+   "s003",
+   "setup_group",
+   "tree000"
+  ],
+  "bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "chk000",
+   "chk001",
+   "cmb000",
+   "duplicate",
+   "footer",
+   "header",
+   "s000",
+   "s001",
+   "s002",
+   "s003",
+   "s004"
+  ],
+  "cache#submenu": [
+   "QtUi",
+   "i040",
+   "widget"
+  ],
+  "calculator": [
+   "QtUi",
+   "btn_convert",
+   "calc_container",
+   "central_widget",
+   "cmb_unit_from",
+   "cmb_unit_to",
+   "footer",
+   "grp_units",
+   "header",
+   "label",
+   "maya_container",
+   "txt_display"
+  ],
+  "cameras#lower#submenu": [
+   "QtUi",
+   "i000",
+   "list000",
+   "staticWindow",
+   "widget"
+  ],
+  "cameras#startmenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "b004",
+   "b005",
+   "b006",
+   "b007",
+   "b010",
+   "b011",
+   "b012",
+   "b013",
+   "i000",
+   "region",
+   "region_2",
+   "region_3",
+   "region_4",
+   "region_5",
+   "staticWindow",
+   "viewport",
+   "widget",
+   "widget_0"
+  ],
+  "channels": [
+   "centralwidget",
+   "channels",
+   "cmb000",
+   "footer",
+   "header",
+   "tbl000",
+   "txt000",
+   "txt001"
+  ],
+  "color_id": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "central_widget",
+   "chk000",
+   "chk001",
+   "chk002",
+   "chk003",
+   "chk004",
+   "chk005",
+   "chk006",
+   "chk007",
+   "chk008",
+   "chk009",
+   "chk010",
+   "chk011",
+   "chk012",
+   "chk013",
+   "chk014",
+   "chk015",
+   "chk016",
+   "footer",
+   "groupBox",
+   "groupBox_2",
+   "grp_palette",
+   "header"
+  ],
+  "compositor": [
+   "QtUi",
+   "central_widget",
+   "footer",
+   "header",
+   "output_grp",
+   "txt000",
+   "txt001",
+   "txt002",
+   "txt003"
+  ],
+  "constrain#submenu": [
+   "QtUi",
+   "i026",
+   "widget"
+  ],
+  "constraints#submenu": [
+   "QtUi",
+   "b020",
+   "widget"
+  ],
+  "control#submenu": [
+   "QtUi",
+   "i033",
+   "widget"
+  ],
+  "converter": [
+   "Formatting",
+   "QtUi",
+   "b000",
+   "b001",
+   "b004",
+   "b007",
+   "b010",
+   "b011",
+   "central_widget",
+   "footer",
+   "groupBox",
+   "groupBox_2",
+   "groupBox_3",
+   "header",
+   "tb000",
+   "tb001",
+   "tb002",
+   "tb003"
+  ],
+  "crease": [
+   "QtUi",
+   "b002",
+   "central_widget",
+   "footer",
+   "groupBox",
+   "header",
+   "tb000"
+  ],
+  "crease#submenu": [
+   "QtUi",
+   "i026",
+   "tb000",
+   "widget"
+  ],
+  "ctrl_points#submenu": [
+   "QtUi",
+   "b010",
+   "widget"
+  ],
+  "curtain": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "central_widget",
+   "chk000",
+   "chk001",
+   "chk004",
+   "chk005",
+   "cmb000",
+   "footer",
+   "grp_drape",
+   "grp_ends",
+   "grp_folds",
+   "grp_hang",
+   "grp_mesh",
+   "grp_rail",
+   "header",
+   "s000",
+   "s001",
+   "s002",
+   "s003",
+   "s004",
+   "s005",
+   "s006",
+   "s007",
+   "s008",
+   "s009",
+   "s010",
+   "s011",
+   "s012",
+   "s013",
+   "s014",
+   "s015",
+   "s016",
+   "s017",
+   "s018",
+   "s019",
+   "s020",
+   "s021",
+   "s022",
+   "s023",
+   "s024",
+   "s025",
+   "s026",
+   "s027"
+  ],
+  "curve#submenu": [
+   "QtUi",
+   "b010",
+   "b011",
+   "b012",
+   "i006",
+   "widget"
+  ],
+  "curve_to_tube": [
+   "QtUi",
+   "b000",
+   "b001",
+   "central_widget",
+   "chk000",
+   "chk001",
+   "chk003",
+   "chk004",
+   "cmb000",
+   "cmb_topology",
+   "curve_to_tube",
+   "footer",
+   "header",
+   "s000",
+   "s001",
+   "s002",
+   "s003"
+  ],
+  "curves#submenu": [
+   "QtUi",
+   "i045",
+   "widget"
+  ],
+  "cut_on_axis": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "chk000",
+   "chk001",
+   "chk002",
+   "chk003",
+   "chk004",
+   "chk005",
+   "chk006",
+   "cmb000",
+   "cmb001",
+   "duplicate",
+   "footer",
+   "header",
+   "s000",
+   "s001",
+   "s002",
+   "s003",
+   "s004"
+  ],
+  "deform#submenu": [
+   "QtUi",
+   "i020",
+   "widget"
+  ],
+  "deformation": [
+   "QtUi",
+   "central_widget",
+   "footer",
+   "groupBox",
+   "header",
+   "tb001"
+  ],
+  "deformation#submenu": [
+   "QtUi",
+   "i020",
+   "tb001",
+   "widget"
+  ],
+  "display": [
+   "QtUi",
+   "b013",
+   "b014",
+   "central_widget",
+   "footer",
+   "header"
+  ],
+  "display#submenu": [
+   "QtUi",
+   "b013",
+   "b014",
+   "i032",
+   "list000",
+   "widget"
+  ],
+  "duplicate": [
+   "QtUi",
+   "b000",
+   "b005",
+   "central_widget",
+   "footer",
+   "groupBox_7",
+   "header",
+   "tb000",
+   "tb001",
+   "tb002"
+  ],
+  "duplicate#submenu": [
+   "QtUi",
+   "b000",
+   "b005",
+   "b006",
+   "b007",
+   "b008",
+   "i025",
+   "tb000",
+   "tb001",
+   "widget"
+  ],
+  "duplicate_grid": [
+   "QtUi",
+   "b000",
+   "b001",
+   "central_widget",
+   "chk000",
+   "cmb000",
+   "duplicate",
+   "footer",
+   "header",
+   "s000",
+   "s001",
+   "s002",
+   "s003",
+   "s004",
+   "s005"
+  ],
+  "duplicate_linear": [
+   "QtUi",
+   "b000",
+   "b001",
+   "central_widget",
+   "chk000",
+   "cmb001",
+   "cmb002",
+   "cmb_inst",
+   "duplicate",
+   "footer",
+   "header",
+   "s000",
+   "s001",
+   "s002",
+   "s003",
+   "s004",
+   "s005",
+   "s006",
+   "s007",
+   "s008",
+   "s009",
+   "s010",
+   "s011"
+  ],
+  "duplicate_radial": [
+   "QtUi",
+   "b000",
+   "b001",
+   "central_widget",
+   "chk000",
+   "chk002",
+   "chk003",
+   "chk004",
+   "chk006",
+   "chk007",
+   "chk008",
+   "cmb000",
+   "cmb_inst",
+   "footer",
+   "header",
+   "radialArray",
+   "s000",
+   "s001",
+   "s002",
+   "s003",
+   "s004",
+   "s005",
+   "s006",
+   "s007",
+   "s008",
+   "s009",
+   "s010",
+   "s011",
+   "s012",
+   "s013",
+   "s014",
+   "s015",
+   "s016"
+  ],
+  "dynamic_pipe": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "create_network_group",
+   "footer",
+   "header",
+   "main_group",
+   "progressBar"
+  ],
+  "edge#submenu": [
+   "QtUi",
+   "b001",
+   "widget"
+  ],
+  "edit": [
+   "QtUi",
+   "central_widget",
+   "cmb000",
+   "delete_2",
+   "footer",
+   "header",
+   "mesh_cleanup",
+   "nodes",
+   "tb000",
+   "tb001",
+   "tb002",
+   "tb004",
+   "transfer"
+  ],
+  "edit#submenu": [
+   "QtUi",
+   "b000",
+   "b_channels",
+   "i007",
+   "i025",
+   "i057",
+   "list000",
+   "list001",
+   "tb000",
+   "tb001",
+   "tb002",
+   "widget"
+  ],
+  "edit_mesh#submenu": [
+   "QtUi",
+   "i042",
+   "widget"
+  ],
+  "editors#lower#submenu": [
+   "QtUi",
+   "i000",
+   "list000",
+   "staticWindow",
+   "widget"
+  ],
+  "editors#startmenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "b004",
+   "b005",
+   "b006",
+   "b007",
+   "b008",
+   "b009",
+   "b010",
+   "b011",
+   "b012",
+   "b013",
+   "i000",
+   "region",
+   "region_2",
+   "region_3",
+   "region_4",
+   "staticWindow",
+   "widget",
+   "widget_0",
+   "widget_2",
+   "widget_3"
+  ],
+  "effects#submenu": [
+   "QtUi",
+   "i024",
+   "i034",
+   "i035",
+   "i036",
+   "i037",
+   "i038",
+   "i039",
+   "i040",
+   "widget"
+  ],
+  "emissive_groups": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "central_widget",
+   "footer",
+   "header",
+   "tb000",
+   "tbl000",
+   "txt000"
+  ],
+  "example": [
+   "QtUi",
+   "button_a",
+   "button_b",
+   "central_widget",
+   "checkbox",
+   "cmb_options",
+   "cmb_view",
+   "footer",
+   "header",
+   "input_group",
+   "main_splitter",
+   "output_group",
+   "spinbox",
+   "tree_demo",
+   "tree_group",
+   "txt_input",
+   "txt_output"
+  ],
+  "exploded_view": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "central_widget",
+   "footer",
+   "groupBox",
+   "header"
+  ],
+  "face#submenu": [
+   "QtUi",
+   "b002",
+   "widget"
+  ],
+  "fields_solvers#submenu": [
+   "QtUi",
+   "i039",
+   "widget"
+  ],
+  "fluids#submenu": [
+   "QtUi",
+   "i038",
+   "widget"
+  ],
+  "game_shader": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb001",
+   "cmb002",
+   "cmb003",
+   "cmb004",
+   "cmb005",
+   "extension_grp",
+   "footer",
+   "header",
+   "main_grp",
+   "material_name_grp",
+   "normal_output_grp",
+   "output_grp",
+   "output_template_grp",
+   "txt000",
+   "txt001",
+   "txt002"
+  ],
+  "gaussian_splat_workflow": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "generate#submenu": [
+   "QtUi",
+   "i047",
+   "widget"
+  ],
+  "hdr_manager": [
+   "QtUi",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "hdr_advanced_group",
+   "hdr_levels_group",
+   "hdr_options_group",
+   "hdr_rotation_group",
+   "header",
+   "main_group",
+   "slider000",
+   "spn_diffuse",
+   "spn_exposure",
+   "spn_intensity",
+   "spn_resolution",
+   "spn_samples",
+   "spn_specular"
+  ],
+  "help#submenu": [
+   "QtUi",
+   "b031",
+   "i050",
+   "widget"
+  ],
+  "hierarchy_sync": [
+   "QtUi",
+   "central_widget",
+   "cmb_diff_options",
+   "cmb_pull_options",
+   "footer",
+   "header",
+   "output",
+   "tb001",
+   "tb002",
+   "tb003",
+   "tree000",
+   "tree001",
+   "txt003"
+  ],
+  "hud#startmenu": [
+   "QtUi",
+   "hudTextEdit",
+   "hud_widget"
+  ],
+  "ik#submenu": [
+   "QtUi",
+   "b021",
+   "widget"
+  ],
+  "image_to_plane": [
+   "b000",
+   "b001",
+   "b002",
+   "b004",
+   "centralwidget",
+   "cmb_mat_type",
+   "create_group",
+   "footer",
+   "header",
+   "image_to_plane",
+   "images_group",
+   "lst_files",
+   "manage_group",
+   "settings_group",
+   "spn_height",
+   "txt_suffix"
+  ],
+  "image_tracer": [
+   "QtUi",
+   "b002",
+   "b003",
+   "b004",
+   "b005",
+   "central_widget",
+   "footer",
+   "header",
+   "s000",
+   "s001",
+   "txt000"
+  ],
+  "key#submenu": [
+   "QtUi",
+   "i006",
+   "i028",
+   "i030",
+   "i031",
+   "i032",
+   "widget"
+  ],
+  "key_stash": [
+   "b000",
+   "b001",
+   "b003",
+   "centralwidget",
+   "chk000",
+   "chk001",
+   "clip_group",
+   "cmb000",
+   "cmb001",
+   "footer",
+   "header",
+   "key_stash",
+   "store_group",
+   "tree000"
+  ],
+  "light_rig": [
+   "QtUi",
+   "b000",
+   "b001",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "header",
+   "main_group"
+  ],
+  "lighting": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "central_widget",
+   "footer",
+   "groupBox",
+   "header",
+   "tb000"
+  ],
+  "lighting#submenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "i014",
+   "widget"
+  ],
+  "lighting_shading#submenu": [
+   "QtUi",
+   "i027",
+   "widget"
+  ],
+  "lightmap_baker": [
+   "QtUi",
+   "b000",
+   "btn_reset_defaults",
+   "central_widget",
+   "cmb000",
+   "cmb002",
+   "cmb_device",
+   "cmb_page",
+   "cmb_resolution",
+   "cmb_scope",
+   "footer",
+   "grp_process",
+   "header",
+   "lbl_exclude",
+   "lbl_isolate",
+   "output_group",
+   "page_bake",
+   "page_manage",
+   "quality_group",
+   "set_exclusions",
+   "set_isolation",
+   "spn_bounces",
+   "spn_gi_samples",
+   "spn_samples",
+   "stk_pages",
+   "tbl_maps",
+   "txt000",
+   "txt_output_dir"
+  ],
+  "look_match": [
+   "QtUi",
+   "b_accept",
+   "b_discard",
+   "b_draw_ellipse",
+   "b_draw_line",
+   "b_draw_poly",
+   "b_draw_rect",
+   "b_edit_regions",
+   "b_fit",
+   "b_paint",
+   "b_redo",
+   "b_region_delete",
+   "b_reload",
+   "b_render",
+   "b_save_rig",
+   "b_solve",
+   "b_undo",
+   "b_update",
+   "central_widget",
+   "chk_all",
+   "cmb_a",
+   "cmb_b",
+   "cmb_mix",
+   "cmb_mode",
+   "cmb_session",
+   "cmb_solve",
+   "cmp_view",
+   "footer",
+   "frm_proposal",
+   "frm_region_tools",
+   "header",
+   "lbl_a",
+   "lbl_b",
+   "lbl_detail",
+   "lbl_headline",
+   "lbl_litby",
+   "lbl_mix",
+   "lbl_mix_title",
+   "lbl_proposal",
+   "lbl_session",
+   "lbl_trust",
+   "pane_mix",
+   "pane_regions",
+   "pane_view",
+   "spl_main",
+   "tbl_mix",
+   "tbl_regions"
+  ],
+  "main#lower#submenu": [
+   "QtUi",
+   "i000",
+   "list000",
+   "staticWindow",
+   "widget"
+  ],
+  "main#startmenu": [
+   "QtUi",
+   "i000",
+   "i003",
+   "i007",
+   "i009",
+   "i010",
+   "i011",
+   "i012",
+   "i013",
+   "i014",
+   "i015",
+   "i023",
+   "i060",
+   "main",
+   "region_A",
+   "region_B",
+   "region_B_inner",
+   "staticWindow",
+   "widget",
+   "widget_A",
+   "widget_B"
+  ],
+  "marmoset_bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "marmoset_workflow": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "mash#submenu": [
+   "QtUi",
+   "i031",
+   "widget"
+  ],
+  "mat_updater": [
+   "QtUi",
+   "b001",
+   "central_widget",
+   "cmb001",
+   "footer",
+   "header",
+   "output_grp",
+   "presets_grp",
+   "txt001"
+  ],
+  "materials": [
+   "QtUi",
+   "b006",
+   "central_widget",
+   "footer",
+   "header",
+   "tbl000",
+   "txt000"
+  ],
+  "materials#submenu": [
+   "QtUi",
+   "b003",
+   "b013",
+   "i005",
+   "i012",
+   "i018",
+   "list000",
+   "list001",
+   "widget"
+  ],
+  "maya#startmenu": [
+   "QtUi",
+   "i001",
+   "i002",
+   "i005",
+   "i006",
+   "i020",
+   "i024",
+   "i027",
+   "i046",
+   "main",
+   "region_A",
+   "region_B",
+   "staticWindow",
+   "widget",
+   "widget_A",
+   "widget_B"
+  ],
+  "maya_bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "mesh#submenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "b004",
+   "i001",
+   "i005",
+   "i042",
+   "i043",
+   "i044",
+   "i047",
+   "widget"
+  ],
+  "mesh_convert": [
+   "Convert_group",
+   "QtUi",
+   "central_widget",
+   "footer",
+   "groupBox_convert",
+   "header",
+   "tb000"
+  ],
+  "mesh_display#submenu": [
+   "QtUi",
+   "i044",
+   "widget"
+  ],
+  "mesh_normals#submenu": [
+   "QtUi",
+   "b004",
+   "widget"
+  ],
+  "mesh_tools#submenu": [
+   "QtUi",
+   "i043",
+   "widget"
+  ],
+  "mesh_uv#submenu": [
+   "QtUi",
+   "b003",
+   "widget"
+  ],
+  "metashape_workflow": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "mirror": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "chk000",
+   "chk001",
+   "chk002",
+   "chk003",
+   "chk004",
+   "chk006",
+   "chk007",
+   "cmb000",
+   "cmb001",
+   "duplicate",
+   "footer",
+   "header"
+  ],
+  "modifiers#submenu": [
+   "QtUi",
+   "b031",
+   "widget"
+  ],
+  "naming": [
+   "Formatting",
+   "Naming",
+   "QtUi",
+   "central_widget",
+   "footer",
+   "groupBox_5",
+   "header",
+   "output_grp",
+   "tb000",
+   "tb001",
+   "tb002",
+   "tb003",
+   "txt000",
+   "txt001",
+   "txt002"
+  ],
+  "ncloth#submenu": [
+   "QtUi",
+   "i034",
+   "widget"
+  ],
+  "nconstraint#submenu": [
+   "QtUi",
+   "i037",
+   "widget"
+  ],
+  "nhair#submenu": [
+   "QtUi",
+   "i036",
+   "widget"
+  ],
+  "normals": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b004",
+   "b006",
+   "central_widget",
+   "edge",
+   "footer",
+   "header",
+   "tb001",
+   "tb004",
+   "tb010",
+   "transfer"
+  ],
+  "normals#submenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b004",
+   "b006",
+   "i005",
+   "tb001",
+   "tb004",
+   "tb010",
+   "widget"
+  ],
+  "nparticles#submenu": [
+   "QtUi",
+   "i035",
+   "widget"
+  ],
+  "nurbs": [
+   "QtUi",
+   "Surfaces",
+   "b030",
+   "b056",
+   "b058",
+   "central_widget",
+   "footer",
+   "header",
+   "list000",
+   "tb000",
+   "tb001"
+  ],
+  "nurbs#submenu": [
+   "QtUi",
+   "b030",
+   "b056",
+   "b058",
+   "i011",
+   "list000",
+   "tb000",
+   "tb001",
+   "widget"
+  ],
+  "object#submenu": [
+   "QtUi",
+   "i004",
+   "i036",
+   "i037",
+   "widget"
+  ],
+  "object_animation#submenu": [
+   "QtUi",
+   "i030",
+   "i031",
+   "widget"
+  ],
+  "object_constraints#submenu": [
+   "QtUi",
+   "b030",
+   "widget"
+  ],
+  "packer": [
+   "Formatting",
+   "QtUi",
+   "b000",
+   "b001",
+   "central_widget",
+   "cmbA",
+   "cmbB",
+   "cmbFormat",
+   "cmbG",
+   "cmbMissing",
+   "cmbMode",
+   "cmbPreset",
+   "cmbR",
+   "footer",
+   "groupBox",
+   "header",
+   "lblA",
+   "lblB",
+   "lblG",
+   "lblR",
+   "txtSuffix"
+  ],
+  "pivot": [
+   "Pivot",
+   "QtUi",
+   "b004",
+   "central_widget",
+   "footer",
+   "header",
+   "tb000",
+   "tb001",
+   "tb002",
+   "tb003"
+  ],
+  "pivot#submenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b004",
+   "i061",
+   "tb000",
+   "tb003",
+   "widget"
+  ],
+  "playback#submenu": [
+   "QtUi",
+   "i032",
+   "widget"
+  ],
+  "polygons": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b003",
+   "b006",
+   "b009",
+   "b012",
+   "b022",
+   "b032",
+   "b034",
+   "b038",
+   "b043",
+   "b047",
+   "b049",
+   "b051",
+   "b053",
+   "central_widget",
+   "component",
+   "edge",
+   "face",
+   "footer",
+   "header",
+   "mesh",
+   "tb000",
+   "tb002",
+   "tb003",
+   "tb004",
+   "tb005",
+   "tb006",
+   "tb007",
+   "tb008",
+   "tb009",
+   "vertex"
+  ],
+  "polygons#component#submenu": [
+   "QtUi",
+   "b000",
+   "b003",
+   "b006",
+   "b007",
+   "b009",
+   "b011",
+   "b012",
+   "b022",
+   "b032",
+   "i011",
+   "tb003",
+   "tb005",
+   "widget"
+  ],
+  "polygons#edge#submenu": [
+   "QtUi",
+   "b047",
+   "i002",
+   "i026",
+   "widget"
+  ],
+  "polygons#face#submenu": [
+   "QtUi",
+   "b034",
+   "i003",
+   "tb006",
+   "widget"
+  ],
+  "polygons#mesh#submenu": [
+   "QtUi",
+   "b001",
+   "i004",
+   "tb002",
+   "tb004",
+   "tb008",
+   "widget"
+  ],
+  "polygons#submenu": [
+   "QtUi",
+   "i000",
+   "i002",
+   "i003",
+   "i004",
+   "i010",
+   "i011",
+   "widget"
+  ],
+  "polygons#vertex#submenu": [
+   "QtUi",
+   "b008",
+   "b043",
+   "i000",
+   "tb000",
+   "widget"
+  ],
+  "pose#submenu": [
+   "QtUi",
+   "b021",
+   "b022",
+   "i009",
+   "widget"
+  ],
+  "preferences": [
+   "QtUi",
+   "autosave",
+   "b001",
+   "b008",
+   "b009",
+   "b010",
+   "central_widget",
+   "chk_warn_autosave_off",
+   "chk_warn_autosave_open",
+   "chk_warn_framerate",
+   "chk_warn_skip_unsaved",
+   "cmb001",
+   "cmb002",
+   "cmb003",
+   "cmb004",
+   "cmb005",
+   "cmb006",
+   "footer",
+   "header",
+   "lbl_menu",
+   "lbl_style",
+   "lbl_unavailable",
+   "lbl_window",
+   "parent_app",
+   "parent_app_2",
+   "s000",
+   "s001",
+   "units",
+   "warnings_group"
+  ],
+  "preferences#submenu": [
+   "QtUi",
+   "b008",
+   "b009",
+   "b010",
+   "b011",
+   "i022",
+   "widget"
+  ],
+  "quick_effects#submenu": [
+   "QtUi",
+   "b032",
+   "widget"
+  ],
+  "realityscan_workflow": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "reference_manager": [
+   "File",
+   "QtUi",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "header",
+   "tbl000",
+   "txt000",
+   "txt001"
+  ],
+  "render#submenu": [
+   "QtUi",
+   "b030",
+   "b031",
+   "i005",
+   "i008",
+   "i027",
+   "i041",
+   "widget"
+  ],
+  "render_effects": [
+   "b000",
+   "btn_remove",
+   "btn_webxr",
+   "centralwidget",
+   "cmb_effect",
+   "footer",
+   "header",
+   "page_fade",
+   "page_pulse",
+   "render_effects",
+   "stk_effects"
+  ],
+  "rendering": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b003",
+   "b004",
+   "central_widget",
+   "footer",
+   "groupBox_2",
+   "groupBox_3",
+   "header",
+   "tb000",
+   "tb001"
+  ],
+  "rendering#submenu": [
+   "QtUi",
+   "b000",
+   "i015",
+   "tb000",
+   "tb001",
+   "widget"
+  ],
+  "rig#submenu": [
+   "QtUi",
+   "i032",
+   "i033",
+   "i034",
+   "i035",
+   "widget"
+  ],
+  "rigging": [
+   "QtUi",
+   "b004",
+   "central_widget",
+   "cmb001",
+   "cmb002",
+   "constraints",
+   "create_group",
+   "display",
+   "footer",
+   "header",
+   "locator",
+   "skin",
+   "tb000",
+   "tb001",
+   "tb003",
+   "tb005"
+  ],
+  "rigging#submenu": [
+   "QtUi",
+   "b004",
+   "i016",
+   "i020",
+   "tb003",
+   "tb004",
+   "widget"
+  ],
+  "rizom_bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "scene": [
+   "File",
+   "QtUi",
+   "central_widget",
+   "cmb002",
+   "footer",
+   "header",
+   "list000",
+   "list001",
+   "list002",
+   "list003"
+  ],
+  "scene#submenu": [
+   "QtUi",
+   "b001",
+   "b005",
+   "i003",
+   "i020",
+   "i022",
+   "i032",
+   "list000",
+   "list001",
+   "list002",
+   "list003",
+   "widget"
+  ],
+  "scene_exporter": [
+   "File",
+   "QtUi",
+   "b000",
+   "b009",
+   "central_widget",
+   "cmb001",
+   "cmb002",
+   "cmb007",
+   "cmb008",
+   "footer",
+   "header",
+   "output_grp",
+   "txt000",
+   "txt001",
+   "txt003"
+  ],
+  "segments#submenu": [
+   "QtUi",
+   "b011",
+   "widget"
+  ],
+  "select#submenu": [
+   "QtUi",
+   "i002",
+   "widget"
+  ],
+  "selection": [
+   "QtUi",
+   "b002",
+   "b003",
+   "b004",
+   "b005",
+   "b006",
+   "b007",
+   "central_widget",
+   "cmb001",
+   "cmb002",
+   "footer",
+   "groupBox_5",
+   "groupBox_7",
+   "groupBox_8",
+   "groupBox_9",
+   "header",
+   "list000",
+   "list001",
+   "tb000",
+   "tb001",
+   "tb002",
+   "tb003"
+  ],
+  "selection#submenu": [
+   "QtUi",
+   "b001",
+   "chk004",
+   "chk005",
+   "chk006",
+   "chk007",
+   "i009",
+   "i021",
+   "list000",
+   "list001",
+   "tb001",
+   "tb002",
+   "widget"
+  ],
+  "settings": [
+   "QtUi",
+   "b020",
+   "b021",
+   "b022",
+   "b023",
+   "b_reset_bindings",
+   "bindings_group",
+   "bindings_group_2",
+   "central_widget",
+   "cmb_bind_default",
+   "cmb_bind_left",
+   "cmb_bind_left_right",
+   "cmb_bind_middle",
+   "cmb_bind_right",
+   "editors_group",
+   "footer",
+   "header",
+   "lbl_bind_default",
+   "lbl_bind_left",
+   "lbl_bind_left_right",
+   "lbl_bind_middle",
+   "lbl_bind_right"
+  ],
+  "settings#submenu": [
+   "QtUi",
+   "b020",
+   "b021",
+   "b022",
+   "b024",
+   "i023",
+   "widget"
+  ],
+  "shader_templates": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "central_widget",
+   "cmb002",
+   "footer",
+   "graph_group",
+   "graph_template_group",
+   "header",
+   "logging_group",
+   "main_group",
+   "progressBar",
+   "txt001"
+  ],
+  "shadow_rig": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "b009",
+   "b010",
+   "central_widget",
+   "chk_combine",
+   "chk_follow",
+   "chk_horizon_preview",
+   "chk_preview",
+   "cmb_atlas",
+   "cmb_planes",
+   "cmb_type",
+   "footer",
+   "groupBox",
+   "groupBox_utility",
+   "header",
+   "s000",
+   "s001",
+   "s002",
+   "s003",
+   "txt_source"
+  ],
+  "shell_xform": [
+   "QtUi",
+   "align",
+   "align_u_avg",
+   "align_u_max",
+   "align_u_min",
+   "align_v_avg",
+   "align_v_max",
+   "align_v_min",
+   "b023",
+   "b024",
+   "b025",
+   "b026",
+   "b034",
+   "b035",
+   "b036",
+   "b037",
+   "central_widget",
+   "cmb_move_scope",
+   "fliprotate",
+   "footer",
+   "gather_shells",
+   "gather_to_udim",
+   "header",
+   "lbl_align_u",
+   "lbl_align_v",
+   "linear_align",
+   "move_grp",
+   "orient",
+   "orient_edges",
+   "orient_shells",
+   "randomize_shells",
+   "s041",
+   "shell",
+   "tb005",
+   "tb006",
+   "tb008"
+  ],
+  "shot_manifest": [
+   "b002",
+   "b003",
+   "b004",
+   "centralwidget",
+   "cmb_collapse",
+   "cmb_expand",
+   "cmb_hide",
+   "cmb_select",
+   "cmb_show",
+   "footer",
+   "header",
+   "shot_manifest",
+   "tbl_steps",
+   "txt_csv_path"
+  ],
+  "shot_sequencer": [
+   "centralwidget",
+   "cmb_mode",
+   "cmb_shot",
+   "footer",
+   "header",
+   "sequencer_widget",
+   "shot_sequencer"
+  ],
+  "shots": [
+   "all_shots",
+   "b000",
+   "btn_apply_gap",
+   "btn_delete_shots",
+   "btn_shift_all",
+   "btn_swap_shot",
+   "btn_trim_all",
+   "btn_trim_empty",
+   "build",
+   "centralwidget",
+   "chk_snap_whole_frames",
+   "cmb_detection_mode",
+   "cmb_fit_mode",
+   "cmb_shot_select",
+   "detection",
+   "footer",
+   "header",
+   "shot_editor",
+   "shots",
+   "spn_detection",
+   "spn_initial_length",
+   "spn_move_to",
+   "spn_shot_end",
+   "spn_shot_start",
+   "spn_space",
+   "txt_shot_desc",
+   "txt_shot_name"
+  ],
+  "skeleton#submenu": [
+   "QtUi",
+   "i025",
+   "i026",
+   "i028",
+   "i033",
+   "widget"
+  ],
+  "skin#submenu": [
+   "QtUi",
+   "i025",
+   "widget"
+  ],
+  "smart_bake": [
+   "b000",
+   "b001",
+   "centralwidget",
+   "chk_bake_blend_shapes",
+   "chk_bake_blendshapes",
+   "chk_delete_inputs",
+   "chk_delete_sources",
+   "chk_mute_drivers",
+   "chk_optimize",
+   "chk_preserve_outside",
+   "chk_use_override",
+   "cmb_backup",
+   "cmb_bake_layer",
+   "cmb_scope",
+   "footer",
+   "header",
+   "label",
+   "options_group",
+   "output_grp",
+   "safety_group",
+   "smart_bake",
+   "spn_sample_by",
+   "txt000"
+  ],
+  "snap": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "central_widget",
+   "footer",
+   "grp_surface",
+   "header"
+  ],
+  "stereo#submenu": [
+   "QtUi",
+   "i041",
+   "widget"
+  ],
+  "subdivision": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b005",
+   "b008",
+   "b011",
+   "b028",
+   "central_widget",
+   "footer",
+   "gb000",
+   "header",
+   "s000",
+   "s001",
+   "subdivision",
+   "tb000"
+  ],
+  "subdivision#submenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b005",
+   "b008",
+   "b011",
+   "i057",
+   "tb000",
+   "widget"
+  ],
+  "substance_bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "substance_workflow": [
+   "File",
+   "QtUi",
+   "b000",
+   "btn_advanced",
+   "btn_launch",
+   "btn_stages",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "header",
+   "output",
+   "painter_group",
+   "txt000",
+   "txt001",
+   "txt002",
+   "txt003"
+  ],
+  "surface#submenu": [
+   "QtUi",
+   "b012",
+   "widget"
+  ],
+  "surfaces#submenu": [
+   "QtUi",
+   "i045",
+   "i046",
+   "widget"
+  ],
+  "symmetry": [
+   "QtUi",
+   "central_widget",
+   "chk000",
+   "chk001",
+   "chk002",
+   "chk004",
+   "chk005",
+   "footer",
+   "groupBox_2",
+   "header"
+  ],
+  "symmetry#submenu": [
+   "QtUi",
+   "chk000",
+   "chk001",
+   "chk002",
+   "i021",
+   "widget"
+  ],
+  "telescope_rig": [
+   "QtUi",
+   "btn_build",
+   "btn_remove",
+   "central_widget",
+   "cmb_axis",
+   "footer",
+   "grp_finalize",
+   "grp_options",
+   "header",
+   "output_grp",
+   "spin_collapsed",
+   "txt003"
+  ],
+  "texture_combine": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "central_widget",
+   "chk_assign",
+   "chk_lightmaps",
+   "chk_rotate",
+   "chk_tt_lightmaps",
+   "cmb_atlas",
+   "cmb_mode",
+   "cmb_normalize",
+   "cmb_quality",
+   "cmb_set",
+   "cmb_shader",
+   "cmb_sizing",
+   "cmb_tt_resolution",
+   "cmb_tt_source",
+   "cmb_tt_targets",
+   "cmb_tt_transfer",
+   "footer",
+   "grp_layout",
+   "grp_material",
+   "grp_output",
+   "grp_sources",
+   "grp_textures",
+   "grp_transfer",
+   "header",
+   "s_padding",
+   "s_spacing",
+   "t_affix",
+   "t_name",
+   "t_output",
+   "t_tt_dst_uvset",
+   "t_tt_src_uvset",
+   "tbl_sources"
+  ],
+  "texture_path_editor": [
+   "QtUi",
+   "central_widget",
+   "footer",
+   "header",
+   "tbl000"
+  ],
+  "toon#submenu": [
+   "QtUi",
+   "i054",
+   "widget"
+  ],
+  "transform": [
+   "Constaints",
+   "QtUi",
+   "align",
+   "b001",
+   "b002",
+   "central_widget",
+   "cmb002",
+   "footer",
+   "header",
+   "tb000",
+   "tb001",
+   "tb002",
+   "tb003",
+   "tb004",
+   "tb005",
+   "transform"
+  ],
+  "transform#submenu": [
+   "QtUi",
+   "b001",
+   "chk023",
+   "chk024",
+   "chk025",
+   "i060",
+   "i061",
+   "tb000",
+   "tb002",
+   "tb005",
+   "widget"
+  ],
+  "tube_rig": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "b004",
+   "b005",
+   "b006",
+   "b007",
+   "central_widget",
+   "chk000",
+   "chk_auto_bend",
+   "chk_squash",
+   "chk_stretch",
+   "chk_twist",
+   "chk_volume",
+   "cmb_preset",
+   "footer",
+   "groupBox_global",
+   "grp_steps",
+   "header",
+   "page_bind",
+   "page_controls",
+   "page_joints",
+   "page_macro",
+   "page_utility",
+   "s000",
+   "s001",
+   "s002",
+   "toolbox_steps",
+   "txt000",
+   "wgt_options"
+  ],
+  "unity_bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "unity_workflow": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "utilities": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "central_widget",
+   "footer",
+   "header",
+   "utilities"
+  ],
+  "utilities#submenu": [
+   "QtUi",
+   "b000",
+   "b001",
+   "b002",
+   "b003",
+   "i020",
+   "widget"
+  ],
+  "uv": [
+   "QtUi",
+   "b000",
+   "b003",
+   "b004",
+   "b005",
+   "b011",
+   "b029",
+   "b030",
+   "b033",
+   "central_widget",
+   "cmb003",
+   "edit",
+   "footer",
+   "header",
+   "map",
+   "map_2",
+   "pack",
+   "s003",
+   "tb000",
+   "tb001",
+   "tb004",
+   "tb007",
+   "tb009",
+   "tb022",
+   "transfer",
+   "transform"
+  ],
+  "uv#submenu": [
+   "QtUi",
+   "b005",
+   "b011",
+   "b021",
+   "b031",
+   "b032",
+   "i018",
+   "tb000",
+   "tb009",
+   "tb022",
+   "widget"
+  ],
+  "vertex#submenu": [
+   "QtUi",
+   "b000",
+   "widget"
+  ],
+  "view#submenu": [
+   "QtUi",
+   "i001",
+   "widget"
+  ],
+  "visualize#submenu": [
+   "QtUi",
+   "i030",
+   "widget"
+  ],
+  "webxr_preview": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
+  ],
+  "wheel_rig": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "chk000",
+   "chk010",
+   "cmb000",
+   "cmb001",
+   "footer",
+   "groupBox_0",
+   "groupBox_1",
+   "header",
+   "s000",
+   "txt000"
+  ],
+  "window#submenu": [
+   "QtUi",
+   "b030",
+   "widget"
+  ],
+  "windows#submenu": [
+   "QtUi",
+   "i051",
+   "widget"
+  ],
+  "workspace_editor": [
+   "QtUi",
+   "central_widget",
+   "footer",
+   "header",
+   "tbl000",
+   "txt000"
+  ],
+  "workspace_map": [
+   "b000",
+   "b001",
+   "b002",
+   "footer",
+   "groupBox",
+   "groupBox_2",
+   "header",
+   "label",
+   "label_2",
+   "tree000",
+   "txt000",
+   "txt001",
+   "workspace_map"
+  ]
+ },
+ "homes": {
+  "add#submenu": [
+   "tentacle"
+  ],
+  "animation": [
+   "tentacle"
+  ],
+  "animation#submenu": [
+   "tentacle"
+  ],
+  "armature#submenu": [
+   "tentacle"
+  ],
+  "arnold#submenu": [
+   "tentacle"
+  ],
+  "arnold_bridge": [
+   "blendertk",
+   "mayatk"
+  ],
+  "articulated_rig": [
+   "blendertk",
+   "mayatk"
+  ],
+  "audio_clips": [
+   "blendertk",
+   "mayatk"
+  ],
+  "bevel": [
+   "blendertk",
+   "mayatk"
+  ],
+  "blender#startmenu": [
+   "tentacle"
+  ],
+  "blender_bridge": [
+   "mayatk"
+  ],
+  "blendshape_animator": [
+   "blendertk",
+   "mayatk"
+  ],
+  "bridge": [
+   "blendertk",
+   "mayatk"
+  ],
+  "cache#submenu": [
+   "tentacle"
+  ],
+  "calculator": [
+   "blendertk",
+   "mayatk"
+  ],
+  "cameras#lower#submenu": [
+   "tentacle"
+  ],
+  "cameras#startmenu": [
+   "tentacle"
+  ],
+  "channels": [
+   "blendertk",
+   "mayatk"
+  ],
+  "color_id": [
+   "blendertk",
+   "mayatk"
+  ],
+  "compositor": [
+   "extapps"
+  ],
+  "constrain#submenu": [
+   "tentacle"
+  ],
+  "constraints#submenu": [
+   "tentacle"
+  ],
+  "control#submenu": [
+   "tentacle"
+  ],
+  "converter": [
+   "extapps"
+  ],
+  "crease": [
+   "tentacle"
+  ],
+  "crease#submenu": [
+   "tentacle"
+  ],
+  "ctrl_points#submenu": [
+   "tentacle"
+  ],
+  "curtain": [
+   "blendertk",
+   "mayatk"
+  ],
+  "curve#submenu": [
+   "tentacle"
+  ],
+  "curve_to_tube": [
+   "blendertk",
+   "mayatk"
+  ],
+  "curves#submenu": [
+   "tentacle"
+  ],
+  "cut_on_axis": [
+   "blendertk",
+   "mayatk"
+  ],
+  "deform#submenu": [
+   "tentacle"
+  ],
+  "deformation": [
+   "tentacle"
+  ],
+  "deformation#submenu": [
+   "tentacle"
+  ],
+  "display": [
+   "tentacle"
+  ],
+  "display#submenu": [
+   "tentacle"
+  ],
+  "duplicate": [
+   "tentacle"
+  ],
+  "duplicate#submenu": [
+   "tentacle"
+  ],
+  "duplicate_grid": [
+   "blendertk",
+   "mayatk"
+  ],
+  "duplicate_linear": [
+   "blendertk",
+   "mayatk"
+  ],
+  "duplicate_radial": [
+   "blendertk",
+   "mayatk"
+  ],
+  "dynamic_pipe": [
+   "blendertk",
+   "mayatk"
+  ],
+  "edge#submenu": [
+   "tentacle"
+  ],
+  "edit": [
+   "tentacle"
+  ],
+  "edit#submenu": [
+   "tentacle"
+  ],
+  "edit_mesh#submenu": [
+   "tentacle"
+  ],
+  "editors#lower#submenu": [
+   "tentacle"
+  ],
+  "editors#startmenu": [
+   "tentacle"
+  ],
+  "effects#submenu": [
+   "tentacle"
+  ],
+  "emissive_groups": [
+   "blendertk",
+   "mayatk"
+  ],
+  "example": [
+   "uitk"
+  ],
+  "exploded_view": [
+   "blendertk",
+   "mayatk"
+  ],
+  "face#submenu": [
+   "tentacle"
+  ],
+  "fields_solvers#submenu": [
+   "tentacle"
+  ],
+  "fluids#submenu": [
+   "tentacle"
+  ],
+  "game_shader": [
+   "blendertk",
+   "mayatk"
+  ],
+  "gaussian_splat_workflow": [
+   "extapps"
+  ],
+  "generate#submenu": [
+   "tentacle"
+  ],
+  "hdr_manager": [
+   "blendertk",
+   "mayatk"
+  ],
+  "help#submenu": [
+   "tentacle"
+  ],
+  "hierarchy_sync": [
+   "blendertk",
+   "mayatk"
+  ],
+  "hud#startmenu": [
+   "tentacle"
+  ],
+  "ik#submenu": [
+   "tentacle"
+  ],
+  "image_to_plane": [
+   "blendertk",
+   "mayatk"
+  ],
+  "image_tracer": [
+   "blendertk",
+   "mayatk"
+  ],
+  "key#submenu": [
+   "tentacle"
+  ],
+  "key_stash": [
+   "blendertk",
+   "mayatk"
+  ],
+  "light_rig": [
+   "mayatk"
+  ],
+  "lighting": [
+   "tentacle"
+  ],
+  "lighting#submenu": [
+   "tentacle"
+  ],
+  "lighting_shading#submenu": [
+   "tentacle"
+  ],
+  "lightmap_baker": [
+   "blendertk",
+   "mayatk"
+  ],
+  "look_match": [
+   "extapps"
+  ],
+  "main#lower#submenu": [
+   "tentacle"
+  ],
+  "main#startmenu": [
+   "tentacle"
+  ],
+  "marmoset_bridge": [
+   "blendertk",
+   "mayatk"
+  ],
+  "marmoset_workflow": [
+   "extapps"
+  ],
+  "mash#submenu": [
+   "tentacle"
+  ],
+  "mat_updater": [
+   "blendertk",
+   "mayatk"
+  ],
+  "materials": [
+   "tentacle"
+  ],
+  "materials#submenu": [
+   "tentacle"
+  ],
+  "maya#startmenu": [
+   "tentacle"
+  ],
+  "maya_bridge": [
+   "blendertk"
+  ],
+  "mesh#submenu": [
+   "tentacle"
+  ],
+  "mesh_convert": [
+   "extapps"
+  ],
+  "mesh_display#submenu": [
+   "tentacle"
+  ],
+  "mesh_normals#submenu": [
+   "tentacle"
+  ],
+  "mesh_tools#submenu": [
+   "tentacle"
+  ],
+  "mesh_uv#submenu": [
+   "tentacle"
+  ],
+  "metashape_workflow": [
+   "extapps"
+  ],
+  "mirror": [
+   "blendertk",
+   "mayatk"
+  ],
+  "modifiers#submenu": [
+   "tentacle"
+  ],
+  "naming": [
+   "blendertk",
+   "mayatk"
+  ],
+  "ncloth#submenu": [
+   "tentacle"
+  ],
+  "nconstraint#submenu": [
+   "tentacle"
+  ],
+  "nhair#submenu": [
+   "tentacle"
+  ],
+  "normals": [
+   "tentacle"
+  ],
+  "normals#submenu": [
+   "tentacle"
+  ],
+  "nparticles#submenu": [
+   "tentacle"
+  ],
+  "nurbs": [
+   "tentacle"
+  ],
+  "nurbs#submenu": [
+   "tentacle"
+  ],
+  "object#submenu": [
+   "tentacle"
+  ],
+  "object_animation#submenu": [
+   "tentacle"
+  ],
+  "object_constraints#submenu": [
+   "tentacle"
+  ],
+  "packer": [
+   "extapps"
+  ],
+  "pivot": [
+   "tentacle"
+  ],
+  "pivot#submenu": [
+   "tentacle"
+  ],
+  "playback#submenu": [
+   "tentacle"
+  ],
+  "polygons": [
+   "tentacle"
+  ],
+  "polygons#component#submenu": [
+   "tentacle"
+  ],
+  "polygons#edge#submenu": [
+   "tentacle"
+  ],
+  "polygons#face#submenu": [
+   "tentacle"
+  ],
+  "polygons#mesh#submenu": [
+   "tentacle"
+  ],
+  "polygons#submenu": [
+   "tentacle"
+  ],
+  "polygons#vertex#submenu": [
+   "tentacle"
+  ],
+  "pose#submenu": [
+   "tentacle"
+  ],
+  "preferences": [
+   "tentacle"
+  ],
+  "preferences#submenu": [
+   "tentacle"
+  ],
+  "quick_effects#submenu": [
+   "tentacle"
+  ],
+  "realityscan_workflow": [
+   "extapps"
+  ],
+  "reference_manager": [
+   "blendertk",
+   "mayatk"
+  ],
+  "render#submenu": [
+   "tentacle"
+  ],
+  "render_effects": [
+   "blendertk",
+   "mayatk"
+  ],
+  "rendering": [
+   "tentacle"
+  ],
+  "rendering#submenu": [
+   "tentacle"
+  ],
+  "rig#submenu": [
+   "tentacle"
+  ],
+  "rigging": [
+   "tentacle"
+  ],
+  "rigging#submenu": [
+   "tentacle"
+  ],
+  "rizom_bridge": [
+   "blendertk",
+   "mayatk"
+  ],
+  "scene": [
+   "tentacle"
+  ],
+  "scene#submenu": [
+   "tentacle"
+  ],
+  "scene_exporter": [
+   "blendertk",
+   "mayatk"
+  ],
+  "segments#submenu": [
+   "tentacle"
+  ],
+  "select#submenu": [
+   "tentacle"
+  ],
+  "selection": [
+   "tentacle"
+  ],
+  "selection#submenu": [
+   "tentacle"
+  ],
+  "settings": [
+   "tentacle"
+  ],
+  "settings#submenu": [
+   "tentacle"
+  ],
+  "shader_templates": [
+   "blendertk",
+   "mayatk"
+  ],
+  "shadow_rig": [
+   "blendertk",
+   "mayatk"
+  ],
+  "shell_xform": [
+   "blendertk",
+   "mayatk"
+  ],
+  "shot_manifest": [
+   "blendertk",
+   "mayatk"
+  ],
+  "shot_sequencer": [
+   "blendertk",
+   "mayatk"
+  ],
+  "shots": [
+   "blendertk",
+   "mayatk"
+  ],
+  "skeleton#submenu": [
+   "tentacle"
+  ],
+  "skin#submenu": [
+   "tentacle"
+  ],
+  "smart_bake": [
+   "blendertk",
+   "mayatk"
+  ],
+  "snap": [
+   "blendertk",
+   "mayatk"
+  ],
+  "stereo#submenu": [
+   "tentacle"
+  ],
+  "subdivision": [
+   "tentacle"
+  ],
+  "subdivision#submenu": [
+   "tentacle"
+  ],
+  "substance_bridge": [
+   "blendertk",
+   "mayatk"
+  ],
+  "substance_workflow": [
+   "extapps"
+  ],
+  "surface#submenu": [
+   "tentacle"
+  ],
+  "surfaces#submenu": [
+   "tentacle"
+  ],
+  "symmetry": [
+   "tentacle"
+  ],
+  "symmetry#submenu": [
+   "tentacle"
+  ],
+  "telescope_rig": [
+   "blendertk",
+   "mayatk"
+  ],
+  "texture_combine": [
+   "blendertk",
+   "mayatk"
+  ],
+  "texture_path_editor": [
+   "blendertk",
+   "mayatk"
+  ],
+  "toon#submenu": [
+   "tentacle"
+  ],
+  "transform": [
+   "tentacle"
+  ],
+  "transform#submenu": [
+   "tentacle"
+  ],
+  "tube_rig": [
+   "blendertk",
+   "mayatk"
+  ],
+  "unity_bridge": [
+   "blendertk",
+   "mayatk"
+  ],
+  "unity_workflow": [
+   "extapps"
+  ],
+  "utilities": [
+   "tentacle"
+  ],
+  "utilities#submenu": [
+   "tentacle"
+  ],
+  "uv": [
+   "tentacle"
+  ],
+  "uv#submenu": [
+   "tentacle"
+  ],
+  "vertex#submenu": [
+   "tentacle"
+  ],
+  "view#submenu": [
+   "tentacle"
+  ],
+  "visualize#submenu": [
+   "tentacle"
+  ],
+  "webxr_preview": [
+   "extapps"
+  ],
+  "wheel_rig": [
+   "blendertk",
+   "mayatk"
+  ],
+  "window#submenu": [
+   "tentacle"
+  ],
+  "windows#submenu": [
+   "tentacle"
+  ],
+  "workspace_editor": [
+   "blendertk"
+  ],
+  "workspace_map": [
+   "mayatk"
+  ]
+ },
+ "records": [
+  "animation",
+  "articulation",
+  "audio",
+  "audio_file_map",
+  "audio_manifest",
+  "emissive_groups",
+  "emissive_registry",
+  "handoff",
+  "hierarchy_baseline",
+  "key_stash",
+  "light_rigs",
+  "lightmap_bake_state",
+  "lightmap_dirs",
+  "lightmap_metadata",
+  "lightmap_probe",
+  "lightmap_writers",
+  "lightmaps",
+  "materials",
+  "render_effects",
+  "render_effects_bindings",
+  "shadow_metadata",
+  "shadows",
+  "shot_metadata",
+  "shot_store",
+  "smart_bake_sessions",
+  "texture_combine",
+  "visibility_tracks"
+ ]
+}

@@ -34,6 +34,7 @@ is what enforces it.
 - Root dispatch table matches `m3trik/workspace.json` (`sync_workspace.py`).
 - Every relative markdown link in a `CLAUDE.md` resolves (no broken nav).
 - Every registry-set package's `CLAUDE.md` **Nav `Deps:`** line names each ecosystem package its `pyproject.toml` depends on (the hand-maintained line must not lag the declared dependency).
+- The registry set's source lines ≤ `line_budget` in `m3trik/workspace.json`: non-blank `.py` lines outside each repo's `test/`. `push.ps1` gates each package it releases (`check_context_budget.py --line-budget <pkg>`), counting that package as the release would commit it and every other one as committed, so work in progress elsewhere never stops a release. Growth is a decision: the change that grows past the ceiling raises `line_budget` to the new count, with a CHANGELOG line naming the growth; a change that shrinks the code may lower it.
 
 ## Soft budgets (WARN — advisory, flag for cleanup)
 

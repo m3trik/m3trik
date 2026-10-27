@@ -7,6 +7,8 @@ The real workspace must hold against the frozen baseline (the same check as
 import, an upward import, a peer import, and a subpackage in no declared part.
 """
 
+import contextlib
+import io
 import sys
 import tempfile
 import textwrap
@@ -39,6 +41,52 @@ class TestRealWorkspace(unittest.TestCase):
             for pkg, found in violations.items()
         }
         self.assertEqual({k: v for k, v in new.items() if v}, {})
+
+
+class TestWorkspaceBaseline(unittest.TestCase):
+    """A baseline describes the workspace it was frozen from, so ``--workspace``
+    reads and rewrites that workspace's own copy, never this one's."""
+
+    def setUp(self):
+        real = self.real = cl.BASELINE.read_bytes()
+        # A regression would rewrite the real baseline before failing: put it back.
+        self.addCleanup(
+            lambda: cl.BASELINE.read_bytes() == real or cl.BASELINE.write_bytes(real)
+        )
+
+    def test_a_workspace_is_judged_against_its_own_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pythontk" / "pythontk").mkdir(parents=True)
+            (root / "pythontk" / "pythontk" / "__init__.py").write_text("")
+            (root / "pythontk" / "pyproject.toml").write_text(
+                '[project]\nname = "pythontk"\n'
+            )
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(cl.main(["--workspace", str(root), "pythontk"]), 0)
+                self.assertEqual(cl.main(["--update", "--workspace", str(root)]), 0)
+            self.assertNotIn("[PAID]", out.getvalue())  # this workspace's entries
+            self.assertTrue(cl.baseline_file(root).is_file())
+            self.assertEqual(cl.BASELINE.read_bytes(), self.real)
+
+    def test_an_update_keeps_the_packages_it_could_not_scan(self):
+        """A partial checkout, or a pyproject that does not parse, is not a
+        package paid off: its frozen entries stay."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pythontk").mkdir()
+            (root / "pythontk" / "pyproject.toml").write_text("[project\n")
+            frozen = cl.baseline_file(root)
+            frozen.parent.mkdir(parents=True)
+            cl.write_baseline({"mayatk": ["a.py -> b"], "pythontk": ["c.py -> d"]}, frozen)
+            with contextlib.redirect_stdout(io.StringIO()):
+                cl.main(["--update", "--workspace", str(root)])
+            self.assertEqual(
+                cl.load_baseline(frozen),
+                {"mayatk": ["a.py -> b"], "pythontk": ["c.py -> d"]},
+            )
+        self.assertEqual(cl.BASELINE.read_bytes(), self.real)
 
 
 class TestRules(unittest.TestCase):
@@ -85,6 +133,21 @@ class TestRules(unittest.TestCase):
         joined = " | ".join(problems)
         self.assertIn("'gone' does not exist", joined)
         self.assertIn("'peer' is in no declared part", joined)
+
+    def test_an_unreadable_pyproject_is_a_declaration_problem_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = _package(root, self.FILES)
+            (repo / "pyproject.toml").write_text(
+                "[project]\n<<<<<<< HEAD\nname = 'a'\n=======\n", encoding="utf-8"
+            )
+            renamed = root / "pythontk"
+            repo.rename(renamed)
+            (renamed / "pkg").rename(renamed / "pythontk")
+            violations, problems, strict = cl.scan(root, ["pythontk"])
+        self.assertEqual(violations, {})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("pythontk: pyproject.toml does not parse", problems[0])
 
     def test_the_longest_prefix_wins(self):
         self.assertEqual(
@@ -159,6 +222,30 @@ class TestProductAndRoles(unittest.TestCase):
                 "tools/spin/maya.py -> bpy (tools/*/maya)",
                 "ui/panels/spin/slots.py -> pkg.tools.spin.maya (ui/panels)",
                 "slots/normals.py -> mayatk (slots)",
+            },
+        )
+
+    def test_tentacles_halves_each_stay_off_the_other(self):
+        """tentacle's own table: a tool's Maya half may not import its Blender
+        half, nor the reverse -- the other host, one import removed."""
+        pyproject = cl.WORKSPACE / "tentacle" / "pyproject.toml"
+        if not pyproject.is_file():
+            self.skipTest("tentacle is not checked out")
+        declared = cl.roles(cl.tomllib.loads(pyproject.read_text(encoding="utf-8")))
+        files = {
+            "tentacle/__init__.py": "",
+            "tentacle/tools/__init__.py": "",
+            "tentacle/tools/spin/__init__.py": "",
+            "tentacle/tools/spin/maya.py": "from tentacle.tools.spin import blender\n",
+            "tentacle/tools/spin/blender.py": "import tentacle.tools.spin.maya\n",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            found = cl.role_violations(_package(Path(tmp), files), "tentacle", declared)
+        self.assertEqual(
+            found,
+            {
+                "tools/spin/maya.py -> tentacle.tools.spin.blender (tools/*/maya)",
+                "tools/spin/blender.py -> tentacle.tools.spin.maya (tools/*/blender)",
             },
         )
 

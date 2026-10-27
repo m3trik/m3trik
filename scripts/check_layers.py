@@ -53,11 +53,14 @@ and are exempt, as ruff already treats them.
 A new check starts by freezing today's violations: ``check_layers_baseline.json``
 lists them, ``--check`` fails only on a violation it does not list, and reports
 listed ones that no longer occur so the baseline can shrink. ``--update``
-rewrites the baseline; its diff is the review.
+rewrites the baseline, keeping a package it could not read; its diff is the
+review. A baseline describes the
+workspace it was frozen from, so ``--workspace`` reads and rewrites that
+workspace's own ``m3trik/scripts`` copy.
 
 Usage:
-    python check_layers.py [--check]    # exit 1 on a new violation
-    python check_layers.py --update     # freeze the current violations
+    python check_layers.py [--check] [pkg ...]   # exit 1 on a new violation
+    python check_layers.py --update              # freeze the current violations
 """
 
 import argparse
@@ -403,10 +406,11 @@ def _rel(repo: Path, package: str, path: Path, suffix: bool = True) -> str:
 
 
 def scan(
-    workspace: Path = WORKSPACE,
+    workspace: Path = WORKSPACE, packages: Optional[Sequence[str]] = None
 ) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[str]]]:
     """({package: sorted violations}, [declaration problems], {package: sorted
-    strict violations}) over the registry set. Strict ones are never frozen."""
+    strict violations}) over the registry set, or the *packages* named from it.
+    Strict ones are never frozen."""
     sync = _sync_workspace()
     ecosystem = sync.ecosystem_packages()
     products = set(sync.products())
@@ -414,10 +418,18 @@ def scan(
     strict: Dict[str, List[str]] = {}
     problems: List[str] = []
     for package in ecosystem:
+        if packages and package not in packages:
+            continue
         repo = workspace / package
         if not (repo / "pyproject.toml").is_file():
             continue  # partial checkout
-        data = pyproject(repo)
+        try:
+            data = pyproject(repo)
+        except tomllib.TOMLDecodeError as error:
+            # A merge left markers in it, say: nothing here can be checked, and
+            # the release's safety preflight names the cause.
+            problems.append(f"{package}: pyproject.toml does not parse ({error})")
+            continue
         found = chain_violations(repo, package, ecosystem)
         order = layer_order(data)
         if order is not None:
@@ -436,6 +448,12 @@ def scan(
 
 
 # -------------------------------------------------------------------- CLI
+def baseline_file(workspace: Path = WORKSPACE) -> Path:
+    """The baseline frozen from *workspace*: its own copy of this one, so a
+    fixture or another checkout is judged against itself."""
+    return workspace / BASELINE.relative_to(WORKSPACE)
+
+
 def load_baseline(path: Path = BASELINE) -> Dict[str, List[str]]:
     if not path.is_file():
         return {}
@@ -462,22 +480,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     mode.add_argument(
         "--update", action="store_true", help="freeze the current violations"
     )
+    parser.add_argument(
+        "--workspace", type=Path, default=WORKSPACE, help="the monorepo root"
+    )
+    parser.add_argument(
+        "packages", nargs="*", help="check only these (default: the registry set)"
+    )
     args = parser.parse_args(argv)
+    if args.update and args.packages:
+        parser.error("--update rewrites the whole baseline: name no packages")
 
-    violations, problems, strict = scan()
+    violations, problems, strict = scan(args.workspace, args.packages)
     for problem in problems:
         print(f"[FAIL] declaration: {problem}")
     for package, found in strict.items():
         for violation in found:
             print(f"[FAIL] {package}: {violation} (strict: never frozen)")
     strict_total = sum(len(v) for v in strict.values())
+    frozen_file = baseline_file(args.workspace)
     if args.update:
-        write_baseline(violations)
+        # A package the scan could not read (absent, or a pyproject that does
+        # not parse) is not paid off: its frozen entries stay.
+        violations = {**load_baseline(frozen_file), **violations}
+        frozen_file.parent.mkdir(parents=True, exist_ok=True)
+        write_baseline(violations, frozen_file)
         total = sum(len(v) for v in violations.values())
-        print(f"[WROTE] {BASELINE.name}: {total} frozen violation(s)")
+        print(f"[WROTE] {frozen_file}: {total} frozen violation(s)")
         return 1 if problems or strict_total else 0
 
-    baseline = load_baseline()
+    baseline = load_baseline(frozen_file)
     new_total = 0
     for package, found in violations.items():
         frozen = set(baseline.get(package, []))

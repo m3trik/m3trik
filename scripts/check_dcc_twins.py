@@ -77,6 +77,7 @@ import difflib
 import io
 import os
 import re
+import subprocess
 import sys
 import textwrap
 import tokenize
@@ -1223,29 +1224,50 @@ _ALIAS_FOLD = ((re.compile(r"\b(?:mtk|btk)\b"), "_tk"), (re.compile(r"\b(?:mayat
 _SKIP_DIRS = {"templates", "plugin_src", "__pycache__"}
 
 
-def _layout_files(workspace: str) -> List[str]:
-    files = []
-    for top in NEW_LAYOUT:
-        for root, dirs, names in os.walk(os.path.join(workspace, *top.split("/"))):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
-            files += [os.path.join(root, n) for n in names if n.endswith(".py")]
-    slots = os.path.join(workspace, *COMPOSED_SLOTS.split("/"))
-    if os.path.isdir(slots):
-        files += [
-            os.path.join(slots, n)
-            for n in os.listdir(slots)
-            if n.endswith(".py") and not n.startswith("_")
+def _released_files(workspace: str, top: str) -> List[str]:
+    """The ``.py`` files under *top* (``<repo>/<path>``) a release would commit:
+    tracked, or new and not ignored, so a generated ``*_ui.py`` is compared
+    neither here nor in CI, whose checkout never has it. A tree outside git is
+    walked whole."""
+    base = os.path.join(workspace, *top.split("/"))
+    if not os.path.isdir(base):
+        return []
+    repo, _, sub = top.partition("/")
+    listed = subprocess.run(
+        ["git", "-C", os.path.join(workspace, repo), "ls-files", "--cached",
+         "--others", "--exclude-standard", "-z", "--", sub],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    if listed.returncode == 0:
+        rels = [rel for rel in listed.stdout.split("\0") if rel]
+        paths = [os.path.join(workspace, repo, *rel.split("/")) for rel in rels]
+    else:
+        paths = [
+            os.path.join(root, n)
+            for root, _, names in os.walk(base)
+            for n in names
         ]
+    return [
+        path for path in paths
+        if path.endswith(".py")
+        and os.path.isfile(path)
+        and not _SKIP_DIRS & set(os.path.relpath(path, base).split(os.sep)[:-1])
+    ]
+
+
+def _layout_files(workspace: str) -> List[str]:
+    files = [f for top in NEW_LAYOUT for f in _released_files(workspace, top)]
+    slots = os.path.join(workspace, *COMPOSED_SLOTS.split("/"))
+    files += [
+        path for path in _released_files(workspace, COMPOSED_SLOTS)
+        if os.path.dirname(path) == slots
+        and not os.path.basename(path).startswith("_")
+    ]
     return sorted(files)
 
 
 def _library_files(workspace: str) -> List[str]:
-    files = []
-    for top in LIBRARIES:
-        for root, dirs, names in os.walk(os.path.join(workspace, *top.split("/"))):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
-            files += [os.path.join(root, n) for n in names if n.endswith(".py")]
-    return sorted(files)
+    return sorted(f for top in LIBRARIES for f in _released_files(workspace, top))
 
 
 def _host_of(body: List[ast.stmt]) -> Optional[str]:
@@ -1333,7 +1355,29 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="exit 1 on drift (default: report and exit 0)",
     )
     parser.add_argument("--list", action="store_true", help="print the ledger")
+    parser.add_argument(
+        "--written-once",
+        action="store_true",
+        help="run only the new layout's written-once rule",
+    )
+    parser.add_argument("--workspace", default=None, help="the monorepo root")
+    parser.add_argument(
+        "packages",
+        nargs="*",
+        help="with --written-once: check only when one of these is tentacle or a library",
+    )
     args = parser.parse_args(argv)
+
+    if args.written_once:
+        involved = {"tentacle"} | {top.split("/")[0] for top in LIBRARIES}
+        if args.packages and not involved & set(args.packages):
+            print("Written once: none of these packages is on the layout or a library.")
+            return 0
+        copies = written_once_violations(args.workspace)
+        for line in copies:
+            print(f"  COPY    {line}")
+        print(f"{len(copies)} body(ies) written twice on the new layout.")
+        return 1 if copies and args.check else 0
 
     if args.list:
         for spec in LEDGER:

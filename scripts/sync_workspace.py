@@ -66,6 +66,9 @@ def validate(data: dict) -> List[str]:
             problems.append(f"{unit.get('path')}: no domain line")
         if "role" in unit and unit["role"] not in ROLES:
             problems.append(f"{unit.get('path')}: role must be one of {ROLES}")
+    budget = data.get("line_budget")
+    if budget is not None and (type(budget) is not int or budget <= 0):
+        problems.append("line_budget must be a positive integer")
     cascade = list(data.get("cascade") or [])
     if not cascade:
         # push.ps1 reads it raw: empty, it would release nothing in order.

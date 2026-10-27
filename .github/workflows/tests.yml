@@ -258,9 +258,17 @@ jobs:
       # Layer order (CODE_STANDARD section 0, Parts): every ecosystem import is a
       # declared pyproject dependency, and each package that declares
       # [tool.m3trik.layers] imports only downward. Today's exceptions are frozen
-      # in check_layers_baseline.json; this fails only on a new one.
+      # in check_layers_baseline.json; this fails only on a new one. The product
+      # and role rules (section 3) are strict: no other package imports tentacle,
+      # and each part of a tool imports only what its role allows.
       - name: Declared layer order and dependencies hold
         run: python m3trik/scripts/check_layers.py --check
+
+      # Saved names (CODE_STANDARD section 5): each .ui stem's widget names and
+      # the SceneRecords keys, frozen by name so a panel or tool may move between
+      # packages and keep its users' settings and its scenes' records.
+      - name: Saved names survive
+        run: python m3trik/scripts/check_saved_names.py --check
 
       # The JavaScript the packages serve (pythontk's WebXR runtime) is plain
       # ES modules typed with JSDoc -- no build step -- so the compiler is the

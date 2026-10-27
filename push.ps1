@@ -372,6 +372,41 @@ function Test-EnglishOnly {
     return Invoke-RepoGate "English-only" $Script @("--workspace", $Root) $Names
 }
 
+function Test-LineBudget {
+    # The line budget (workspace.json line_budget): the registry set's source lines, $Names as
+    # this run would commit them and every other package as committed, refused past the
+    # ceiling, so growth is a decision with a CHANGELOG line rather than a drift.
+    # scripts/check_context_budget.py --line-budget over $Names; -Script exists for tests.
+    param(
+        [string]$Root,
+        [string[]]$Names,
+        [string]$Script = (Join-Path $PSScriptRoot "scripts\check_context_budget.py")
+    )
+    return Invoke-RepoGate "Line budget" $Script @("--line-budget", "--workspace", $Root) $Names
+}
+
+function Test-LayoutGuardrails {
+    # The layout's guardrails (CODE_STANDARD sections 3 and 5) over $Names: scripts/check_layers.py
+    # (layer order, the product and role rules), check_dcc_twins.py's written-once rule and
+    # check_saved_names.py (each .ui stem's widget names, the SceneRecords keys) -- the checks
+    # each package's pull request runs, here before anything is committed or pushed. The
+    # release loop calls it per package. -Layers, -Twins and -Saved exist for tests.
+    param(
+        [string]$Root,
+        [string[]]$Names,
+        [string]$Layers = (Join-Path $PSScriptRoot "scripts\check_layers.py"),
+        [string]$Twins = (Join-Path $PSScriptRoot "scripts\check_dcc_twins.py"),
+        [string]$Saved = (Join-Path $PSScriptRoot "scripts\check_saved_names.py")
+    )
+    if (-not (Invoke-RepoGate "Layer rules" $Layers @("--check", "--workspace", $Root) $Names)) {
+        return $false
+    }
+    if (-not (Invoke-RepoGate "Written once" $Twins @("--check", "--written-once", "--workspace", $Root) $Names)) {
+        return $false
+    }
+    return Invoke-RepoGate "Saved names" $Saved @("--check", "--workspace", $Root) $Names
+}
+
 function Get-TreeDiffPaths {
     # The repo-relative paths that differ between two Get-TreeHash trees. Both are real
     # tree objects Get-TreeHash wrote into the object store, so the abbreviated shas
@@ -2876,6 +2911,7 @@ if ($Merge -and $Strict -and -not $SkipReview) {
 
 $results = @{}
 $anyErrors = $false
+$runNames = @($reposToProcess | ForEach-Object { $_.Name })
 
 foreach ($repo in $reposToProcess) {
     $pkgName = $repo.Name
@@ -2932,6 +2968,25 @@ foreach ($repo in $reposToProcess) {
             break
         }
         if ($entry -eq "finalized") { $finalizedOnEntry = $true }
+    }
+
+    # 1b. The layout's guardrails (CODE_STANDARD section 3) and the line budget, before anything
+    #     of this package is committed or pushed. After Finalize, which commits nothing of dev,
+    #     so a merged release finishes whatever dev has gained since; after the safety
+    #     preflight, since the checks parse pyproject.toml and an unsafe tree is the
+    #     preflight's to report. The budget counts every package of the run as the run would
+    #     commit it, the rest as committed (docs/CONTEXT_BUDGET.md).
+    if (-not (Test-LayoutGuardrails $ROOT @($pkgName))) {
+        $results[$pkgName] = "guardrails-failed"
+        $anyErrors = $true
+        if ($stopOnFailure) { break }
+        continue
+    }
+    if (-not (Test-LineBudget $ROOT $runNames)) {
+        $results[$pkgName] = "line-budget-failed"
+        $anyErrors = $true
+        if ($stopOnFailure) { break }
+        continue
     }
 
     # 2. Prepare
@@ -3104,6 +3159,8 @@ foreach ($repo in $reposToProcess) {
         "merge-conflict" { Write-Err "$pkg - Merge conflicts" }
         "workflow-failed" { Write-Err "$pkg - Workflow failed/timed out" }
         "unsafe-repo" { Write-Err "$pkg - Unsafe repo state" }
+        "guardrails-failed" { Write-Err "$pkg - Layout guardrails failed; nothing committed (see above)" }
+        "line-budget-failed" { Write-Err "$pkg - Past the line budget; nothing committed (see above)" }
         "dry-run" { Write-Host "  o $pkg - Dry Run OK" -ForegroundColor Cyan }
         default { Write-Host "  ? $pkg - Not processed" -ForegroundColor DarkGray }
     }

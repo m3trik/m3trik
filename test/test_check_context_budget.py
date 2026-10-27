@@ -228,6 +228,76 @@ class TestLiveNavDeps(unittest.TestCase):
         self.assertEqual([f for f in rep.fails if "NAVDEPS" in f], [])
 
 
+class TestLineBudget(unittest.TestCase):
+    """The ecosystem's source lines against workspace.json's ``line_budget``:
+    the guard reports the headroom, and the release gate refuses growth past
+    it. Counted: non-blank lines of the .py files outside each repo's test/,
+    a released package's as the release would commit them (tracked, or new
+    and not ignored) and every other package's as committed."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.root = Path(self._td.name)
+        repo = self.root / "pythontk"
+        (repo / "pythontk").mkdir(parents=True)
+        (repo / "test").mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        _write(repo / "pythontk", "a.py", "x = 1\n\n\ny = 2\n")  # 2 counted
+        _write(repo / "pythontk", "b.py", "z = 3\n")  # new, untracked: counted
+        _write(repo / "test", "test_a.py", "t = 1\n" * 50)  # test/: never counted
+        _write(repo, ".gitignore", "gen_ui.py\n")
+        _write(repo / "pythontk", "gen_ui.py", "g = 1\n" * 50)  # ignored
+        subprocess.run(["git", "-C", str(repo), "add", "pythontk/a.py", "test"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t",
+             "commit", "-q", "-m", "a"],
+            check=True,
+        )
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def _report(self, budget: int) -> guard.Report:
+        rep = guard.Report()
+        guard.check_line_budget(rep, self.root, budget=budget)
+        return rep
+
+    def test_only_the_released_source_lines_count(self):
+        self.assertEqual(guard.source_lines(self.root), {"pythontk": 3})
+        self.assertEqual(guard.source_lines(self.root, ["pythontk"]), {"pythontk": 3})
+
+    def test_a_package_outside_the_release_counts_as_committed(self):
+        """Another session's uncommitted file is not this release's growth."""
+        self.assertEqual(guard.source_lines(self.root, ["uitk"]), {"pythontk": 2})
+
+    def test_within_the_budget_reports_the_headroom(self):
+        rep = self._report(10)
+        self.assertEqual(rep.fails + rep.warns, [])
+        self.assertIn("7 headroom", rep.oks[0])
+
+    def test_past_the_budget_warns_and_the_gate_fails(self):
+        rep = self._report(2)
+        self.assertEqual(rep.fails, [])
+        self.assertIn("over the line budget", rep.warns[0])
+        with patch.object(guard, "_line_budget", return_value=2):
+            self.assertEqual(
+                guard.main(["--line-budget", "--workspace", str(self.root)]), 1
+            )
+            self.assertEqual(
+                guard.main(["--line-budget", "--workspace", str(self.root), "pythontk"]), 1
+            )
+            self.assertEqual(
+                guard.main(["--line-budget", "--workspace", str(self.root), "uitk"]), 0
+            )
+
+    def test_the_committed_tree_is_within_its_budget(self):
+        """Committed, so work in progress never reddens this suite; a commit
+        that grows past the budget without raising it does."""
+        rep = guard.Report()
+        guard.check_line_budget(rep, released=())
+        self.assertEqual(rep.warns, [], rep.warns)
+
+
 class TestDefaultMemoryDir(unittest.TestCase):
     """The memory dir is DERIVED, never a hardcoded machine path.
 

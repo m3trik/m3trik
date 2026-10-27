@@ -8,7 +8,7 @@
     "Readers: push.ps1, generate_api_registry.py, generate_workspace_inventory.py, check_context_budget.py.",
     "Restatements (root CLAUDE.md dispatch table, CI sibling lists) are checked by scripts/sync_workspace.py --check."
   ],
-  "line_budget": 659280,
+  "line_budget": 659429,
   "cascade": ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"],
   "units": [
     {"path": "pythontk", "release": "cascade", "domain": "Core utils — DCC-agnostic, zero-dep"},

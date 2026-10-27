@@ -86,8 +86,34 @@ class TestSceneRecordsDerivedSurfaces(unittest.TestCase):
             if isinstance(value, RecordSpec)
         }
         for dcc, path in s.FBX_UTILS.items():
-            for spec in s.producer_specs(path):
+            registered = s.registered_producer_specs(s.HOSTS[dcc])
+            for spec in s.producer_specs(path) | registered:
                 self.assertIn(spec, declared, f"{dcc}: {spec}")
+
+    def test_a_producer_registered_as_an_entry_point_counts_for_its_host(self):
+        """A tool outside the libraries registers its producer in its own
+        pyproject.toml (SceneRecords.HOOK_GROUP); read as TOML, nothing
+        imported, and an undeclared key comes back as itself."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "pyproject.toml"
+            project.write_text(
+                '[project.entry-points."m3trik.scene_records"]\n'
+                '"maya.producer.lightmaps" = "tentacle.lm.maya:LightmapRecords.export_record"\n'
+                '"blender.producer.lightmaps" = "tentacle.lm.blender:LightmapRecords.export_record"\n'
+                '"maya.owner.shot_store" = "tentacle.shots.maya:ShotStore"\n'
+                '"maya.producer.no_such" = "tentacle.x:X.export_record"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                s.registered_producer_specs("maya", projects=(project,)),
+                {"LIGHTMAPS", "no_such"},
+            )
+            self.assertEqual(
+                s.registered_producer_specs("blender", projects=(project,)), {"LIGHTMAPS"}
+            )
 
     def test_splice_refuses_a_doc_without_its_markers(self):
         with self.assertRaises(ValueError):

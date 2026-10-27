@@ -85,6 +85,12 @@ FBX_UTILS = {
     "mayatk": REPO_ROOT / "mayatk" / "mayatk" / "env_utils" / "fbx_utils.py",
     "blendertk": REPO_ROOT / "blendertk" / "blendertk" / "env_utils" / "fbx_utils.py",
 }
+#: The projects that may register a record producer as an entry point
+#: (pythontk's ``SceneRecords.HOOK_GROUP``) instead of a row in a library's
+#: ``PRODUCERS``: the product, which no library names.
+HOOK_PROJECTS = (REPO_ROOT / "tentacle" / "pyproject.toml",)
+#: Each DCC library's host name in those entry points.
+HOSTS = {"mayatk": "maya", "blendertk": "blender"}
 #: Records one DCC produces and the other deliberately does not: spec attribute
 #: name -> (the DCC that lacks it, why). Delete a row when the port lands.
 PRODUCER_DIVERGENCES = {}
@@ -238,9 +244,42 @@ def producer_specs(path: Path) -> set:
     raise ValueError(f"no PRODUCERS table in {path}")
 
 
+def registered_producer_specs(host: str, projects=HOOK_PROJECTS) -> set:
+    """The ``SceneRecords`` attribute names the producer entry points in
+    *projects* register for *host*, read as TOML so nothing is imported; a key
+    no record declares comes back as itself."""
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover - Python < 3.11
+        import tomli as tomllib
+    from pythontk import RecordSpec
+
+    records = _records()
+    names = {
+        value.key: name
+        for name, value in vars(records).items()
+        if isinstance(value, RecordSpec)
+    }
+    found = set()
+    for path in projects:
+        if not path.is_file():
+            continue
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        points = data.get("project", {}).get("entry-points", {}).get(records.HOOK_GROUP, {})
+        for entry in points:
+            parts = entry.split(".", 2)
+            if len(parts) == 3 and parts[0] == host and parts[1] == "producer":
+                found.add(names.get(parts[2], parts[2]))
+    return found
+
+
 def producer_parity() -> list:
-    """Unledgered differences between the two DCC producer tables, as lines."""
-    tables = {dcc: producer_specs(path) for dcc, path in FBX_UTILS.items()}
+    """Unledgered differences between the two DCC producer tables, each with
+    the producers registered for its host, as lines."""
+    tables = {
+        dcc: producer_specs(path) | registered_producer_specs(HOSTS[dcc])
+        for dcc, path in FBX_UTILS.items()
+    }
     problems = []
     for spec in sorted(set().union(*tables.values())):
         missing = [dcc for dcc, specs in tables.items() if spec not in specs]

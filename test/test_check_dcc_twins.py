@@ -261,8 +261,8 @@ class LedgerTest(unittest.TestCase):
 
 
 class WrittenOnceTest(unittest.TestCase):
-    """Guardrail 3: on the new layout a body of 8+ lines exists once, unless the
-    copies call different hosts (a tool's two halves are the mirror)."""
+    """Guardrail 3: on the new layout (the shared tools' ``slots/tools/``) a body
+    of 8+ lines exists once, unless the copies call different hosts (the mirror)."""
 
     #: Nine statements: long enough to count, after the docstring is dropped.
     LOGIC = (
@@ -287,15 +287,15 @@ class WrittenOnceTest(unittest.TestCase):
         root = self.tree({"mayatk/mayatk/a.py": "def plan(count):\n" + self.LOGIC})
         self.assertEqual(gate.written_once_violations(root), [])
 
-    def test_logic_in_both_halves_is_a_copy(self):
+    def test_logic_in_two_layout_modules_is_a_copy(self):
         root = self.tree({
-            "tentacle/tentacle/tools/spin/maya.py": "def plan(count):\n" + self.LOGIC,
-            "tentacle/tentacle/tools/spin/blender.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/tools/spin_maya.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/tools/spin_blender.py": "def plan(count):\n" + self.LOGIC,
         })
         found = gate.written_once_violations(root)
         self.assertEqual(len(found), 1)
-        self.assertIn("tools/spin/blender.py:1 plan", found[0])
-        self.assertIn("tools/spin/maya.py:1 plan", found[0])
+        self.assertIn("slots/tools/spin_blender.py:1 plan", found[0])
+        self.assertIn("slots/tools/spin_maya.py:1 plan", found[0])
 
     def test_only_files_a_release_commits_are_compared(self):
         """A gitignored copy (a generated ``*_ui.py``) is not compared, here or
@@ -304,8 +304,8 @@ class WrittenOnceTest(unittest.TestCase):
 
         root = self.tree({
             "tentacle/.gitignore": "*_ui.py\n",
-            "tentacle/tentacle/tools/spin/maya.py": "def plan(count):\n" + self.LOGIC,
-            "tentacle/tentacle/tools/spin/spin_ui.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/tools/spin_maya.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/tools/spin_ui.py": "def plan(count):\n" + self.LOGIC,
         })
         subprocess.run(["git", "init", "-q", os.path.join(root, "tentacle")], check=True)
         self.assertEqual(gate.written_once_violations(root), [])
@@ -316,7 +316,7 @@ class WrittenOnceTest(unittest.TestCase):
         """A copy between tentacle's layout and mayatk stops a release of
         either, never one of blendertk, which wrote no part of it."""
         root = self.tree({
-            "tentacle/tentacle/tools/spin/model/plan.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/tools/spin.py": "def plan(count):\n" + self.LOGIC,
             "mayatk/mayatk/a.py": "def plan(count):\n" + self.LOGIC,
         })
         self.assertEqual(gate.written_once_violations(root, ["blendertk"]), [])
@@ -325,19 +325,19 @@ class WrittenOnceTest(unittest.TestCase):
 
     def test_a_layout_copy_of_library_code_is_a_copy(self):
         root = self.tree({
-            "tentacle/tentacle/core/radial/plan.py": "def lay_out(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/tools/radial.py": "def lay_out(count):\n" + self.LOGIC,
             "pythontk/pythontk/math_utils/m.py": "def spread(count):\n" + self.LOGIC,
         })
         found = gate.written_once_violations(root)
         self.assertEqual(len(found), 1)
         self.assertIn("pythontk/pythontk/math_utils/m.py:1 spread", found[0])
 
-    def test_the_two_halves_of_a_mirror_are_not_a_copy(self):
+    def test_copies_over_the_two_hosts_are_the_mirror_not_a_copy(self):
         root = self.tree({
-            "tentacle/tentacle/tools/spin/maya.py": (
+            "tentacle/tentacle/slots/tools/spin_maya.py": (
                 "import mayatk as mtk\ndef run(objects):\n" + self.ADAPTER.format(tk="mtk")
             ),
-            "tentacle/tentacle/tools/spin/blender.py": (
+            "tentacle/tentacle/slots/tools/spin_blender.py": (
                 "import blendertk as btk\ndef run(objects):\n" + self.ADAPTER.format(tk="btk")
             ),
         })
@@ -345,7 +345,7 @@ class WrittenOnceTest(unittest.TestCase):
 
     def test_two_copies_over_one_host_are_a_copy(self):
         root = self.tree({
-            "tentacle/tentacle/tools/spin/maya.py": (
+            "tentacle/tentacle/slots/tools/spin_maya.py": (
                 "def run(objects):\n" + self.ADAPTER.format(tk="mtk")
             ),
             "mayatk/mayatk/edit_utils/spin.py": (

@@ -49,7 +49,7 @@ safety of this comparison, and ``test_check_dcc_twins.py`` self-tests it.
 
 Written once (the new layout)
 -----------------------------
-tentacle's new layout (``tools/``, ``core/``, ``ui/panels/``, composed slots) gets
+tentacle's new layout (the shared tools' ``slots/tools/``, composed slots) gets
 the reverse check, with no ledger: a function body of 8+ lines, docstring dropped
 and the toolkit aliases folded, may exist only once across the layout and between
 the layout and the four libraries. Copies that call different hosts are a tool's
@@ -1191,11 +1191,7 @@ def compare(spec: TwinSpec) -> Tuple[str, List[str]]:
 #: the four libraries. Copies that call different hosts (a tool's two halves, the
 #: mirror) are not copies; two over one host, or over none, are.
 WRITTEN_ONCE_MIN_LINES = 8
-NEW_LAYOUT = (
-    "tentacle/tentacle/tools",
-    "tentacle/tentacle/core",
-    "tentacle/tentacle/ui/panels",
-)
+NEW_LAYOUT = ("tentacle/tentacle/slots/tools",)
 #: Composed Slots classes: the public modules at this folder's top level. The
 #: ``_<panel>.py`` mixins and the per-host folders are unmoved code.
 COMPOSED_SLOTS = "tentacle/tentacle/slots"

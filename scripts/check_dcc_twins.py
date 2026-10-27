@@ -712,13 +712,10 @@ LEDGER: List[TwinSpec] = [
     TwinSpec(
         rel="mat_utils/emissive_groups.py",
         reason=(
-            "The Emissive Groups panel (EmissiveGroupsSlots) is pure glue over each "
-            "host's EmissiveGroups engine, identical in both packages; with no "
-            "domain model of its own it is guarded, not hoisted. The few engine "
-            "methods that only reach the shared registry are identical too."
+            "The engine methods that only reach the shared registry are identical "
+            "in both packages (the panel, EmissiveGroupsSlots, is tentacle's now)."
         ),
         symbols=(
-            "EmissiveGroupsSlots",
             "EmissiveGroups.compact_slots",
             "EmissiveGroups.export_record",
             "EmissiveGroups.set_default",
@@ -726,7 +723,7 @@ LEDGER: List[TwinSpec] = [
             "_EmissiveGroupsInternal._registry",
         ),
         note=(
-            "The whole Slots class plus 5 engine methods. The engine's membership "
+            "5 engine methods. The engine's membership "
             "storage diverges by design (Maya face objectSets, Blender boolean FACE "
             "attributes)."
         ),

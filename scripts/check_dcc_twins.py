@@ -710,25 +710,6 @@ LEDGER: List[TwinSpec] = [
         ),
     ),
     TwinSpec(
-        rel="mat_utils/emissive_groups.py",
-        reason=(
-            "The engine methods that only reach the shared registry are identical "
-            "in both packages (the panel, EmissiveGroupsSlots, is tentacle's now)."
-        ),
-        symbols=(
-            "EmissiveGroups.compact_slots",
-            "EmissiveGroups.export_record",
-            "EmissiveGroups.set_default",
-            "_EmissiveGroupsInternal._refresh_export_if_published",
-            "_EmissiveGroupsInternal._registry",
-        ),
-        note=(
-            "5 engine methods. The engine's membership "
-            "storage diverges by design (Maya face objectSets, Blender boolean FACE "
-            "attributes)."
-        ),
-    ),
-    TwinSpec(
         rel="edit_utils/naming/naming_slots.py",
         reason=(
             "The Naming panel. Its Suffix By Type editor lives once in uitk "

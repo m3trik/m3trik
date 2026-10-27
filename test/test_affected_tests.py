@@ -322,6 +322,28 @@ class TestSelection(_Fixture):
         _, picks = self.picks("tentacle/tentacle/tcl.py")
         self.assertEqual(picks, {"tentacle": {"test_tcl"}})
 
+    def test_a_headless_host_check_is_named_with_its_command(self):
+        """A check whose usage line runs it in a background Blender has a
+        runner (``--in-blender``): the note gives the command instead of
+        sending it to be run by hand."""
+        _write(self.ws, {
+            "tentacle/tentacle/__init__.py": "",
+            "tentacle/tentacle/ui/materials.ui": "<ui/>\n",
+            "tentacle/tentacle/slots/blender/materials.py": "class MaterialsSlots:\n    pass\n",
+            "tentacle/test/blender/deepened_slots_check.py": (
+                '"""Run: blender --background --factory-startup --python deepened_slots_check.py"""\n'
+                "def run():\n    from tentacle.slots.blender.materials import MaterialsSlots\n"
+            ),
+            **_STRUCTURAL,
+        })
+        _clear_caches()
+        sel, _ = self.picks("tentacle/tentacle/slots/blender/materials.py")
+        report = at.report(sel, [], explain=False, workspace=self.ws)
+        hosts = [ln for ln in report.splitlines() if "host-only" in ln]
+        self.assertEqual(len(hosts), 1, report)
+        self.assertIn("python tentacle/test/run_tests.py deepened_slots --in-blender", hosts[0])
+        self.assertNotIn("by hand", hosts[0])
+
     def test_a_blendertk_panel_ui_selects_its_panel_load_suite(self):
         _write(self.ws, {
             "blendertk/blendertk/__init__.py": "",

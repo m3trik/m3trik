@@ -173,13 +173,20 @@ class Gate:
     suites: Tuple[str, ...]
     host_checks: Optional[str] = None
     host: str = ""
+    #: A host check whose source says this runs headless, through
+    #: *host_command* (``{stem}`` is the check's name, ``_check`` dropped);
+    #: any other drives a real window and is run by hand.
+    host_headless: str = ""
+    host_command: str = ""
 
 
 GATES: Tuple[Gate, ...] = (
     Gate("tentacle", ("tentacle/ui/*", "tentacle/slots/*"),
          ("test_slot_method_coverage", "test_ui_integrity", "test_slot_integrity",
           "test_dcc_invariants", "test_ui_footers"),
-         host_checks="test/blender/*_check.py", host="Blender"),
+         host_checks="test/blender/*_check.py", host="Blender",
+         host_headless="blender --background",
+         host_command="python tentacle/test/run_tests.py {stem} --in-blender"),
     # Loads every co-located tool panel's .ui through BlenderUiHandler and wires its slots.
     Gate("blendertk", ("blendertk/*.ui",), ("test_blender_ui_handler",)),
 )
@@ -926,6 +933,24 @@ def recent_dirty(seconds: float, workspace: Path = WORKSPACE) -> List[Path]:
 
 
 # ---------------------------------------------------------------- report / run
+def _host_command(host: str, check: str, workspace: Path) -> Optional[str]:
+    """The command that runs host check *check* headless, from its gate, or
+    ``None`` when the check drives a real window (its source never says
+    :attr:`Gate.host_headless`)."""
+    path = workspace / check
+    for gate in GATES:
+        if gate.host != host or not gate.host_command or not gate.host_headless:
+            continue
+        try:
+            source = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return None
+        if gate.host_headless in source:
+            stem = path.stem[: -len("_check")] if path.stem.endswith("_check") else path.stem
+            return gate.host_command.format(stem=stem)
+    return None
+
+
 def report(sel: Selection, cmds, explain: bool, workspace: Path = WORKSPACE,
            k: Optional[str] = None) -> str:
     lines = []
@@ -967,7 +992,9 @@ def report(sel: Selection, cmds, explain: bool, workspace: Path = WORKSPACE,
             "selected; a harness change can reach every module, so sample more widely before review"
         )
     for (host, check), changed in sorted(sel.host_only.items()):
-        lines.append(f"note: host-only, not run (a fresh {host} runs it by hand): {check} "
+        command = _host_command(host, check, workspace)
+        how = f"run it: {command}" if command else f"a fresh {host} runs it by hand"
+        lines.append(f"note: host-only, not run ({how}): {check} "
                      f"(reaches {', '.join(sorted(changed))})")
     if sel.docs:
         lines.append("note: docs/generated, no tests (check_docs.py is their gate): " + ", ".join(sel.docs))

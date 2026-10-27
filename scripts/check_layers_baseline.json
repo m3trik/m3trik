@@ -60,7 +60,6 @@
   "env_utils/blender_bridge/_scene_import.py -> mayatk.core_utils.diagnostics.scene_diag",
   "env_utils/blender_bridge/_scene_import.py -> mayatk.rig_utils.rig_graph_build",
   "env_utils/fbx_utils.py -> mayatk.anim_utils._anim_utils",
-  "env_utils/fbx_utils.py -> mayatk.anim_utils.smart_bake._smart_bake",
   "env_utils/fbx_utils.py -> mayatk.rig_utils.rig_graph_extract",
   "env_utils/handoff_export.py -> mayatk.anim_utils._anim_utils",
   "env_utils/scene_exporter/_task_animation.py -> mayatk.anim_utils._anim_utils",

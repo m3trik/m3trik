@@ -178,6 +178,16 @@ def _manifest_panel_twins() -> List["TwinSpec"]:
 # normal here.
 LEDGER: List[TwinSpec] = [
     TwinSpec(
+        rel="core_utils/_core_utils.py",
+        reason=(
+            "The decorator tentacle's composed Slots lean on to read the selection "
+            "for a None target. Host-free logic, but a library helper both DCC "
+            "packages expose on CoreUtils, and code never moves into pythontk; the "
+            "selection read is each host's CoreUtils.selected_objects."
+        ),
+        symbols=("CoreUtils.selected",),
+    ),
+    TwinSpec(
         rel="anim_utils/shots/shot_sequencer/marker_manager.py",
         reason=(
             "Shot-sequencer panel controller. DCC-agnostic marker bookkeeping over "

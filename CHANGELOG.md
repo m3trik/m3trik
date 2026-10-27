@@ -1,5 +1,7 @@
 # m3trik — Changelog
 
+- **2026-10-27 - `scripts/check_dcc_twins.py` no longer lists the Shot Manifest's `export_menu.py` as a host module (`_MANIFEST_HOST_MODULES`).** The deprecated module is gone from both packages.
+  - Test(s): none new -- the check runs green (41 twins, 0 drift).
 - **2026-10-27 - `scripts/check_dcc_twins.py` guards `CoreUtils.selected` (`LEDGER`).** mayatk's and blendertk's copies of the decorator are now one text, each reading its own `CoreUtils.selected_objects()`; the entry keeps them so (41 twins, 0 drift).
   - Test(s): none new -- the check itself runs green with the entry.
 - **2026-10-24 - `scripts/affected_tests.py` maps a repo-root packaging file to the packaging suites, and a license text to nothing (`PACKAGING`, `PACKAGING_TESTS`, `LICENSE_TEXT`, `_select_one`).** `MANIFEST.in` and `pyproject.toml` went through the asset path, which name-matches the stem: a blendertk `MANIFEST.in` edit picked six shot/material *manifest* suites, while `test_packaging_metadata` (pythontk) and `test_package` (tentacle), which read those files directly and so are reached by no import, were never picked. `LICENSE` / `COPYING*` / `NOTICE` now note "license text, no tests" instead of matching any test whose name holds the word.

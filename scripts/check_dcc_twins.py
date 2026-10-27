@@ -129,9 +129,8 @@ class TwinSpec:
 
 #: The Shot Manifest panel folder, and the modules in it that answer to their
 #: host (each DCC's own): the host adapter, the engine adapter, the range
-#: facade bound to the host's audio sizing, the generated ``.ui`` module, the
-#: package docstring and a deprecated alias (its ``remove_in`` is its
-#: package's release).
+#: facade bound to the host's audio sizing, the generated ``.ui`` module and
+#: the package docstring.
 _MANIFEST_PANEL = "anim_utils/shots/shot_manifest"
 _MANIFEST_HOST_MODULES = frozenset(
     (
@@ -140,7 +139,6 @@ _MANIFEST_HOST_MODULES = frozenset(
         "_shot_manifest.py",
         "range_resolver.py",
         "shot_manifest_ui.py",
-        "export_menu.py",
     )
 )
 

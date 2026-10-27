@@ -13,7 +13,7 @@ that was false.
 
 Scope -- what this is NOT
 -------------------------
-The 198 mayatk<->blendertk name collisions in ``docs/API_SHADOWS.md`` are the
+The mayatk<->blendertk name collisions in ``docs/API_SHADOWS.md`` are the
 deliberate public-API mirror that keeps tentacle's slots branch-free. Those are
 not twins in this sense and are none of this script's business. What IS in scope
 is the **controller tier**: helper mixins that carry the same algorithm in both
@@ -46,6 +46,15 @@ the fold applies **only inside STRING and COMMENT tokens**: a twin may NAME the
 other DCC in prose, but an ``import mayatk`` inside blendertk is a real
 cross-wiring bug and must never compare equal. That distinction is the whole
 safety of this comparison, and ``test_check_dcc_twins.py`` self-tests it.
+
+Written once (the new layout)
+-----------------------------
+tentacle's new layout (``tools/``, ``core/``, ``ui/panels/``, composed slots) gets
+the reverse check, with no ledger: a function body of 8+ lines, docstring dropped
+and the toolkit aliases folded, may exist only once across the layout and between
+the layout and the four libraries. Copies that call different hosts are a tool's
+two halves, the mirror; two over one host, or over none, are a copy. It reads no
+library while the layout is empty.
 
 Usage
 -----
@@ -1189,6 +1198,133 @@ def compare(spec: TwinSpec) -> Tuple[str, List[str]]:
     return "ok", []
 
 
+# ------------------------------------------------------------- written once
+#: CODE_STANDARD section 3, guardrail 3: on the new layout a function body of
+#: this many lines exists once -- across the layout, and between the layout and
+#: the four libraries. Copies that call different hosts (a tool's two halves, the
+#: mirror) are not copies; two over one host, or over none, are.
+WRITTEN_ONCE_MIN_LINES = 8
+NEW_LAYOUT = (
+    "tentacle/tentacle/tools",
+    "tentacle/tentacle/core",
+    "tentacle/tentacle/ui/panels",
+)
+#: Composed Slots classes: the public modules at this folder's top level. The
+#: ``_<panel>.py`` mixins and the per-host folders are unmoved code.
+COMPOSED_SLOTS = "tentacle/tentacle/slots"
+LIBRARIES = ("pythontk/pythontk", "uitk/uitk", "mayatk/mayatk", "blendertk/blendertk")
+_HOST_NAMES = {
+    "maya": frozenset({"maya", "cmds", "mel", "om", "om2", "pm", "pymel", "mtk", "mayatk"}),
+    "blender": frozenset({"bpy", "bmesh", "mathutils", "btk", "blendertk"}),
+}
+#: Each toolkit's alias folds to one name, so a body that differs only by which
+#: toolkit it calls compares equal -- and is then judged by the hosts it names.
+_ALIAS_FOLD = ((re.compile(r"\b(?:mtk|btk)\b"), "_tk"), (re.compile(r"\b(?:mayatk|blendertk)\b"), "_tkpkg"))
+_SKIP_DIRS = {"templates", "plugin_src", "__pycache__"}
+
+
+def _layout_files(workspace: str) -> List[str]:
+    files = []
+    for top in NEW_LAYOUT:
+        for root, dirs, names in os.walk(os.path.join(workspace, *top.split("/"))):
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+            files += [os.path.join(root, n) for n in names if n.endswith(".py")]
+    slots = os.path.join(workspace, *COMPOSED_SLOTS.split("/"))
+    if os.path.isdir(slots):
+        files += [
+            os.path.join(slots, n)
+            for n in os.listdir(slots)
+            if n.endswith(".py") and not n.startswith("_")
+        ]
+    return sorted(files)
+
+
+def _library_files(workspace: str) -> List[str]:
+    files = []
+    for top in LIBRARIES:
+        for root, dirs, names in os.walk(os.path.join(workspace, *top.split("/"))):
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+            files += [os.path.join(root, n) for n in names if n.endswith(".py")]
+    return sorted(files)
+
+
+def _host_of(body: List[ast.stmt]) -> Optional[str]:
+    """The one host a body's code names, or None (none, or both)."""
+    names = set()
+    for stmt in body:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.alias):
+                names.add((node.asname or node.name).split(".")[0])
+    hosts = [host for host, known in _HOST_NAMES.items() if names & known]
+    return hosts[0] if len(hosts) == 1 else None
+
+
+def function_bodies(path: str) -> List[Tuple[int, str, str, Optional[str]]]:
+    """``(line, name, normalized body, host)`` for each function in *path* whose
+    body, docstring dropped and reformatted, runs to the minimum length."""
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            tree = ast.parse(fh.read())
+    except (OSError, SyntaxError, ValueError):
+        return []
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.end_lineno - node.lineno < WRITTEN_ONCE_MIN_LINES:
+            continue  # cheap: a body shorter in source is shorter unparsed too
+        body = node.body
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            body = body[1:]
+        if not body:
+            continue
+        text = ast.unparse(ast.Module(body=body, type_ignores=[]))
+        if text.count("\n") + 1 < WRITTEN_ONCE_MIN_LINES:
+            continue
+        for pattern, neutral in _ALIAS_FOLD:
+            text = pattern.sub(neutral, text)
+        found.append((node.lineno, node.name, text, _host_of(body)))
+    return found
+
+
+def written_once_violations(workspace: Optional[str] = None) -> List[str]:
+    """Each body of the new layout that exists twice over one host (or over
+    none), with every place it is written; empty while the layout is empty."""
+    workspace = workspace or REPO
+    groups: Dict[str, List[Tuple[str, Optional[str]]]] = {}
+
+    def record(path: str, keep_new: bool) -> None:
+        rel = os.path.relpath(path, workspace).replace(os.sep, "/")
+        for line, name, text, host in function_bodies(path):
+            if keep_new or text in groups:
+                groups.setdefault(text, []).append((f"{rel}:{line} {name}", host))
+
+    for path in _layout_files(workspace):
+        record(path, keep_new=True)
+    if not groups:
+        return []  # nothing on the new layout: no library needs reading
+    for path in _library_files(workspace):
+        record(path, keep_new=False)
+
+    found = []
+    for text, places in groups.items():
+        by_host: Dict[Optional[str], List[str]] = {}
+        for where, host in places:
+            by_host.setdefault(host, []).append(where)
+        for host, wheres in by_host.items():
+            if len(wheres) > 1:
+                lines = text.count("\n") + 1
+                found.append(f"{' = '.join(sorted(wheres))}  ({lines} lines)")
+    return sorted(found)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
@@ -1230,6 +1366,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     for label in absent:
         print(f"  skipped {label}  (sibling not checked out)")
 
+    copies = written_once_violations()
+    for line in copies:
+        print(f"  COPY    {line}")
+
     if not checked:
         # Same rule the sibling workflows apply to test counts: a run that
         # compared nothing is not a pass. Without this, a job whose checkout
@@ -1237,7 +1377,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("\nFAIL: 0 twin(s) compared - nothing was checked out to compare.")
         return 1
 
-    print(f"\n{checked} twin(s) compared, {len(bad)} with drift.")
+    print(
+        f"\n{checked} twin(s) compared, {len(bad)} with drift; "
+        f"{len(copies)} body(ies) written twice on the new layout."
+    )
+    if copies and args.check:
+        print(
+            "\nA body on the new layout is written twice. Keep one copy -- the "
+            "model, core/ or the\nlibrary that owns it -- and call it from the "
+            "other place (CODE_STANDARD.md §3)."
+        )
     if bad and args.check:
         print(
             "\nA declared twin has diverged. Either port the change to the other "
@@ -1245,6 +1394,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "differ.\nCODE_STANDARD.md §6: a vendored copy is sanctioned only "
             "while it is guarded."
         )
+    if (bad or copies) and args.check:
         return 1
     if bad:
         print("(report mode: exit 0. Wire --check once the ledger is clear.)")

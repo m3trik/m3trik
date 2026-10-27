@@ -260,6 +260,85 @@ class LedgerTest(unittest.TestCase):
                 self.assertIn(status, ("ok", "absent"), "\n".join(detail[:10]))
 
 
+class WrittenOnceTest(unittest.TestCase):
+    """Guardrail 3: on the new layout a body of 8+ lines exists once, unless the
+    copies call different hosts (a tool's two halves are the mirror)."""
+
+    #: Nine statements: long enough to count, after the docstring is dropped.
+    LOGIC = (
+        '    """Plan the copies."""\n'
+        + "".join(f"    step{i} = {i} * count\n" for i in range(8))
+        + "    return step7\n"
+    )
+    #: The same shape over each host's toolkit: identical once mtk/btk fold.
+    ADAPTER = "".join(f"    {{tk}}.step{i}(objects)\n" for i in range(9))
+
+    def tree(self, files):
+        root = tempfile.mkdtemp(prefix="written_once_")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        for rel, text in files.items():
+            path = os.path.join(root, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        return root
+
+    def test_an_empty_layout_reads_no_library(self):
+        root = self.tree({"mayatk/mayatk/a.py": "def plan(count):\n" + self.LOGIC})
+        self.assertEqual(gate.written_once_violations(root), [])
+
+    def test_logic_in_both_halves_is_a_copy(self):
+        root = self.tree({
+            "tentacle/tentacle/tools/spin/maya.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/tools/spin/blender.py": "def plan(count):\n" + self.LOGIC,
+        })
+        found = gate.written_once_violations(root)
+        self.assertEqual(len(found), 1)
+        self.assertIn("tools/spin/blender.py:1 plan", found[0])
+        self.assertIn("tools/spin/maya.py:1 plan", found[0])
+
+    def test_a_layout_copy_of_library_code_is_a_copy(self):
+        root = self.tree({
+            "tentacle/tentacle/core/radial/plan.py": "def lay_out(count):\n" + self.LOGIC,
+            "pythontk/pythontk/math_utils/m.py": "def spread(count):\n" + self.LOGIC,
+        })
+        found = gate.written_once_violations(root)
+        self.assertEqual(len(found), 1)
+        self.assertIn("pythontk/pythontk/math_utils/m.py:1 spread", found[0])
+
+    def test_the_two_halves_of_a_mirror_are_not_a_copy(self):
+        root = self.tree({
+            "tentacle/tentacle/tools/spin/maya.py": (
+                "import mayatk as mtk\ndef run(objects):\n" + self.ADAPTER.format(tk="mtk")
+            ),
+            "tentacle/tentacle/tools/spin/blender.py": (
+                "import blendertk as btk\ndef run(objects):\n" + self.ADAPTER.format(tk="btk")
+            ),
+        })
+        self.assertEqual(gate.written_once_violations(root), [])
+
+    def test_two_copies_over_one_host_are_a_copy(self):
+        root = self.tree({
+            "tentacle/tentacle/tools/spin/maya.py": (
+                "def run(objects):\n" + self.ADAPTER.format(tk="mtk")
+            ),
+            "mayatk/mayatk/edit_utils/spin.py": (
+                "def spin(objects):\n" + self.ADAPTER.format(tk="mtk")
+            ),
+        })
+        self.assertEqual(len(gate.written_once_violations(root)), 1)
+
+    def test_legacy_slots_and_short_bodies_are_out_of_scope(self):
+        short = "def f(count):\n    a = count\n    return a\n"
+        root = self.tree({
+            "tentacle/tentacle/slots/_mixin.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/maya/edit.py": "def plan(count):\n" + self.LOGIC,
+            "tentacle/tentacle/slots/normals.py": short,
+            "tentacle/tentacle/ui/panels/spin/slots.py": short,
+        })
+        self.assertEqual(gate.written_once_violations(root), [])
+
+
 class ZeroComparedTest(unittest.TestCase):
     def test_comparing_nothing_fails(self):
         """A run that checked nothing is not a pass -- same rule as test counts."""

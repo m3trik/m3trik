@@ -95,6 +95,13 @@ $global:verdict = $null
 "RESULT:unknown_verdict=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
 $global:verdict = @{{ bump = 'minor'; reasons = @('x') }}
 "RESULT:unparseable_published=$([bool](Test-SemverGate 'p' 'not-a-version' '0.17.1'))"
+$global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unaccounted = @('mod.py::Widget.spin') }}
+"RESULT:unaccounted_as_minor=$([bool](Test-SemverGate 'p' '0.17.0' '0.18.0'))"
+$AllowBreakingPatch = $true
+"RESULT:unaccounted_override=$([bool](Test-SemverGate 'p' '0.17.0' '0.18.0'))"
+$AllowBreakingPatch = $false
+$global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unaccounted = @() }}
+"RESULT:moved_out_as_minor=$([bool](Test-SemverGate 'p' '0.17.0' '0.18.0'))"
 """
 
     @classmethod
@@ -133,6 +140,16 @@ $global:verdict = @{{ bump = 'minor'; reasons = @('x') }}
 
     def test_a_removal_may_not_ship_as_a_patch(self):
         self._assert("removal_as_patch", False)
+
+    def test_a_removal_nothing_accounts_for_is_refused_even_as_a_minor(self):
+        """A name gone with no ptk.Deprecation alias and no MOVED_NAMES entry
+        is a break whatever the version says: a caller gets a bare
+        AttributeError instead of where the name went."""
+        self._assert("unaccounted_as_minor", False)
+        self._assert("unaccounted_override", True)
+
+    def test_a_name_that_moved_out_ships_as_a_minor(self):
+        self._assert("moved_out_as_minor", True)
 
     def test_a_removal_ships_as_a_minor_or_major(self):
         self._assert("removal_as_minor", True)

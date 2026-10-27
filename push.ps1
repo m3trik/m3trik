@@ -145,7 +145,8 @@ param(
     # 0.8.1 as a bugfix. Measured 2026-09-19 -- blendertk's removal of the public
     # `smart_bake=` keyword would have shipped as 0.8.1. Deliberate exceptions
     # exist (retiring something provably unreachable), so the gate is a refusal
-    # with a named override, not a wall.
+    # with a named override, not a wall. It also waives the move-only check: a
+    # removal with no ptk.Deprecation alias and no MOVED_NAMES entry.
     [switch]$AllowBreakingPatch,
     [string[]]$RecordReceipt,
     [switch]$ShowReceipts,
@@ -1014,7 +1015,13 @@ function Get-RequiredBump {
     try { $parsed = ($raw -join "`n") | ConvertFrom-Json } catch { return $null }
     $row = @($parsed)[0]
     if (-not $row -or -not $row.bump) { return $null }
-    return @{ bump = [string]$row.bump; reasons = @($row.reasons) }
+    # unaccounted: removals with no ptk.Deprecation alias and no MOVED_NAMES entry. A generator
+    # predating the field leaves it absent, which reads as none.
+    return @{
+        bump        = [string]$row.bump
+        reasons     = @($row.reasons)
+        unaccounted = @($row.unaccounted | Where-Object { $_ })
+    }
 }
 
 function Test-SemverGate {
@@ -1029,7 +1036,20 @@ function Test-SemverGate {
     )
     if ($AllowBreakingPatch) { return $true }
     $required = Get-RequiredBump $PackageName
-    if (-not $required -or $required.bump -ne 'minor') { return $true }
+    if (-not $required) { return $true }
+    # A removal nothing accounts for is a break whatever the version says: its caller gets a bare
+    # AttributeError instead of an alias's warning or the moved-names error naming the new home.
+    $unaccounted = @($required.unaccounted | Where-Object { $_ })
+    if ($unaccounted.Count -gt 0) {
+        Write-Err "$PackageName removes public API nothing accounts for: each name owes a ptk.Deprecation alias, or a MOVED_NAMES entry in $PackageName/$PackageName/__init__.py when it left for another package."
+        foreach ($r in ($unaccounted | Select-Object -First 8)) { Write-Host "    - $r" -ForegroundColor DarkGray }
+        if ($unaccounted.Count -gt 8) {
+            Write-Host "    ... and $($unaccounted.Count - 8) more (API_CHANGES.md lists them all)" -ForegroundColor DarkGray
+        }
+        Write-Err "Account for them, or re-run with -AllowBreakingPatch."
+        return $false
+    }
+    if ($required.bump -ne 'minor') { return $true }
     $pub = ConvertTo-VersionOrNull $Published
     $rel = ConvertTo-VersionOrNull $Release
     # Unparseable either side: say nothing rather than guess (same rule as the

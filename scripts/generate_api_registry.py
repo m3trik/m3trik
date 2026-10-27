@@ -1608,6 +1608,8 @@ class ApiDelta:
     """
 
     added: list[str]
+    #: Removals nothing accounts for: a break with no alias and no moved-names
+    #: entry.
     removed: list[str]
     changed: list[str]
     moved: list[str]
@@ -1615,9 +1617,25 @@ class ApiDelta:
     #: what a symbol WAS as well as what it is.
     prior: dict[str, str]
     new: dict[str, str]
+    #: Removals the package's ``MOVED_NAMES`` table lists: the name left for
+    #: another package, and its old home says where (pythontk's
+    #: ``MovedNameError``).
+    moved_out: list[str] = field(default_factory=list)
+    #: Removals of names the baseline already marked deprecated: an alias whose
+    #: window ran out.
+    retired: list[str] = field(default_factory=list)
+    #: ``key -> (new home, version)`` for each :attr:`moved_out` key.
+    destinations: dict[str, tuple[str, str]] = field(default_factory=dict)
 
     def is_empty(self) -> bool:
-        return not (self.added or self.removed or self.changed or self.moved)
+        return not (
+            self.added
+            or self.removed
+            or self.changed
+            or self.moved
+            or self.moved_out
+            or self.retired
+        )
 
 
 def required_bump(delta: ApiDelta | None) -> tuple[str, list[str]]:
@@ -1639,8 +1657,67 @@ def required_bump(delta: ApiDelta | None) -> tuple[str, list[str]]:
     """
     if delta is None:
         return "patch", []
-    reasons = [k for k in delta.removed if not _is_semver_exempt(k)]
+    removals = delta.removed + delta.moved_out + delta.retired
+    reasons = [k for k in sorted(removals) if not _is_semver_exempt(k)]
     return ("minor" if reasons else "patch"), reasons
+
+
+def moved_names(source_dir: Path) -> dict[str, tuple[str, str]]:
+    """The package's moved-names table: the ``MOVED_NAMES`` literal its
+    ``__init__.py`` declares, ``{name: (new home, version)}``, read with
+    ``ast`` so nothing is imported. Empty when absent or not a literal."""
+    try:
+        tree = ast.parse((source_dir / "__init__.py").read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return {}
+    for node in tree.body:
+        targets = getattr(node, "targets", None) or [getattr(node, "target", None)]
+        if not any(getattr(t, "id", None) == "MOVED_NAMES" for t in targets):
+            continue
+        try:
+            table = ast.literal_eval(node.value)
+        except (ValueError, TypeError, SyntaxError):
+            return {}
+        if not isinstance(table, dict):
+            return {}
+        return {
+            str(name): (str(entry[0]), str(entry[1]))
+            for name, entry in table.items()
+            if isinstance(entry, (tuple, list)) and len(entry) == 2
+        }
+    return {}
+
+
+def _retired_keys(prior_json: dict) -> set[str]:
+    """Every ``relpath::symbol`` the baseline marked deprecated; a deprecated
+    class retires its members with it."""
+    keys: set[str] = set()
+    for mod in prior_json.get("modules", []):
+        prefix = mod["relpath"]
+        for fn in mod.get("functions", []):
+            if fn.get("deprecated"):
+                keys.add(f"{prefix}::{fn['qualname']}")
+        for cls in mod.get("classes", []):
+            whole = bool(cls.get("deprecated"))
+            if whole:
+                keys.add(f"{prefix}::{cls['name']}")
+            for member in cls.get("members", []):
+                if whole or member.get("deprecated"):
+                    keys.add(f"{prefix}::{member['qualname']}")
+    return keys
+
+
+def _moved_entry(
+    symbol: str, table: dict[str, tuple[str, str]]
+) -> tuple[str, str] | None:
+    """The moved-names entry that covers *symbol* (``Name`` or
+    ``Class.member``): the symbol itself, its whole class, or a member's flat
+    name (a wildcard module's methods are exposed flat)."""
+    parts = symbol.split(".")
+    for candidate in (symbol, parts[0], parts[-1] if len(parts) == 2 else None):
+        if candidate in table:
+            return table[candidate]
+    return None
 
 
 def compute_api_delta(
@@ -1648,9 +1725,14 @@ def compute_api_delta(
     prior_json: dict | None,
     foreign_members: dict[str, set[str]] | None = None,
     reexports: dict[str, set[str]] | None = None,
+    moved_table: dict[str, tuple[str, str]] | None = None,
 ) -> ApiDelta | None:
     """The public-API delta of *pkg* against *prior_json*, or None when there
     is no baseline to diff against.
+
+    A removal is one of three kinds: listed in *moved_table* (the package's
+    ``MOVED_NAMES``, :func:`moved_names`), so it moved out; deprecated in the
+    baseline, so it retired; or neither, a break nothing accounts for.
 
     Parameters:
         foreign_members: ``{class name: members it resolves}`` for bases that
@@ -1733,13 +1815,32 @@ def compute_api_delta(
             )
         (still_removed if gone else moved).append(key)
 
+    table = moved_table or {}
+    retired_keys = _retired_keys(prior_json)
+    moved_out: list[str] = []
+    retired: list[str] = []
+    unaccounted: list[str] = []
+    destinations: dict[str, tuple[str, str]] = {}
+    for key in still_removed:
+        entry = _moved_entry(key.split("::", 1)[1], table)
+        if entry is not None:
+            moved_out.append(key)
+            destinations[key] = entry
+        elif key in retired_keys:
+            retired.append(key)
+        else:
+            unaccounted.append(key)
+
     return ApiDelta(
         added=added,
-        removed=still_removed,
+        removed=unaccounted,
         changed=changed,
         moved=moved,
         prior=prior,
         new=new,
+        moved_out=moved_out,
+        retired=retired,
+        destinations=destinations,
     )
 
 
@@ -1750,9 +1851,12 @@ def emit_changes_markdown(
     foreign_members: dict[str, set[str]] | None = None,
     reexports: dict[str, set[str]] | None = None,
     version: str = "",
+    moved_table: dict[str, tuple[str, str]] | None = None,
 ) -> str:
     """Render :func:`compute_api_delta`'s result as ``API_CHANGES.md``."""
-    delta = compute_api_delta(pkg, prior_json, foreign_members, reexports)
+    delta = compute_api_delta(
+        pkg, prior_json, foreign_members, reexports, moved_table=moved_table
+    )
     if delta is None:
         # No baseline to diff against, but the retirement debt is a
         # property of THIS tree, not of the delta -- a package whose first
@@ -1790,9 +1894,31 @@ def emit_changes_markdown(
     if removed:
         lines.append(f"## Removed ({len(removed)})")
         lines.append("")
+        lines.append(
+            "_A break: each owes a `ptk.Deprecation` alias, or a `MOVED_NAMES` "
+            "entry when the name left for another package._"
+        )
+        lines.append("")
         for key in removed:
             mod, sym = key.split("::", 1)
             lines.append(f"- `{mod}::{sym}` — was `{prior[key]}`")
+        lines.append("")
+    if delta.moved_out:
+        lines.append(f"## Moved out ({len(delta.moved_out)})")
+        lines.append("")
+        for key in delta.moved_out:
+            mod, sym = key.split("::", 1)
+            home, since = delta.destinations[key]
+            lines.append(f"- `{mod}::{sym}` → `{home}` (from {since})")
+        lines.append("")
+    if delta.retired:
+        lines.append(f"## Retired ({len(delta.retired)})")
+        lines.append("")
+        lines.append("_Deprecated aliases whose window ran out._")
+        lines.append("")
+        for key in delta.retired:
+            mod, sym = key.split("::", 1)
+            lines.append(f"- `{mod}::{sym}`")
         lines.append("")
     if added:
         lines.append(f"## Added ({len(added)})")
@@ -2130,6 +2256,7 @@ def regenerate(
                     _relpaths_losing_symbols(data, prior),
                 ),
                 version=pkg_version,
+                moved_table=moved_names(repo_root / data.source_root),
             )
 
         for path, content in targets.items():
@@ -2279,7 +2406,7 @@ def semver_verdict(name: str, repo_root: Path = REPO_ROOT) -> dict:
     try:
         data = walk_package(pkg_dir, repo_root)
     except (FileNotFoundError, NotADirectoryError):
-        return {"package": name, "bump": "patch", "reasons": []}
+        return {"package": name, "bump": "patch", "reasons": [], "unaccounted": []}
     prior, _label = _baseline_registry_json(pkg_dir)
     delta = compute_api_delta(
         data,
@@ -2288,9 +2415,18 @@ def semver_verdict(name: str, repo_root: Path = REPO_ROOT) -> dict:
         reexports=module_reexports(
             repo_root / data.source_root, _relpaths_losing_symbols(data, prior)
         ),
+        moved_table=moved_names(repo_root / data.source_root),
     )
     bump, reasons = required_bump(delta)
-    return {"package": name, "bump": bump, "reasons": reasons}
+    unaccounted = [
+        k for k in (delta.removed if delta else []) if not _is_semver_exempt(k)
+    ]
+    return {
+        "package": name,
+        "bump": bump,
+        "reasons": reasons,
+        "unaccounted": unaccounted,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

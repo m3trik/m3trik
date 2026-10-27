@@ -462,7 +462,59 @@ class TestSemverVerdict(unittest.TestCase):
     def test_an_unwalkable_package_is_not_a_break(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             verdict = g.semver_verdict("nope", Path(td))
-        self.assertEqual(verdict, {"package": "nope", "bump": "patch", "reasons": []})
+        self.assertEqual(
+            verdict, {"package": "nope", "bump": "patch", "reasons": [], "unaccounted": []}
+        )
+
+    MOVED = {"Widget.spin": ("tentacle.tools.spin.Spin.spin", "0.30.0")}
+
+    def test_a_name_in_the_moved_table_moved_out_and_is_no_break(self):
+        """A move gets no alias, so its removal is accounted for by the
+        package's MOVED_NAMES entry; it still owes the minor."""
+        data, prior = self._tree({"mod.py": self.WIDGET_2}, {"mod.py": self.WIDGET_1})
+        delta = g.compute_api_delta(data, prior, moved_table=self.MOVED)
+        self.assertEqual(delta.removed, [])
+        self.assertEqual(delta.moved_out, ["mod.py::Widget.spin"])
+        self.assertEqual(g.required_bump(delta), ("minor", ["mod.py::Widget.spin"]))
+
+    def test_a_whole_class_moved_out_takes_its_members(self):
+        data, prior = self._tree({"mod.py": self.WIDGET_2}, {"mod.py": '"""Mod."""\n'})
+        delta = g.compute_api_delta(data, prior, moved_table={"Widget": ("tentacle.W", "0.30.0")})
+        self.assertEqual(delta.removed, [])
+        self.assertEqual(
+            delta.moved_out,
+            ["mod.py::Widget", "mod.py::Widget.hop", "mod.py::Widget.spin"],
+        )
+
+    def test_a_deprecated_alias_retires_and_a_plain_removal_is_a_break(self):
+        deprecated = self.WIDGET_2.replace(
+            "    def spin(self):",
+            '    @Deprecation.symbol(replacement="hop", remove_in="1.0.0")\n    def spin(self):',
+        )
+        data, prior = self._tree({"mod.py": deprecated}, {"mod.py": self.WIDGET_1})
+        delta = g.compute_api_delta(data, prior)
+        self.assertEqual((delta.removed, delta.retired), ([], ["mod.py::Widget.spin"]))
+        data, prior = self._tree({"mod.py": self.WIDGET_2}, {"mod.py": self.WIDGET_1})
+        self.assertEqual(g.compute_api_delta(data, prior).removed, ["mod.py::Widget.spin"])
+
+    def test_the_moved_table_is_read_from_the_package_init(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            src = Path(td)
+            (src / "__init__.py").write_text(
+                'MOVED_NAMES = {"Spin": ("tentacle.Spin", "0.30.0")}\n', encoding="utf-8"
+            )
+            self.assertEqual(g.moved_names(src), {"Spin": ("tentacle.Spin", "0.30.0")})
+            (src / "__init__.py").write_text("MOVED_NAMES = dict(build())\n", encoding="utf-8")
+            self.assertEqual(g.moved_names(src), {})
+
+    def test_the_changes_document_names_each_destination(self):
+        data, prior = self._tree({"mod.py": self.WIDGET_2}, {"mod.py": self.WIDGET_1})
+        md = g.emit_changes_markdown(data, prior, moved_table=self.MOVED)
+        self.assertIn("## Moved out (1)", md)
+        self.assertIn(
+            "- `mod.py::Widget.spin` → `tentacle.tools.spin.Spin.spin` (from 0.30.0)", md
+        )
+        self.assertNotIn("## Removed", md)
 
 
 class TestChangesBaseline(unittest.TestCase):

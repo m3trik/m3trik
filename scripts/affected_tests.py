@@ -189,6 +189,9 @@ GATES: Tuple[Gate, ...] = (
          host_command="python tentacle/test/run_tests.py {stem} --in-blender"),
     # Loads every co-located tool panel's .ui through BlenderUiHandler and wires its slots.
     Gate("blendertk", ("blendertk/*.ui",), ("test_blender_ui_handler",)),
+    # Pins every root name against the package's DEFAULT_INCLUDE: no import of
+    # the root reaches it as a dependency, so a root change selects it outright.
+    Gate("pythontk", ("pythontk/__init__.py",), ("test_surface_snapshot",)),
 )
 
 

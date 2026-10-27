@@ -14,7 +14,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Behaviors` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L242)
+- `blendertk` — [`Behaviors`](blendertk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L241)
 - `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L157)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L110)
 
@@ -43,7 +43,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `KeyStash` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L214)
+- `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L213)
 - `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L237)
 - `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L194)
 

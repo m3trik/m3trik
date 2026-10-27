@@ -354,6 +354,18 @@ class TestSelection(_Fixture):
         _, picks = self.picks("blendertk/blendertk/edit_utils/mirror.ui")
         self.assertIn("test_blender_ui_handler", picks.get("blendertk", set()))
 
+    def test_a_root_init_change_selects_the_surface_snapshot(self):
+        """Bug: a name added to pythontk's DEFAULT_INCLUDE selected 110 modules,
+        none of them the snapshot that pins every root name, so the full suite
+        went red at release. Fixed: 2026-10-27"""
+        _write(self.ws, {
+            "pythontk/pythontk/__init__.py": "DEFAULT_INCLUDE = {}\n",
+            "pythontk/test/test_surface_snapshot.py": "def test_names():\n    pass\n",
+        })
+        _clear_caches()
+        _, picks = self.picks("pythontk/pythontk/__init__.py")
+        self.assertIn("test_surface_snapshot", picks.get("pythontk", set()))
+
 
 class TestCommands(_Fixture):
     def test_each_runner_gets_its_own_subset_form_and_no_badge(self):

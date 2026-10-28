@@ -97,7 +97,8 @@ Tools with a `header_init` but no help text yet. Adding
 
 ## Out of scope — tentacle hub panels
 
-These `header_init` methods exist in [tentacle/tentacle/slots/maya/](../../tentacle/tentacle/slots/maya/) but
+These `header_init` methods exist in tentacle's category Slots ([tentacle/tentacle/slots/](../../tentacle/tentacle/slots/):
+one composed `<category>.py` per category, or its `slots/<dcc>/` forks until it is composed) but
 serve as **launchers / utility menus** for the tentacle marking-menu hub
 (materials, scene, edit, polygons, rigging, animation, uv, transform,
 duplicate, settings). They aren't standalone tool windows, so the help

@@ -63,10 +63,10 @@ widget.menu.add(
 | mayatk · env_utils | [`scene_exporter/scene_exporter_slots.py`](../../mayatk/mayatk/env_utils/scene_exporter/scene_exporter_slots.py) |
 | mayatk · env_utils | [`workspace_map.py`](../../mayatk/mayatk/env_utils/workspace_map.py) |
 | mayatk · light_utils | [`hdr_manager.py`](../../mayatk/mayatk/light_utils/hdr_manager.py) |
-| mayatk · mat_utils | [`game_shader.py`](../../mayatk/mayatk/mat_utils/game_shader.py) |
+| tentacle · slots/tools | [`game_shader.py`](../../tentacle/tentacle/slots/tools/game_shader.py) |
 | tentacle · slots/tools | [`image_to_plane.py`](../../tentacle/tentacle/slots/tools/image_to_plane.py) |
 | mayatk · mat_utils | [`marmoset_bridge/marmoset_bridge_slots.py`](../../mayatk/mayatk/mat_utils/marmoset_bridge/marmoset_bridge_slots.py) |
-| mayatk · mat_utils | [`mat_updater.py`](../../mayatk/mayatk/mat_utils/mat_updater.py) |
+| tentacle · slots/tools | [`mat_updater.py`](../../tentacle/tentacle/slots/tools/mat_updater.py) |
 | mayatk · mat_utils | [`render_opacity/render_effects_slots.py`](../../mayatk/mayatk/mat_utils/render_opacity/render_effects_slots.py) |
 | mayatk · mat_utils | [`shader_templates/shader_templates_slots.py`](../../mayatk/mayatk/mat_utils/shader_templates/shader_templates_slots.py) |
 | mayatk · mat_utils | [`substance_bridge/substance_bridge_slots.py`](../../mayatk/mayatk/mat_utils/substance_bridge/substance_bridge_slots.py) |

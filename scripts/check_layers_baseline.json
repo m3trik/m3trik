@@ -100,6 +100,7 @@
   "ui_utils/_ui_utils.py -> mayatk.env_utils.webxr_preview",
   "ui_utils/channel_box.py -> mayatk.env_utils.devtools",
   "ui_utils/maya_ui_handler.py -> mayatk.node_utils.data_nodes",
+  "uv_utils/_uv_utils.py -> mayatk.core_utils.diagnostics.mesh_diag",
   "uv_utils/_uv_utils.py -> mayatk.core_utils.diagnostics.uv_diag",
   "uv_utils/rizom_bridge/_rizom_bridge.py -> mayatk.env_utils.fbx_utils",
   "xform_utils/_freeze.py -> mayatk.node_utils._node_utils",

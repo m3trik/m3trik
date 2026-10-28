@@ -469,6 +469,14 @@ LEDGER: List[TwinSpec] = [
             "(blendertk swaps the baked material per slot)."
         ),
     ),
+    TwinSpec(
+        rel="uv_utils/_uv_utils.py",
+        reason=(
+            "What UvUtils.unfold_uvs returns: one shape in both packages, so tentacle's "
+            "shared UV page reads either host's result (2026-10-28)."
+        ),
+        symbols=("UnfoldResult",),
+    ),
 ]
 
 

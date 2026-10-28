@@ -716,47 +716,6 @@ LEDGER: List[TwinSpec] = [
             "scan, the file browser, Locators vs Empties, the find/select report."
         ),
     ),
-    TwinSpec(
-        rel="rig_utils/articulated_rig/articulated_rig_slots.py",
-        reason=(
-            "The Articulated Rig panel: Qt glue over each host's ArticulatedRig "
-            "engine (the plan edits and the table's limits / give text are pythontk's "
-            "ArticulationPlan). uitk names no rig and pythontk hosts no Qt, so the "
-            "glue is mirrored in both DCC packages over one .ui (mayatk's, byte for "
-            "byte)."
-        ),
-        symbols=(
-            "ArticulatedRigSlots._entry",
-            "ArticulatedRigSlots._init_table",
-            "ArticulatedRigSlots._on_end_control_toggled",
-            "ArticulatedRigSlots._on_item_changed",
-            "ArticulatedRigSlots._reporting",
-            "ArticulatedRigSlots._retype",
-            "ArticulatedRigSlots._selected_joints",
-            "ArticulatedRigSlots._selected_rig",
-            "ArticulatedRigSlots._set_give",
-            "ArticulatedRigSlots._set_limits",
-            "ArticulatedRigSlots._sync_adjust",
-            "ArticulatedRigSlots.btn_clear_limits",
-            "ArticulatedRigSlots.btn_fold",
-            "ArticulatedRigSlots.btn_grab",
-            "ArticulatedRigSlots.btn_ik_fk",
-            "ArticulatedRigSlots.btn_ik_fk_init",
-            "ArticulatedRigSlots.btn_limits_from_pose",
-            "ArticulatedRigSlots.btn_rebuild",
-            "ArticulatedRigSlots.btn_remove",
-            "ArticulatedRigSlots.btn_rest",
-            "ArticulatedRigSlots.match_end_control",
-            "ArticulatedRigSlots.parse_limits",
-        ),
-        note=(
-            "22 of 36 shared methods (measured 2026-10-17). The rest speak host "
-            "vocabulary: Maya selects a control transform, Blender a bone in Pose "
-            "Mode (blendertk's _selection / _select / _parts_of); a Blender part is "
-            "named by its object, not a DAG path; blendertk defers its Qt imports, "
-            "arms the selection-order tracker on open, and its help says Auto Keying."
-        ),
-    ),
     # Seeded 2026-09-26 after the scene-export engine pass: SceneExporterBase and
     # SceneDataSidecarBase (pythontk) took the exporter's DCC-free shell and the
     # sidecar; HierarchyAnalyzer the Hierarchy Sync pairing passes; TiledPath the

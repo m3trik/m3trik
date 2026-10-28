@@ -2308,8 +2308,7 @@
    "tentacle"
   ],
   "arnold_bridge": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "articulated_rig": [
    "tentacle"
@@ -2498,7 +2497,7 @@
    "tentacle"
   ],
   "light_rig": [
-   "mayatk"
+   "tentacle"
   ],
   "lighting": [
    "tentacle"
@@ -2832,10 +2831,10 @@
    "tentacle"
   ],
   "workspace_editor": [
-   "blendertk"
+   "tentacle"
   ],
   "workspace_map": [
-   "mayatk"
+   "tentacle"
   ]
  },
  "records": [

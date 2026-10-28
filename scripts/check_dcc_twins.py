@@ -670,52 +670,6 @@ LEDGER: List[TwinSpec] = [
             "the current frame and the WebXR push are each host's own."
         ),
     ),
-    TwinSpec(
-        rel="edit_utils/naming/naming_slots.py",
-        reason=(
-            "The Naming panel. Its Suffix By Type editor lives once in uitk "
-            "(NamingConventionEditor); what stays here is host glue handing it data "
-            "(_convention_groups / _convention_tooltip / tb003_init, the host "
-            "difference expressed as CONVENTION_DISABLED) plus the shared operation "
-            "slots."
-        ),
-        symbols=(
-            "NamingSlots._add_apply_button",
-            "NamingSlots._apply_dry_run",
-            "NamingSlots._arm_apply",
-            "NamingSlots._begin",
-            "NamingSlots._convention_groups",
-            "NamingSlots._convention_tooltip",
-            "NamingSlots._disarm_apply",
-            "NamingSlots._file_targets",
-            "NamingSlots._follow_renames",
-            "NamingSlots._log_directories",
-            "NamingSlots._on_scope_changed",
-            "NamingSlots._report_found",
-            "NamingSlots._run",
-            "NamingSlots._run_on_files",
-            "NamingSlots._scene_only",
-            "NamingSlots._sync_scope_options",
-            "NamingSlots.base_names",
-            "NamingSlots.dry_run",
-            "NamingSlots.file_scope",
-            "NamingSlots.scope",
-            "NamingSlots.tb000",
-            "NamingSlots.tb000_init",
-            "NamingSlots.tb001_init",
-            "NamingSlots.tb002",
-            "NamingSlots.tb002_init",
-            "NamingSlots.tb003",
-            "NamingSlots.tb003_init",
-            "NamingSlots.txt001",
-            "NamingSlots.txt001_init",
-            "NamingSlots.valid_suffixes",
-        ),
-        note=(
-            "30 of 38 shared methods. The rest differ on host vocabulary: the scope "
-            "scan, the file browser, Locators vs Empties, the find/select report."
-        ),
-    ),
     # Seeded 2026-09-26 after the scene-export engine pass: SceneExporterBase and
     # SceneDataSidecarBase (pythontk) took the exporter's DCC-free shell and the
     # sidecar; HierarchyAnalyzer the Hierarchy Sync pairing passes; TiledPath the

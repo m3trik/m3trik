@@ -216,7 +216,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (203)
+## Intentional mayatk↔blendertk port parity (202)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -256,10 +256,10 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ControlNodes`
 - `Controls`
 - `Creator`
+- `Curtain`
 - `CurtainDrape`
 - `CurtainMesh`
 - `CurtainRig`
-- `CurtainSlots`
 - `CurveToTube`
 - `CutOnAxis`
 - `DataNodes`
@@ -315,7 +315,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Matrices`
 - `MeshDiagnostics`
 - `Naming`
-- `NamingSlots`
 - `NodeIcons`
 - `NodeUtils`
 - `NurbsUtils`

@@ -56,7 +56,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`duplicate_radial.py`](../../tentacle/tentacle/slots/tools/duplicate_radial.py) |
 | tentacle · slots/tools | [`dynamic_pipe.py`](../../tentacle/tentacle/slots/tools/dynamic_pipe.py) |
 | tentacle · slots/tools | [`mirror.py`](../../tentacle/tentacle/slots/tools/mirror.py) |
-| mayatk · edit_utils | [`naming/naming_slots.py`](../../mayatk/mayatk/edit_utils/naming/naming_slots.py) |
+| tentacle · slots/tools | [`naming.py`](../../tentacle/tentacle/slots/tools/naming.py) |
 | tentacle · slots/tools | [`snap.py`](../../tentacle/tentacle/slots/tools/snap.py) |
 | mayatk · env_utils | [`hierarchy_sync/hierarchy_sync_slots.py`](../../mayatk/mayatk/env_utils/hierarchy_sync/hierarchy_sync_slots.py) |
 | mayatk · env_utils | [`reference_manager/reference_manager_slots.py`](../../mayatk/mayatk/env_utils/reference_manager/reference_manager_slots.py) |

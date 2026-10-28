@@ -71,7 +71,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`shader_templates.py`](../../tentacle/tentacle/slots/tools/shader_templates.py) |
 | mayatk · mat_utils | [`substance_bridge/substance_bridge_slots.py`](../../mayatk/mayatk/mat_utils/substance_bridge/substance_bridge_slots.py) |
 | mayatk · mat_utils | [`texture_path_editor.py`](../../mayatk/mayatk/mat_utils/texture_path_editor.py) |
-| mayatk · node_utils | [`attributes/channels/channels_slots.py`](../../mayatk/mayatk/node_utils/attributes/channels/channels_slots.py) |
+| tentacle · slots/tools | [`channels.py`](../../tentacle/tentacle/slots/tools/channels.py) |
 | tentacle · slots/tools | [`image_tracer.py`](../../tentacle/tentacle/slots/tools/image_tracer.py) |
 | tentacle · slots/tools | [`shadow_rig.py`](../../tentacle/tentacle/slots/tools/shadow_rig.py) |
 | tentacle · slots/tools | [`telescope_rig.py`](../../tentacle/tentacle/slots/tools/telescope_rig.py) |

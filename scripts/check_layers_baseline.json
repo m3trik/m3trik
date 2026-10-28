@@ -16,7 +16,6 @@
   "mat_utils/marmoset_bridge/_marmoset_bridge.py -> blendertk.env_utils.usd",
   "mat_utils/render_opacity/render_effects.py -> blendertk.anim_utils._anim_utils",
   "mat_utils/render_opacity/render_effects.py -> blendertk.env_utils.fbx_utils",
-  "mat_utils/render_opacity/render_effects_slots.py -> blendertk.env_utils.webxr_preview",
   "mat_utils/substance_bridge/_substance_bridge.py -> blendertk.env_utils.fbx_utils",
   "mat_utils/substance_bridge/_substance_bridge.py -> blendertk.env_utils.handoff_export",
   "mat_utils/substance_bridge/_substance_bridge.py -> blendertk.env_utils.usd",

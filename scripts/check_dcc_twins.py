@@ -633,43 +633,6 @@ LEDGER: List[TwinSpec] = [
             "keyframe points and channels)."
         ),
     ),
-    TwinSpec(
-        rel="mat_utils/render_opacity/render_effects_slots.py",
-        reason=(
-            "Render Effects panel controller: Qt glue binding the effect pages to "
-            "the scene's effect recipe (pythontk EffectRecipe, through uitk's "
-            "ModelBinding and FormRows). uitk names no render effects and "
-            "pythontk hosts no Qt, so the glue is mirrored in both DCC packages."
-        ),
-        symbols=(
-            "RenderEffectsSlots._add_settings",
-            "RenderEffectsSlots._clear_report",
-            "RenderEffectsSlots._fade_preview_plan",
-            "RenderEffectsSlots._fit_stack",
-            "RenderEffectsSlots._on_mode_changed",
-            "RenderEffectsSlots._on_scene_selection",
-            "RenderEffectsSlots._pulse_preview_plan",
-            "RenderEffectsSlots._recipe_values",
-            "RenderEffectsSlots._refit",
-            "RenderEffectsSlots._show_recipe_colors",
-            "RenderEffectsSlots._shown_channel",
-            "RenderEffectsSlots._shown_page",
-            "RenderEffectsSlots._spin_value",
-            "RenderEffectsSlots._stop_watching",
-            "RenderEffectsSlots._sync_pulse_shape",
-            "RenderEffectsSlots._update_cycle_readout",
-            "RenderEffectsSlots._write_recipe",
-            "RenderEffectsSlots.b000",
-            "RenderEffectsSlots.ui_field",
-            "RenderEffectsSlots.unfocus",
-        ),
-        note=(
-            "20 of 63 shared methods (re-measured 2026-10-12). The rest speak "
-            "host vocabulary: mayatk keys a "
-            "channel by ChannelSpec and blendertk by name, and selection, undo, "
-            "the current frame and the WebXR push are each host's own."
-        ),
-    ),
     # Seeded 2026-09-26 after the scene-export engine pass: SceneExporterBase and
     # SceneDataSidecarBase (pythontk) took the exporter's DCC-free shell and the
     # sidecar; HierarchyAnalyzer the Hierarchy Sync pairing passes; TiledPath the

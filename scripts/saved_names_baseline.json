@@ -103,12 +103,10 @@
    "b003",
    "b004",
    "centralwidget",
-   "clips_group",
    "cmb000",
    "footer",
    "header",
    "key_group",
-   "move_group",
    "range_group",
    "s000",
    "s001",
@@ -2317,8 +2315,7 @@
    "tentacle"
   ],
   "audio_clips": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "bevel": [
    "tentacle"
@@ -2515,8 +2512,7 @@
    "tentacle"
   ],
   "lightmap_baker": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "look_match": [
    "extapps"
@@ -2671,8 +2667,7 @@
    "tentacle"
   ],
   "render_effects": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "rendering": [
    "tentacle"

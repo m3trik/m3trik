@@ -2123,7 +2123,6 @@
    "cmb_preset",
    "footer",
    "groupBox_global",
-   "grp_steps",
    "header",
    "page_bind",
    "page_controls",
@@ -2134,8 +2133,7 @@
    "s001",
    "s002",
    "toolbox_steps",
-   "txt000",
-   "wgt_options"
+   "txt000"
   ],
   "unity_bridge": [
    "QtUi",
@@ -2316,8 +2314,7 @@
    "mayatk"
   ],
   "articulated_rig": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "audio_clips": [
    "blendertk",
@@ -2333,8 +2330,7 @@
    "mayatk"
   ],
   "blendshape_animator": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "bridge": [
    "tentacle"
@@ -2383,8 +2379,7 @@
    "tentacle"
   ],
   "curtain": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "curve#submenu": [
    "tentacle"
@@ -2471,8 +2466,7 @@
    "tentacle"
   ],
   "game_shader": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "gaussian_splat_workflow": [
    "extapps"
@@ -2481,8 +2475,7 @@
    "tentacle"
   ],
   "hdr_manager": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "help#submenu": [
    "tentacle"
@@ -2545,8 +2538,7 @@
    "tentacle"
   ],
   "mat_updater": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "materials": [
    "tentacle"
@@ -2588,8 +2580,7 @@
    "tentacle"
   ],
   "naming": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "ncloth#submenu": [
    "tentacle"
@@ -2731,12 +2722,10 @@
    "tentacle"
   ],
   "shader_templates": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "shadow_rig": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "shell_xform": [
    "tentacle"
@@ -2813,8 +2802,7 @@
    "tentacle"
   ],
   "tube_rig": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "unity_bridge": [
    "blendertk",

@@ -41,7 +41,7 @@ widget.menu.add(
 | Package | File |
 |:---|:---|
 | extapps | [`photogrammetry/_panel_slots.py`](../../extapps/extapps/photogrammetry/_panel_slots.py) |
-| mayatk · anim_utils | [`blendshape_animator/blendshape_animator_slots.py`](../../mayatk/mayatk/anim_utils/blendshape_animator/blendshape_animator_slots.py) |
+| tentacle · slots/tools | [`blendshape_animator.py`](../../tentacle/tentacle/slots/tools/blendshape_animator.py) |
 | mayatk · anim_utils | [`shots/shots_slots.py`](../../mayatk/mayatk/anim_utils/shots/shots_slots.py) |
 | tentacle · slots/tools | [`shot_manifest.py`](../../tentacle/tentacle/slots/tools/shot_manifest.py) |
 | mayatk · anim_utils | [`shots/shot_sequencer/shot_sequencer_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_sequencer/shot_sequencer_slots.py) |
@@ -75,7 +75,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`image_tracer.py`](../../tentacle/tentacle/slots/tools/image_tracer.py) |
 | tentacle · slots/tools | [`shadow_rig.py`](../../tentacle/tentacle/slots/tools/shadow_rig.py) |
 | tentacle · slots/tools | [`telescope_rig.py`](../../tentacle/tentacle/slots/tools/telescope_rig.py) |
-| mayatk · rig_utils | [`tube_rig/tube_rig_slots.py`](../../mayatk/mayatk/rig_utils/tube_rig/tube_rig_slots.py) |
+| tentacle · slots/tools | [`tube_rig.py`](../../tentacle/tentacle/slots/tools/tube_rig.py) |
 | tentacle · slots/tools | [`wheel_rig.py`](../../tentacle/tentacle/slots/tools/wheel_rig.py) |
 | tentacle · slots/tools | [`calculator.py`](../../tentacle/tentacle/slots/tools/calculator.py) |
 | mayatk · uv_utils | [`rizom_bridge/rizom_bridge_slots.py`](../../mayatk/mayatk/uv_utils/rizom_bridge/rizom_bridge_slots.py) |

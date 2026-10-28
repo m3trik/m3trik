@@ -74,9 +74,9 @@ widget.menu.add(
 | mayatk · node_utils | [`attributes/channels/channels_slots.py`](../../mayatk/mayatk/node_utils/attributes/channels/channels_slots.py) |
 | tentacle · slots/tools | [`image_tracer.py`](../../tentacle/tentacle/slots/tools/image_tracer.py) |
 | mayatk · rig_utils | [`shadow_rig/shadow_rig_slots.py`](../../mayatk/mayatk/rig_utils/shadow_rig/shadow_rig_slots.py) |
-| mayatk · rig_utils | [`telescope_rig.py`](../../mayatk/mayatk/rig_utils/telescope_rig.py) |
+| tentacle · slots/tools | [`telescope_rig.py`](../../tentacle/tentacle/slots/tools/telescope_rig.py) |
 | mayatk · rig_utils | [`tube_rig/tube_rig_slots.py`](../../mayatk/mayatk/rig_utils/tube_rig/tube_rig_slots.py) |
-| mayatk · rig_utils | [`wheel_rig.py`](../../mayatk/mayatk/rig_utils/wheel_rig.py) |
+| tentacle · slots/tools | [`wheel_rig.py`](../../tentacle/tentacle/slots/tools/wheel_rig.py) |
 | tentacle · slots/tools | [`calculator.py`](../../tentacle/tentacle/slots/tools/calculator.py) |
 | mayatk · uv_utils | [`rizom_bridge/rizom_bridge_slots.py`](../../mayatk/mayatk/uv_utils/rizom_bridge/rizom_bridge_slots.py) |
 

@@ -43,7 +43,7 @@ widget.menu.add(
 | extapps | [`photogrammetry/_panel_slots.py`](../../extapps/extapps/photogrammetry/_panel_slots.py) |
 | mayatk · anim_utils | [`blendshape_animator/blendshape_animator_slots.py`](../../mayatk/mayatk/anim_utils/blendshape_animator/blendshape_animator_slots.py) |
 | mayatk · anim_utils | [`shots/shots_slots.py`](../../mayatk/mayatk/anim_utils/shots/shots_slots.py) |
-| mayatk · anim_utils | [`shots/shot_manifest/shot_manifest_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_manifest/shot_manifest_slots.py) |
+| tentacle · slots/tools | [`shot_manifest.py`](../../tentacle/tentacle/slots/tools/shot_manifest.py) |
 | mayatk · anim_utils | [`shots/shot_sequencer/shot_sequencer_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_sequencer/shot_sequencer_slots.py) |
 | mayatk · audio_utils | [`audio_clips/audio_clips_slots.py`](../../mayatk/mayatk/audio_utils/audio_clips/audio_clips_slots.py) |
 | mayatk · display_utils | [`color_id.py`](../../mayatk/mayatk/display_utils/color_id.py) |

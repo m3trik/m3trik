@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (28)
+## Genuine cross-layer collisions (36)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -18,11 +18,53 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L157)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L110)
 
+### `BevelSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`BevelSlots`](blendertk/edit_utils/bevel.py#L98)
+- `mayatk` — [`BevelSlots`](mayatk/edit_utils/bevel.py#L113)
+- `tentacle` — [`BevelSlots`](tentacle/slots/tools/bevel.py#L12)
+
+### `CalculatorSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`CalculatorSlots`](blendertk/ui_utils/calculator.py#L79)
+- `mayatk` — [`CalculatorSlots`](mayatk/ui_utils/calculator.py#L74)
+- `tentacle` — [`CalculatorSlots`](tentacle/slots/tools/calculator.py#L13)
+
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L464)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L280)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
+
+### `CutOnAxisSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`CutOnAxisSlots`](blendertk/edit_utils/cut_on_axis.py#L22)
+- `mayatk` — [`CutOnAxisSlots`](mayatk/edit_utils/cut_on_axis.py#L73)
+- `tentacle` — [`CutOnAxisSlots`](tentacle/slots/tools/cut_on_axis.py#L14)
+
+### `DuplicateGridSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`DuplicateGridSlots`](blendertk/edit_utils/duplicate_grid.py#L106)
+- `mayatk` — [`DuplicateGridSlots`](mayatk/edit_utils/duplicate_grid.py#L259)
+- `tentacle` — [`DuplicateGridSlots`](tentacle/slots/tools/duplicate_grid.py#L13)
+
+### `DuplicateLinearSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`DuplicateLinearSlots`](blendertk/edit_utils/duplicate_linear.py#L106)
+- `mayatk` — [`DuplicateLinearSlots`](mayatk/edit_utils/duplicate_linear.py#L134)
+- `tentacle` — [`DuplicateLinearSlots`](tentacle/slots/tools/duplicate_linear.py#L27)
+
+### `DynamicPipeSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`DynamicPipeSlots`](blendertk/edit_utils/dynamic_pipe.py#L141)
+- `mayatk` — [`DynamicPipeSlots`](mayatk/edit_utils/dynamic_pipe.py#L139)
+- `tentacle` — [`DynamicPipeSlots`](tentacle/slots/tools/dynamic_pipe.py#L13)
+
+### `ExplodedViewSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`ExplodedViewSlots`](blendertk/display_utils/exploded_view.py#L27)
+- `mayatk` — [`ExplodedViewSlots`](mayatk/display_utils/exploded_view.py#L240)
+- `tentacle` — [`ExplodedViewSlots`](tentacle/slots/tools/exploded_view.py#L12)
 
 ### `Finding` — mayatk, pythontk
 
@@ -135,6 +177,12 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`ShotStore`](mayatk/anim_utils/shots/_shots.py#L382)
 - `pythontk` — [`ShotStore`](pythontk/core_utils/engines/shots/shot_model.py#L428)
 
+### `SnapSlots` — blendertk, mayatk, tentacle
+
+- `blendertk` — [`SnapSlots`](blendertk/edit_utils/snap.py#L25)
+- `mayatk` — [`SnapSlots`](mayatk/edit_utils/snap.py#L271)
+- `tentacle` — [`SnapSlots`](tentacle/slots/tools/snap.py#L13)
+
 ### `TemplateParams` — blendertk, extapps, mayatk
 
 - `blendertk` — [`TemplateParams`](blendertk/mat_utils/marmoset_bridge/template_params.py#L101)
@@ -216,7 +264,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (236)
+## Intentional mayatk↔blendertk port parity (215)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -242,13 +290,11 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `BakeSourceSet`
 - `BatchJob`
 - `Bevel`
-- `BevelSlots`
 - `BlendshapeAnimator`
 - `BlendshapeAnimatorSlots`
 - `Bridge`
 - `BridgeSlots`
 - `CalculatorController`
-- `CalculatorSlots`
 - `CamUtils`
 - `Channels`
 - `ChannelsSlots`
@@ -267,24 +313,18 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `CurtainSlots`
 - `CurveToTube`
 - `CurveToTubeSlots`
-- `CutOnAxisSlots`
 - `DataNodes`
 - `Detection`
 - `DisplayMacros`
 - `DisplayUtils`
 - `DuplicateGrid`
-- `DuplicateGridSlots`
 - `DuplicateLinear`
-- `DuplicateLinearSlots`
 - `DuplicateRadial`
 - `DynamicPipe`
-- `DynamicPipeSlots`
 - `EditMacros`
 - `EditUtils`
 - `EmissiveGroups`
 - `EnvUtils`
-- `ExplodedViewSlots`
-- `ExportPreviewMixin`
 - `FKChainStrategy`
 - `FbxUtils`
 - `GameShader`
@@ -293,7 +333,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `GeometryMatcher`
 - `GraphSync`
 - `HdrManagerSlots`
-- `HeaderMenuMixin`
 - `HierarchyMapBuilder`
 - `HierarchySync`
 - `HierarchySyncController`
@@ -318,12 +357,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `LightmapRecords`
 - `MacroManager`
 - `Macros`
-- `ManifestData`
-- `ManifestEditor`
 - `ManifestHost`
-- `ManifestSourceMixin`
-- `ManifestTableMixin`
-- `MappingPickerMixin`
 - `MarkerManagerMixin`
 - `MarmosetBridge`
 - `MarmosetBridgeSlots`
@@ -345,7 +379,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `PainterRpcClient`
 - `Preview`
 - `Rail`
-- `RangeColumnMixin`
 - `ReferenceManagerSlots`
 - `RenderEffects`
 - `RenderEffectsSlots`
@@ -355,7 +388,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `RigUtils`
 - `RizomBridgeSlots`
 - `RizomUVBridge`
-- `RowMenusMixin`
 - `ScaleKeys`
 - `SceneAnalyzer`
 - `SceneCallbacksMixin`
@@ -378,8 +410,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ShellXformSlots`
 - `ShotEditDialog`
 - `ShotLaneMixin`
-- `ShotManifestController`
-- `ShotManifestSlots`
 - `ShotNavMixin`
 - `ShotSequencerController`
 - `ShotSequencerSlots`
@@ -387,10 +417,8 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ShotsSlots`
 - `SmartBake`
 - `SmartBakeSlots`
-- `SnapSlots`
 - `SplineIKStrategy`
 - `StaggerKeys`
-- `StoreFollowMixin`
 - `StyleSetter`
 - `SubstanceBridge`
 - `SubstanceBridgeSlots`
@@ -425,7 +453,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UvDiagnostics`
 - `UvUtils`
 - `Validator`
-- `ViewCombosMixin`
 - `WebXrPreview`
 - `WheelRig`
 - `WheelRigSlots`

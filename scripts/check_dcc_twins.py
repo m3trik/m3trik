@@ -127,49 +127,6 @@ class TwinSpec:
         return f"{self.rel}  [{self.a}<->{self.b}, {kind}]"
 
 
-#: The Shot Manifest panel folder, and the modules in it that answer to their
-#: host (each DCC's own): the host adapter, the engine adapter, the range
-#: facade bound to the host's audio sizing, the generated ``.ui`` module and
-#: the package docstring.
-_MANIFEST_PANEL = "anim_utils/shots/shot_manifest"
-_MANIFEST_HOST_MODULES = frozenset(
-    (
-        "__init__.py",
-        "manifest_host.py",
-        "_shot_manifest.py",
-        "range_resolver.py",
-        "shot_manifest_ui.py",
-    )
-)
-
-
-def _manifest_panel_twins() -> List["TwinSpec"]:
-    """A whole-file entry per Shot Manifest panel module but the host's.
-
-    Derived from both packages' folders, never hand-listed (CODE_STANDARD §6):
-    a module the panel gains in either host is guarded the day it lands, and
-    one the other host lacks reads MISSING.  Empty when neither is checked out.
-    """
-    names = set()
-    for pkg in ("mayatk", "blendertk"):
-        root = os.path.join(REPO, pkg, pkg, *_MANIFEST_PANEL.split("/"))
-        if os.path.isdir(root):
-            names.update(os.listdir(root))
-    return [
-        TwinSpec(
-            rel=f"{_MANIFEST_PANEL}/{name}",
-            reason=(
-                "The Shot Manifest panel's Qt glue over the pythontk manifest "
-                "engine (pairing, rows, ranges, edits, tags). uitk names no "
-                "shots, so it is mirrored in both DCC packages -- one text, "
-                "every host call going through manifest_host.ManifestHost."
-            ),
-        )
-        for name in sorted(names)
-        if name.endswith(".py") and name not in _MANIFEST_HOST_MODULES
-    ]
-
-
 # Seeded 2026-09-16 from a measured pass, NOT from a guess: every symbol below
 # was confirmed identical-after-fold at the moment it was added. An entry that
 # was never green is worse than no entry -- it teaches the reader that red is
@@ -417,10 +374,6 @@ LEDGER: List[TwinSpec] = [
     # HierarchyBaselineStore) and the Suffix By Type editor to uitk
     # (NamingConventionEditor). What each DCC keeps is thin panel glue over
     # those -- identical, so it is guarded here, measured green.
-    # The Shot Manifest panel, restructured 2026-10-10: every module but the
-    # host's is one text in both packages, so each is guarded whole-file --
-    # the set derived from the folder (_manifest_panel_twins).
-    *_manifest_panel_twins(),
     TwinSpec(
         rel="anim_utils/shots/shots_slots.py",
         reason=(

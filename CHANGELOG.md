@@ -1,5 +1,7 @@
 # m3trik — Changelog
 
+- **2026-10-28 - `scripts/check_dcc_twins.py` drops the Shot Manifest panel's derived twin set (`_manifest_panel_twins`).** The panel is one copy in tentacle; the host modules left in both libraries were never twins.
+  - Test(s): `test/test_check_dcc_twins.py` -1 (the derived-set case).
 - **2026-10-27 - The new layout is tentacle's `slots/tools/`; tool logic stays in the libraries (`scripts/check_dcc_twins.py` `NEW_LAYOUT`, `scripts/check_layers_baseline.json`, `docs/CODE_STANDARD.md` §3 and §14, `docs/HEADER_HELP_INVENTORY.md`).** The maintainer's architecture, restated: mayatk / blendertk hold each tool's API half, pythontk the truly reusable shared logic, tentacle only the launcher, the UIs and the Slots classes (a tool's `.ui` flat in `ui/tools/`, its Slots in `slots/tools/`). The written-once check reads `slots/tools/` instead of `tools/`, `core/` and `ui/panels/`; the layer baseline takes back the three Emissive Groups imports it held before the engine left (it is back in the libraries).
   - Test(s): `test/test_check_dcc_twins.py` `WrittenOnceTest` fixtures on `slots/tools/` (33 passed).
 - **2026-10-27 - `scripts/check_dcc_twins.py` no longer lists the Shot Manifest's `export_menu.py` as a host module (`_MANIFEST_HOST_MODULES`).** The deprecated module is gone from both packages.

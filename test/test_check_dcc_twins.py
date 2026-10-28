@@ -135,27 +135,6 @@ class WholeFileCompareTest(_TwinTreeCase):
         self.assertEqual(status, "missing")
         self.assertIn("blendertk", detail[0])
 
-    def test_a_manifest_module_only_one_host_has_is_guarded(self):
-        """The derived Shot Manifest set reads BOTH folders, so a panel module
-        that lands in either host first is ledgered (and reads ``missing``)."""
-        folder = gate._MANIFEST_PANEL.split("/")
-        for pkg, names in (
-            ("mayatk", ("shared.py", "maya_first.py")),
-            ("blendertk", ("shared.py", "blender_first.py")),
-        ):
-            path = os.path.join(self.root, pkg, pkg, *folder)
-            os.makedirs(path, exist_ok=True)
-            for name in names:
-                with open(os.path.join(path, name), "w", encoding="utf-8") as fh:
-                    fh.write("X = 1\n")
-        specs = {s.rel.rsplit("/", 1)[1]: s for s in gate._manifest_panel_twins()}
-        self.assertEqual(
-            sorted(specs), ["blender_first.py", "maya_first.py", "shared.py"]
-        )
-        self.assertEqual(gate.compare(specs["shared.py"])[0], "ok")
-        self.assertEqual(gate.compare(specs["maya_first.py"])[0], "missing")
-        self.assertEqual(gate.compare(specs["blender_first.py"])[0], "missing")
-
 
 class SymbolCompareTest(_TwinTreeCase):
     A_SRC = (

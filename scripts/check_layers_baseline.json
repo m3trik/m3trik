@@ -139,7 +139,6 @@
   "str_utils/_str_utils.py -> pythontk.file_utils._file_utils"
  ],
  "tentacle": [
-  "slots/blender/settings.py -> tentacle.tcl_blender",
   "slots/tools/_unity_bridge/_unity_panel.py -> unitytk"
  ],
  "uitk": [

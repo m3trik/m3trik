@@ -110,12 +110,12 @@ TEMP_TOKEN = re.compile(r"(?i:%(?:TEMP|TMP)%)|\$\{?(?:TEMP|TMPDIR|TMP)\b\}?")
 # Keep this list SHORT and each entry argued. A growing allowlist means the
 # primitive is missing a capability -- add it there instead.
 ALLOWLIST: Dict[str, str] = {
-    "blendertk/blendertk/core_utils/_core_utils.py::get_recent_autosave": (
+    "blendertk/blendertk/env_utils/_env_utils.py::get_recent_autosave": (
         "names BLENDER's autosave folder (its documented OS-temp fallback when "
         "the preference is empty) -- reads Blender's files, writes nothing"
     ),
-    "tentacle/tentacle/slots/blender/hud.py::_warn_check_autosave_file_open": (
-        "the same Blender autosave-folder test as get_recent_autosave; read-only"
+    "blendertk/blendertk/env_utils/_env_utils.py::scene_status": (
+        "the HUD's autosave-folder test, the same as get_recent_autosave; read-only"
     ),
     "mayatk/mayatk/mat_utils/texture_baker.py::_exr_trouble": (
         "names OPENCV's own temp folder in a diagnostic message (cv2 resolves it "

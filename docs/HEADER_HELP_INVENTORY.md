@@ -78,7 +78,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`tube_rig.py`](../../tentacle/tentacle/slots/tools/tube_rig.py) |
 | tentacle · slots/tools | [`wheel_rig.py`](../../tentacle/tentacle/slots/tools/wheel_rig.py) |
 | tentacle · slots/tools | [`calculator.py`](../../tentacle/tentacle/slots/tools/calculator.py) |
-| mayatk · uv_utils | [`rizom_bridge/rizom_bridge_slots.py`](../../mayatk/mayatk/uv_utils/rizom_bridge/rizom_bridge_slots.py) |
+| tentacle · slots/tools | [`rizom_bridge.py`](../../tentacle/tentacle/slots/tools/rizom_bridge.py) |
 
 ### Excluded from migration
 

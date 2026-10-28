@@ -2323,7 +2323,7 @@
    "tentacle"
   ],
   "blender_bridge": [
-   "mayatk"
+   "tentacle"
   ],
   "blendshape_animator": [
    "tentacle"
@@ -2542,7 +2542,7 @@
    "tentacle"
   ],
   "maya_bridge": [
-   "blendertk"
+   "tentacle"
   ],
   "mesh#submenu": [
    "tentacle"
@@ -2680,8 +2680,7 @@
    "tentacle"
   ],
   "rizom_bridge": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "scene": [
    "tentacle"

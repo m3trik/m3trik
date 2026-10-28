@@ -1887,14 +1887,11 @@
    "b000",
    "b001",
    "centralwidget",
-   "chk_bake_blend_shapes",
    "chk_bake_blendshapes",
    "chk_delete_inputs",
-   "chk_delete_sources",
    "chk_mute_drivers",
    "chk_optimize",
    "chk_preserve_outside",
-   "chk_use_override",
    "cmb_backup",
    "cmb_bake_layer",
    "cmb_scope",
@@ -2327,8 +2324,7 @@
    "mayatk"
   ],
   "bevel": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "blender#startmenu": [
    "tentacle"
@@ -2341,15 +2337,13 @@
    "mayatk"
   ],
   "bridge": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "cache#submenu": [
    "tentacle"
   ],
   "calculator": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "cameras#lower#submenu": [
    "tentacle"
@@ -2362,8 +2356,7 @@
    "mayatk"
   ],
   "color_id": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "compositor": [
    "extapps"
@@ -2397,15 +2390,13 @@
    "tentacle"
   ],
   "curve_to_tube": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "curves#submenu": [
    "tentacle"
   ],
   "cut_on_axis": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "deform#submenu": [
    "tentacle"
@@ -2429,20 +2420,16 @@
    "tentacle"
   ],
   "duplicate_grid": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "duplicate_linear": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "duplicate_radial": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "dynamic_pipe": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "edge#submenu": [
    "tentacle"
@@ -2466,15 +2453,13 @@
    "tentacle"
   ],
   "emissive_groups": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "example": [
    "uitk"
   ],
   "exploded_view": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "face#submenu": [
    "tentacle"
@@ -2513,19 +2498,16 @@
    "tentacle"
   ],
   "image_to_plane": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "image_tracer": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "key#submenu": [
    "tentacle"
   ],
   "key_stash": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "light_rig": [
    "mayatk"
@@ -2600,8 +2582,7 @@
    "extapps"
   ],
   "mirror": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "modifiers#submenu": [
    "tentacle"
@@ -2758,12 +2739,10 @@
    "mayatk"
   ],
   "shell_xform": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "shot_manifest": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "shot_sequencer": [
    "blendertk",
@@ -2780,12 +2759,10 @@
    "tentacle"
   ],
   "smart_bake": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "snap": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "stereo#submenu": [
    "tentacle"
@@ -2816,8 +2793,7 @@
    "tentacle"
   ],
   "telescope_rig": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "texture_combine": [
    "blendertk",
@@ -2872,8 +2848,7 @@
    "extapps"
   ],
   "wheel_rig": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "window#submenu": [
    "tentacle"

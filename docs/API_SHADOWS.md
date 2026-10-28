@@ -20,7 +20,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
-- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L464)
+- `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L478)
 - `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L280)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
@@ -44,7 +44,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `KeyStash` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L213)
-- `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L237)
+- `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L238)
 - `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L194)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
@@ -216,7 +216,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (211)
+## Intentional mayatk↔blendertk port parity (207)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -252,7 +252,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ClipMenuMixin`
 - `ClipMotionMixin`
 - `ColorId`
-- `ColorIdSlots`
 - `CombineInputs`
 - `Components`
 - `ControlNodes`
@@ -291,13 +290,11 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `HierarchySyncSlots`
 - `HierarchyTreeRenderer`
 - `ImageToPlane`
-- `ImageToPlaneSlots`
 - `ImageTracer`
 - `Installer`
 - `InstanceCandidate`
 - `InstanceGroup`
 - `KeyMenuMixin`
-- `KeyStashSlots`
 - `Keyframes`
 - `LightUtils`
 - `LightmapBakeResult`
@@ -365,7 +362,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ShotsController`
 - `ShotsSlots`
 - `SmartBake`
-- `SmartBakeSlots`
 - `Snap`
 - `SplineIKStrategy`
 - `StaggerKeys`

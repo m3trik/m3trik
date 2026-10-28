@@ -49,7 +49,7 @@ widget.menu.add(
 | mayatk · display_utils | [`color_id.py`](../../mayatk/mayatk/display_utils/color_id.py) |
 | tentacle · slots/tools | [`exploded_view.py`](../../tentacle/tentacle/slots/tools/exploded_view.py) |
 | tentacle · slots/tools | [`bevel.py`](../../tentacle/tentacle/slots/tools/bevel.py) |
-| mayatk · edit_utils | [`bridge.py`](../../mayatk/mayatk/edit_utils/bridge.py) |
+| tentacle · slots/tools | [`bridge.py`](../../tentacle/tentacle/slots/tools/bridge.py) |
 | tentacle · slots/tools | [`cut_on_axis.py`](../../tentacle/tentacle/slots/tools/cut_on_axis.py) |
 | tentacle · slots/tools | [`duplicate_grid.py`](../../tentacle/tentacle/slots/tools/duplicate_grid.py) |
 | tentacle · slots/tools | [`duplicate_linear.py`](../../tentacle/tentacle/slots/tools/duplicate_linear.py) |

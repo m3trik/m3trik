@@ -158,11 +158,10 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`ToolbagLog`](extapps/marmoset_workflow/toolbag_log.py#L30)
 - `mayatk` — [`ToolbagLog`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L30)
 
-### `UnityPanelMixin` — blendertk, extapps, mayatk
+### `UnityPanelMixin` — extapps, tentacle
 
-- `blendertk` — [`UnityPanelMixin`](blendertk/env_utils/unity_bridge/_unity_panel.py#L34)
-- `extapps` — [`UnityPanelMixin`](extapps/unity_workflow/_unity_panel.py#L34)
-- `mayatk` — [`UnityPanelMixin`](mayatk/env_utils/unity_bridge/_unity_panel.py#L34)
+- `extapps` — [`UnityPanelMixin`](extapps/unity_workflow/_unity_panel.py#L33)
+- `tentacle` — [`UnityPanelMixin`](tentacle/slots/tools/_unity_bridge/_unity_panel.py#L33)
 
 ### `close_plugin` — blendertk, extapps, mayatk
 
@@ -243,6 +242,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Bevel`
 - `BlendshapeAnimator`
 - `Bridge`
+- `BridgeHost`
 - `CalculatorController`
 - `CamUtils`
 - `Channels`
@@ -379,7 +379,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `UndoLedgerMixin`
 - `Units`
 - `UnityBridge`
-- `UnityBridgeSlots`
 - `UsdUtils`
 - `UvDiagnostics`
 - `UvUtils`

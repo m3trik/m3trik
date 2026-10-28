@@ -143,7 +143,8 @@
   "str_utils/_str_utils.py -> pythontk.file_utils._file_utils"
  ],
  "tentacle": [
-  "slots/blender/settings.py -> tentacle.tcl_blender"
+  "slots/blender/settings.py -> tentacle.tcl_blender",
+  "slots/tools/_unity_bridge/_unity_panel.py -> unitytk"
  ],
  "uitk": [
   "bridge/_output_dir.py -> uitk.widgets.optionBox.options.recent_values",

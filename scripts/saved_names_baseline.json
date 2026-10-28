@@ -2345,8 +2345,7 @@
    "tentacle"
   ],
   "channels": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "color_id": [
    "tentacle"
@@ -2478,8 +2477,7 @@
    "tentacle"
   ],
   "hierarchy_sync": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "hud#startmenu": [
    "tentacle"
@@ -2695,8 +2693,7 @@
    "tentacle"
   ],
   "scene_exporter": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "segments#submenu": [
    "tentacle"
@@ -2780,8 +2777,7 @@
    "tentacle"
   ],
   "texture_combine": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "texture_path_editor": [
    "blendertk",
@@ -2800,8 +2796,7 @@
    "tentacle"
   ],
   "unity_bridge": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "unity_workflow": [
    "extapps"

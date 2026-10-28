@@ -60,7 +60,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`snap.py`](../../tentacle/tentacle/slots/tools/snap.py) |
 | mayatk · env_utils | [`hierarchy_sync/hierarchy_sync_slots.py`](../../mayatk/mayatk/env_utils/hierarchy_sync/hierarchy_sync_slots.py) |
 | mayatk · env_utils | [`reference_manager/reference_manager_slots.py`](../../mayatk/mayatk/env_utils/reference_manager/reference_manager_slots.py) |
-| mayatk · env_utils | [`scene_exporter/scene_exporter_slots.py`](../../mayatk/mayatk/env_utils/scene_exporter/scene_exporter_slots.py) |
+| tentacle · slots/tools | [`scene_exporter.py`](../../tentacle/tentacle/slots/tools/scene_exporter.py) |
 | mayatk · env_utils | [`workspace_map.py`](../../mayatk/mayatk/env_utils/workspace_map.py) |
 | tentacle · slots/tools | [`hdr_manager.py`](../../tentacle/tentacle/slots/tools/hdr_manager.py) |
 | tentacle · slots/tools | [`game_shader.py`](../../tentacle/tentacle/slots/tools/game_shader.py) |

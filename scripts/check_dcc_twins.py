@@ -305,24 +305,6 @@ LEDGER: List[TwinSpec] = [
         ),
         note="Measured identical 2026-10-19; the gather and write-back read host meshes.",
     ),
-    TwinSpec(
-        rel="uv_utils/texture_combine/_transfer_mode.py",
-        reason=(
-            "Transfer mode's host-free decisions (which passes run, Auto "
-            "source, pairing, the gate): tentacle's UvMixin carried them once; "
-            "each panel now carries them, so they are guarded to stay one rule."
-        ),
-        symbols=(
-            "_TransferMode.passes",
-            "_TransferMode.resolve_auto",
-            "_TransferMode.pair",
-        ),
-        note=(
-            "Measured identical 2026-10-19. auto_source and gate share their "
-            "logic but word it per host (UV Set vs UV Map); the scene reads and "
-            "writes differ."
-        ),
-    ),
     # Seeded 2026-09-26 after the auto-instancer's DCC-free merge/format moved
     # to ``ptk.InstanceGrouping``: what is still identical, measured green.
     TwinSpec(

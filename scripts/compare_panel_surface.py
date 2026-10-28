@@ -947,10 +947,9 @@ def _resolve(panel):
     ``*Slots``-class pairing ``--all`` uses.  Both steps are needed, because a
     filename is not what makes a file a panel:
 
-    - A package can ship BOTH forms for one tool -- each scene exporter is
-      ``_scene_exporter.py`` (the Qt-free engine, which defines no controls)
-      *and* ``scene_exporter_slots.py`` (the panel).  Only files defining a
-      ``*Slots`` class are accepted here, so the engine can never win.
+    - A package can ship BOTH forms for one tool -- an engine module (Qt-free,
+      defining no controls) *and* a ``<tool>_slots.py`` panel.  Only files
+      defining a ``*Slots`` class are accepted here, so the engine can never win.
     - The twin need not share the Maya file's stem at all (until 2026-09-13
       mayatk's exporter panel lived in ``_scene_exporter.py``, which no
       ``scene_exporter*`` glob could find).  Whichever side resolves is

@@ -215,7 +215,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (176)
+## Intentional mayatk↔blendertk port parity (178)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -309,11 +309,13 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `NurbsUtils`
 - `ObjectSwapper`
 - `PainterRpcClient`
+- `PlayblastExporter`
 - `Preview`
 - `Primitives`
 - `Rail`
 - `ReferenceManager`
 - `RenderEffects`
+- `RenderUtils`
 - `RestoreResult`
 - `RigGraphBuilder`
 - `RigGraphExtractor`

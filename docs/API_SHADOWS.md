@@ -282,7 +282,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `GapManagerMixin`
 - `GeometryMatcher`
 - `GraphSync`
-- `HdrManagerSlots`
+- `HdrManager`
 - `HierarchyMapBuilder`
 - `HierarchySync`
 - `HierarchySyncController`
@@ -348,7 +348,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SegmentKeys`
 - `Selection`
 - `SelectionMacros`
-- `ShaderTemplatesSlots`
+- `ShaderTemplates`
 - `ShadowPreview`
 - `ShadowRig`
 - `ShadowRigSlots`

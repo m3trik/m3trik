@@ -47,17 +47,17 @@ widget.menu.add(
 | mayatk · anim_utils | [`shots/shot_sequencer/shot_sequencer_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_sequencer/shot_sequencer_slots.py) |
 | mayatk · audio_utils | [`audio_clips/audio_clips_slots.py`](../../mayatk/mayatk/audio_utils/audio_clips/audio_clips_slots.py) |
 | mayatk · display_utils | [`color_id.py`](../../mayatk/mayatk/display_utils/color_id.py) |
-| mayatk · display_utils | [`exploded_view.py`](../../mayatk/mayatk/display_utils/exploded_view.py) |
-| mayatk · edit_utils | [`bevel.py`](../../mayatk/mayatk/edit_utils/bevel.py) |
+| tentacle · slots/tools | [`exploded_view.py`](../../tentacle/tentacle/slots/tools/exploded_view.py) |
+| tentacle · slots/tools | [`bevel.py`](../../tentacle/tentacle/slots/tools/bevel.py) |
 | mayatk · edit_utils | [`bridge.py`](../../mayatk/mayatk/edit_utils/bridge.py) |
-| mayatk · edit_utils | [`cut_on_axis.py`](../../mayatk/mayatk/edit_utils/cut_on_axis.py) |
-| mayatk · edit_utils | [`duplicate_grid.py`](../../mayatk/mayatk/edit_utils/duplicate_grid.py) |
-| mayatk · edit_utils | [`duplicate_linear.py`](../../mayatk/mayatk/edit_utils/duplicate_linear.py) |
+| tentacle · slots/tools | [`cut_on_axis.py`](../../tentacle/tentacle/slots/tools/cut_on_axis.py) |
+| tentacle · slots/tools | [`duplicate_grid.py`](../../tentacle/tentacle/slots/tools/duplicate_grid.py) |
+| tentacle · slots/tools | [`duplicate_linear.py`](../../tentacle/tentacle/slots/tools/duplicate_linear.py) |
 | tentacle · slots/tools | [`duplicate_radial.py`](../../tentacle/tentacle/slots/tools/duplicate_radial.py) |
-| mayatk · edit_utils | [`dynamic_pipe.py`](../../mayatk/mayatk/edit_utils/dynamic_pipe.py) |
-| mayatk · edit_utils | [`mirror.py`](../../mayatk/mayatk/edit_utils/mirror.py) |
+| tentacle · slots/tools | [`dynamic_pipe.py`](../../tentacle/tentacle/slots/tools/dynamic_pipe.py) |
+| tentacle · slots/tools | [`mirror.py`](../../tentacle/tentacle/slots/tools/mirror.py) |
 | mayatk · edit_utils | [`naming/naming_slots.py`](../../mayatk/mayatk/edit_utils/naming/naming_slots.py) |
-| mayatk · edit_utils | [`snap.py`](../../mayatk/mayatk/edit_utils/snap.py) |
+| tentacle · slots/tools | [`snap.py`](../../tentacle/tentacle/slots/tools/snap.py) |
 | mayatk · env_utils | [`hierarchy_sync/hierarchy_sync_slots.py`](../../mayatk/mayatk/env_utils/hierarchy_sync/hierarchy_sync_slots.py) |
 | mayatk · env_utils | [`reference_manager/reference_manager_slots.py`](../../mayatk/mayatk/env_utils/reference_manager/reference_manager_slots.py) |
 | mayatk · env_utils | [`scene_exporter/scene_exporter_slots.py`](../../mayatk/mayatk/env_utils/scene_exporter/scene_exporter_slots.py) |
@@ -72,12 +72,12 @@ widget.menu.add(
 | mayatk · mat_utils | [`substance_bridge/substance_bridge_slots.py`](../../mayatk/mayatk/mat_utils/substance_bridge/substance_bridge_slots.py) |
 | mayatk · mat_utils | [`texture_path_editor.py`](../../mayatk/mayatk/mat_utils/texture_path_editor.py) |
 | mayatk · node_utils | [`attributes/channels/channels_slots.py`](../../mayatk/mayatk/node_utils/attributes/channels/channels_slots.py) |
-| mayatk · nurbs_utils | [`image_tracer.py`](../../mayatk/mayatk/nurbs_utils/image_tracer.py) |
+| tentacle · slots/tools | [`image_tracer.py`](../../tentacle/tentacle/slots/tools/image_tracer.py) |
 | mayatk · rig_utils | [`shadow_rig/shadow_rig_slots.py`](../../mayatk/mayatk/rig_utils/shadow_rig/shadow_rig_slots.py) |
 | mayatk · rig_utils | [`telescope_rig.py`](../../mayatk/mayatk/rig_utils/telescope_rig.py) |
 | mayatk · rig_utils | [`tube_rig/tube_rig_slots.py`](../../mayatk/mayatk/rig_utils/tube_rig/tube_rig_slots.py) |
 | mayatk · rig_utils | [`wheel_rig.py`](../../mayatk/mayatk/rig_utils/wheel_rig.py) |
-| mayatk · ui_utils | [`calculator.py`](../../mayatk/mayatk/ui_utils/calculator.py) |
+| tentacle · slots/tools | [`calculator.py`](../../tentacle/tentacle/slots/tools/calculator.py) |
 | mayatk · uv_utils | [`rizom_bridge/rizom_bridge_slots.py`](../../mayatk/mayatk/uv_utils/rizom_bridge/rizom_bridge_slots.py) |
 
 ### Excluded from migration

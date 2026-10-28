@@ -44,7 +44,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`blendshape_animator.py`](../../tentacle/tentacle/slots/tools/blendshape_animator.py) |
 | tentacle · slots/tools | [`shots.py`](../../tentacle/tentacle/slots/tools/shots.py) |
 | tentacle · slots/tools | [`shot_manifest.py`](../../tentacle/tentacle/slots/tools/shot_manifest.py) |
-| mayatk · anim_utils | [`shots/shot_sequencer/shot_sequencer_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_sequencer/shot_sequencer_slots.py) |
+| tentacle · slots/tools | [`shot_sequencer.py`](../../tentacle/tentacle/slots/tools/shot_sequencer.py) |
 | tentacle · slots/tools | [`audio_clips.py`](../../tentacle/tentacle/slots/tools/audio_clips.py) |
 | tentacle · slots/tools | [`color_id.py`](../../tentacle/tentacle/slots/tools/color_id.py) |
 | tentacle · slots/tools | [`exploded_view.py`](../../tentacle/tentacle/slots/tools/exploded_view.py) |

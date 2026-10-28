@@ -29,7 +29,8 @@ Two granularities
 ``identical``   the whole file must match after normalization.
 ``symbols``     only the named methods must match. This exists because
                 whole-file is the wrong unit for most real twins: measured
-                2026-09-16, ``gap_manager.py`` has 7 of 14 methods identical
+                2026-09-16, the Shot Sequencer's ``gap_manager.py`` (one shared
+                tentacle copy since 2026-10-28) had 7 of 14 methods identical
                 while the rest differ for a genuine reason (mayatk brackets its
                 edits with ``store.scene_edit(label)``, a primitive blendertk's
                 store does not have -- it uses ``CoreUtils.undo_chunk()``). A
@@ -93,7 +94,7 @@ class TwinSpec:
 
     Parameters:
         rel: Path relative to each package's inner source dir, identical on
-            both sides (``anim_utils/shots/.../gap_manager.py``).
+            both sides (``anim_utils/shots/.../graph_sync.py``).
         symbols: Qualified ``Class.method`` names that must match. ``None``
             means the WHOLE FILE must match.
         reason: Why this pair is duplicated at all -- the §6 justification.
@@ -141,76 +142,6 @@ LEDGER: List[TwinSpec] = [
             "selection read is each host's CoreUtils.selected_objects."
         ),
         symbols=("CoreUtils.selected",),
-    ),
-    TwinSpec(
-        rel="anim_utils/shots/shot_sequencer/marker_manager.py",
-        reason=(
-            "Shot-sequencer panel controller. DCC-agnostic marker bookkeeping over "
-            "the shared pythontk shots engine, but it is Qt-side, so pythontk "
-            "cannot host it and there is no shared uitk panel tier yet."
-        ),
-        symbols=(
-            "MarkerManagerMixin._rebuild_markers_store",
-            "MarkerManagerMixin.on_marker_changed",
-            "MarkerManagerMixin.on_marker_moved",
-            "MarkerManagerMixin.on_marker_removed",
-            "_MarkerManagerMixinInternal._marker_to_dict",
-        ),
-        note=(
-            "5 of 6 methods identical. on_marker_added genuinely differs. The file "
-            "is 4 normalized lines from whole-file guardable and all 4 are ONE "
-            "comment re-wrapped differently -- reconcile that wrap and this entry "
-            "can drop its symbol list."
-        ),
-    ),
-    TwinSpec(
-        rel="anim_utils/shots/shot_sequencer/gap_manager.py",
-        reason=(
-            "Shot-sequencer gap arithmetic, same tier and same reason as "
-            "marker_manager: Qt-side controller over a shared engine."
-        ),
-        symbols=(
-            "GapManagerMixin._drag_modifiers",
-            "GapManagerMixin._find_shot_by_end",
-            "GapManagerMixin._find_shot_by_start",
-            "GapManagerMixin._gap_edit_epilogue",
-            "GapManagerMixin._gap_pair_at",
-            "GapManagerMixin._refuse_if_gap_locked",
-            "GapManagerMixin.on_gap_lock_all",
-            "GapManagerMixin.on_gap_unlock_all",
-        ),
-        note=(
-            "8 of 13 methods identical (re-measured 2026-10-10). Both stores now "
-            "bracket edits in store.scene_edit(label); the other 5 differ on the "
-            "label each host shows (mayatk's chunk ids 'gapresize' / 'shotmove', "
-            "Blender's undo-history names 'Resize Gap' / 'Move Shot'), comment "
-            "wording, one debug log (on_gap_lock_changed) and a signature wrap "
-            "(on_gap_moved). Reconcile the comments and the log and only the "
-            "labels remain."
-        ),
-    ),
-    TwinSpec(
-        rel="anim_utils/shots/shot_sequencer/shot_nav.py",
-        reason=(
-            "Shot-sequencer navigation controller, same tier and same reason as "
-            "the other two: it drives Qt widgets over the shared pythontk shots "
-            "engine, so neither pythontk (no Qt) nor uitk (no shot semantics) "
-            "can host it today."
-        ),
-        symbols=(
-            "ShotNavMixin._configure_shot_combobox",
-            "ShotNavMixin._go_to_shot",
-            "ShotNavMixin._land_on_shot",
-            "ShotNavMixin._set_playhead_to_shot_start",
-            "ShotNavMixin._sync_combobox",
-            "ShotNavMixin._update_shot_nav_state",
-            "ShotNavMixin.on_shot_block_clicked",
-        ),
-        note=(
-            "7 of 11 methods identical (re-measured 2026-10-12). The other 4 wrap "
-            "real DCC calls (playback range, navigation, selection, cell edits) "
-            "and are expected to differ."
-        ),
     ),
     TwinSpec(
         rel="env_utils/usd.py",
@@ -357,38 +288,6 @@ LEDGER: List[TwinSpec] = [
     # (NamingConventionEditor). What each DCC keeps is thin panel glue over
     # those -- identical, so it is guarded here, measured green.
     TwinSpec(
-        rel="anim_utils/shots/shot_sequencer/widget_sync.py",
-        reason=(
-            "Shot Sequencer widget-sync mixin (split from shot_sequencer_slots.py "
-            "2026-09-26): Qt glue between the sequencer widget and each host's scene."
-        ),
-        symbols=(
-            "WidgetSyncMixin._apply_view",
-            "WidgetSyncMixin._drop_caches",
-            "WidgetSyncMixin._on_editor_changed",
-            "WidgetSyncMixin._on_frame_on_shot_change_toggled",
-            "WidgetSyncMixin._on_select_on_load_toggled",
-            "WidgetSyncMixin._rebuild_content",
-            "WidgetSyncMixin._resolve_sync_target",
-            "WidgetSyncMixin._restore_viewport",
-            "WidgetSyncMixin._save_viewport_state",
-            "WidgetSyncMixin._set_cmb_mode",
-            "WidgetSyncMixin._set_playback_range_mode",
-            "WidgetSyncMixin._set_show_internal_holds",
-            "WidgetSyncMixin._set_view",
-            "WidgetSyncMixin._set_view_mode",
-            "WidgetSyncMixin._sync_to_widget",
-            "WidgetSyncMixin._visible_shots",
-            "WidgetSyncMixin.refresh",
-        ),
-        note=(
-            "17 of 25 shared methods (re-measured 2026-10-12). The other 8 differ "
-            "in code: each builds its tracks, clips, audio rows and sub-rows from "
-            "its own scene, colors its own scene attributes, and keeps its own "
-            "decoration, header and shotless state."
-        ),
-    ),
-    TwinSpec(
         rel="anim_utils/shots/shot_sequencer/segment_collector.py",
         reason=(
             "Shot Sequencer segment reader: the object-row summary rule is "
@@ -403,35 +302,6 @@ LEDGER: List[TwinSpec] = [
             "2 of 6 shared methods (2026-10-12): the summary rule and the active "
             "shot's object set. The rest read Maya animCurves or Blender fcurves "
             "directly."
-        ),
-    ),
-    TwinSpec(
-        rel="anim_utils/shots/shot_sequencer/shot_sequencer_slots.py",
-        reason=(
-            "Shot Sequencer panel slots: Qt glue over the shared engine, one per "
-            "host because each wires its own controller."
-        ),
-        symbols=(
-            "ShotSequencerSlots._delete_shot",
-            "ShotSequencerSlots._edit_shot_in_settings",
-            "ShotSequencerSlots._on_cmb_mode_changed",
-            "ShotSequencerSlots._on_playback_range_changed",
-            "ShotSequencerSlots._on_shortcut_overlay_changed",
-            "ShotSequencerSlots._on_snap_to_keys_toggled",
-            "ShotSequencerSlots._on_track_order_changed",
-            "ShotSequencerSlots._register_track_options",
-            "ShotSequencerSlots._set_help",
-            "ShotSequencerSlots._view_option",
-            "ShotSequencerSlots.btn_shortcuts",
-            "ShotSequencerSlots.btn_shot_settings",
-        ),
-        note=(
-            "12 of 21 shared methods (re-measured 2026-10-12): the View menu pair, "
-            "the header help (one guide for both hosts) and the option and button "
-            "handlers. The other 9 differ in their host's undo, shortcut and "
-            "dialog wiring (__init__, header_init, the shot combo and its context "
-            "menu, shot detection and navigation, colors, the snap spinbox, "
-            "ShotEditDialog.show)."
         ),
     ),
     TwinSpec(
@@ -458,53 +328,6 @@ LEDGER: List[TwinSpec] = [
             "writes, infinity, selection following and change detection are per "
             "host (Maya animCurve nodes and MAnimMessage; Blender fcurves, Cycles "
             "modifiers and fingerprints)."
-        ),
-    ),
-    TwinSpec(
-        rel="anim_utils/shots/shot_sequencer/key_menu.py",
-        reason=(
-            "Shot Sequencer key-menu mixin: the rows a key selection gets from "
-            "any view, and how a key shortcut finds the selection of a view "
-            "other than the track rows (the graph's)."
-        ),
-        symbols=(
-            "KeyMenuMixin._add_selection_key_actions",
-            "KeyMenuMixin._claims_follow",
-            "KeyMenuMixin._copy_keys_shortcut",
-            "KeyMenuMixin._key_scene_edit",
-            "KeyMenuMixin._key_selection_edit",
-            "KeyMenuMixin._key_targets",
-            "KeyMenuMixin._key_targets_to_sequences",
-            "KeyMenuMixin._paste_keys_shortcut",
-            "KeyMenuMixin._selected_key_targets",
-            "KeyMenuMixin._target_objects",
-            "KeyMenuMixin._target_span",
-            "KeyMenuMixin.register_key_targets",
-        ),
-        note=(
-            "12 of 29 shared methods (re-measured 2026-10-12): the selection rows, "
-            "the key targets and their edit brackets, the copy / paste shortcuts. "
-            "The tangent rows and the key operations themselves differ (Maya "
-            "tangent types and animCurves; Blender handle types, interpolation "
-            "and fcurves)."
-        ),
-    ),
-    TwinSpec(
-        rel="anim_utils/shots/shot_sequencer/scene_selection.py",
-        reason=(
-            "Shot Sequencer selection mixin: the footer's key-selection line "
-            "(2026-10-10), the widget's clips read into the shared "
-            "pythontk ShotSequencer.describe_key_selection."
-        ),
-        symbols=(
-            "SceneSelectionMixin._select_target_keys",
-            "SceneSelectionMixin._show_key_selection",
-            "SceneSelectionMixin.on_header_menu",
-        ),
-        note=(
-            "3 of 20 shared methods (re-measured 2026-10-12); the rest mirror each "
-            "host's selection (Maya's selectKey / Channel Box vs Blender's "
-            "keyframe points and channels)."
         ),
     ),
     # Seeded 2026-09-26 after the scene-export engine pass: SceneExporterBase and

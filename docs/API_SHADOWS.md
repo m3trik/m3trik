@@ -215,7 +215,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (187)
+## Intentional mayatk↔blendertk port parity (173)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -245,8 +245,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `CalculatorController`
 - `CamUtils`
 - `Channels`
-- `ClipMenuMixin`
-- `ClipMotionMixin`
 - `ColorId`
 - `CombineInputs`
 - `Components`
@@ -275,7 +273,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `FKChainStrategy`
 - `FbxUtils`
 - `GameShader`
-- `GapManagerMixin`
 - `GeometryMatcher`
 - `GraphSync`
 - `HdrManager`
@@ -287,7 +284,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Installer`
 - `InstanceCandidate`
 - `InstanceGroup`
-- `KeyMenuMixin`
 - `Keyframes`
 - `LightUtils`
 - `LightmapBakeResult`
@@ -298,7 +294,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `MacroManager`
 - `Macros`
 - `ManifestHost`
-- `MarkerManagerMixin`
 - `MarmosetBridge`
 - `MarmosetConnection`
 - `MatManifest`
@@ -325,11 +320,9 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `RizomUVBridge`
 - `ScaleKeys`
 - `SceneAnalyzer`
-- `SceneCallbacksMixin`
 - `SceneDataSidecar`
 - `SceneExporter`
 - `SceneInfoSection`
-- `SceneSelectionMixin`
 - `SceneState`
 - `ScriptConsole`
 - `ScriptJobManager`
@@ -337,14 +330,10 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SegmentKeys`
 - `Selection`
 - `SelectionMacros`
+- `SequencerHost`
 - `ShaderTemplates`
 - `ShadowPreview`
 - `ShadowRig`
-- `ShotEditDialog`
-- `ShotLaneMixin`
-- `ShotNavMixin`
-- `ShotSequencerController`
-- `ShotSequencerSlots`
 - `SmartBake`
 - `Snap`
 - `SplineIKStrategy`
@@ -363,14 +352,12 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `TexturePathEditor`
 - `TextureTransfer`
 - `TransformDiagnostics`
-- `TransportMixin`
 - `TubePath`
 - `TubeRig`
 - `TubeRigBundle`
 - `TubeStrategy`
 - `UiMacros`
 - `UiUtils`
-- `UndoLedgerMixin`
 - `Units`
 - `UnityBridge`
 - `UsdUtils`
@@ -379,7 +366,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `Validator`
 - `WebXrPreview`
 - `WheelRig`
-- `WidgetSyncMixin`
 - `XformUtils`
 - `apply_mesh_maps`
 - `autostart`

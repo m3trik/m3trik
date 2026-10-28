@@ -58,7 +58,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`mirror.py`](../../tentacle/tentacle/slots/tools/mirror.py) |
 | tentacle · slots/tools | [`naming.py`](../../tentacle/tentacle/slots/tools/naming.py) |
 | tentacle · slots/tools | [`snap.py`](../../tentacle/tentacle/slots/tools/snap.py) |
-| mayatk · env_utils | [`hierarchy_sync/hierarchy_sync_slots.py`](../../mayatk/mayatk/env_utils/hierarchy_sync/hierarchy_sync_slots.py) |
+| tentacle · slots/tools | [`hierarchy_sync.py`](../../tentacle/tentacle/slots/tools/hierarchy_sync.py) |
 | mayatk · env_utils | [`reference_manager/reference_manager_slots.py`](../../mayatk/mayatk/env_utils/reference_manager/reference_manager_slots.py) |
 | tentacle · slots/tools | [`scene_exporter.py`](../../tentacle/tentacle/slots/tools/scene_exporter.py) |
 | mayatk · env_utils | [`workspace_map.py`](../../mayatk/mayatk/env_utils/workspace_map.py) |

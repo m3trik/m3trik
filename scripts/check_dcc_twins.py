@@ -708,6 +708,19 @@ LEDGER: List[TwinSpec] = [
         ),
     ),
     TwinSpec(
+        rel="env_utils/hierarchy_sync/hierarchy_sync_session.py",
+        reason=(
+            "What the shared Hierarchy Sync panel asks of each host's scene: the "
+            "repair pruning, the loaded check and the fuzzy-matching toggle are "
+            "host-free and kept identical; the scene reads and edits differ."
+        ),
+        symbols=(
+            "HierarchySyncSession.is_loaded",
+            "HierarchySyncSession._prune_resolved_by_renames",
+            "HierarchySyncSession.fuzzy_matching",
+        ),
+    ),
+    TwinSpec(
         rel="mat_utils/marmoset_bridge/_marmoset_bridge.py",
         reason=(
             "The Marmoset bake roundtrip's host-free bookkeeping: packed-map "

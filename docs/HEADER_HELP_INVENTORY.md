@@ -42,7 +42,7 @@ widget.menu.add(
 |:---|:---|
 | extapps | [`photogrammetry/_panel_slots.py`](../../extapps/extapps/photogrammetry/_panel_slots.py) |
 | tentacle · slots/tools | [`blendshape_animator.py`](../../tentacle/tentacle/slots/tools/blendshape_animator.py) |
-| mayatk · anim_utils | [`shots/shots_slots.py`](../../mayatk/mayatk/anim_utils/shots/shots_slots.py) |
+| tentacle · slots/tools | [`shots.py`](../../tentacle/tentacle/slots/tools/shots.py) |
 | tentacle · slots/tools | [`shot_manifest.py`](../../tentacle/tentacle/slots/tools/shot_manifest.py) |
 | mayatk · anim_utils | [`shots/shot_sequencer/shot_sequencer_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_sequencer/shot_sequencer_slots.py) |
 | tentacle · slots/tools | [`audio_clips.py`](../../tentacle/tentacle/slots/tools/audio_clips.py) |

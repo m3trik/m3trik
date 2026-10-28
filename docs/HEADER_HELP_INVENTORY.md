@@ -46,7 +46,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`shot_manifest.py`](../../tentacle/tentacle/slots/tools/shot_manifest.py) |
 | mayatk · anim_utils | [`shots/shot_sequencer/shot_sequencer_slots.py`](../../mayatk/mayatk/anim_utils/shots/shot_sequencer/shot_sequencer_slots.py) |
 | mayatk · audio_utils | [`audio_clips/audio_clips_slots.py`](../../mayatk/mayatk/audio_utils/audio_clips/audio_clips_slots.py) |
-| mayatk · display_utils | [`color_id.py`](../../mayatk/mayatk/display_utils/color_id.py) |
+| tentacle · slots/tools | [`color_id.py`](../../tentacle/tentacle/slots/tools/color_id.py) |
 | tentacle · slots/tools | [`exploded_view.py`](../../tentacle/tentacle/slots/tools/exploded_view.py) |
 | tentacle · slots/tools | [`bevel.py`](../../tentacle/tentacle/slots/tools/bevel.py) |
 | tentacle · slots/tools | [`bridge.py`](../../tentacle/tentacle/slots/tools/bridge.py) |
@@ -64,7 +64,7 @@ widget.menu.add(
 | mayatk · env_utils | [`workspace_map.py`](../../mayatk/mayatk/env_utils/workspace_map.py) |
 | mayatk · light_utils | [`hdr_manager.py`](../../mayatk/mayatk/light_utils/hdr_manager.py) |
 | mayatk · mat_utils | [`game_shader.py`](../../mayatk/mayatk/mat_utils/game_shader.py) |
-| mayatk · mat_utils | [`image_to_plane/image_to_plane_slots.py`](../../mayatk/mayatk/mat_utils/image_to_plane/image_to_plane_slots.py) |
+| tentacle · slots/tools | [`image_to_plane.py`](../../tentacle/tentacle/slots/tools/image_to_plane.py) |
 | mayatk · mat_utils | [`marmoset_bridge/marmoset_bridge_slots.py`](../../mayatk/mayatk/mat_utils/marmoset_bridge/marmoset_bridge_slots.py) |
 | mayatk · mat_utils | [`mat_updater.py`](../../mayatk/mayatk/mat_utils/mat_updater.py) |
 | mayatk · mat_utils | [`render_opacity/render_effects_slots.py`](../../mayatk/mayatk/mat_utils/render_opacity/render_effects_slots.py) |

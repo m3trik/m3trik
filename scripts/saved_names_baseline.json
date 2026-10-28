@@ -2658,8 +2658,7 @@
    "extapps"
   ],
   "reference_manager": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "render#submenu": [
    "tentacle"
@@ -2779,8 +2778,7 @@
    "tentacle"
   ],
   "texture_path_editor": [
-   "blendertk",
-   "mayatk"
+   "tentacle"
   ],
   "toon#submenu": [
    "tentacle"

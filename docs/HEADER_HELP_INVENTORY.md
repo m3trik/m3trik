@@ -59,7 +59,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`naming.py`](../../tentacle/tentacle/slots/tools/naming.py) |
 | tentacle · slots/tools | [`snap.py`](../../tentacle/tentacle/slots/tools/snap.py) |
 | tentacle · slots/tools | [`hierarchy_sync.py`](../../tentacle/tentacle/slots/tools/hierarchy_sync.py) |
-| mayatk · env_utils | [`reference_manager/reference_manager_slots.py`](../../mayatk/mayatk/env_utils/reference_manager/reference_manager_slots.py) |
+| tentacle · slots/tools | [`reference_manager.py`](../../tentacle/tentacle/slots/tools/reference_manager.py) |
 | tentacle · slots/tools | [`scene_exporter.py`](../../tentacle/tentacle/slots/tools/scene_exporter.py) |
 | mayatk · env_utils | [`workspace_map.py`](../../mayatk/mayatk/env_utils/workspace_map.py) |
 | tentacle · slots/tools | [`hdr_manager.py`](../../tentacle/tentacle/slots/tools/hdr_manager.py) |
@@ -70,7 +70,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`render_effects.py`](../../tentacle/tentacle/slots/tools/render_effects.py) |
 | tentacle · slots/tools | [`shader_templates.py`](../../tentacle/tentacle/slots/tools/shader_templates.py) |
 | mayatk · mat_utils | [`substance_bridge/substance_bridge_slots.py`](../../mayatk/mayatk/mat_utils/substance_bridge/substance_bridge_slots.py) |
-| mayatk · mat_utils | [`texture_path_editor.py`](../../mayatk/mayatk/mat_utils/texture_path_editor.py) |
+| tentacle · slots/tools | [`texture_path_editor.py`](../../tentacle/tentacle/slots/tools/texture_path_editor.py) |
 | tentacle · slots/tools | [`channels.py`](../../tentacle/tentacle/slots/tools/channels.py) |
 | tentacle · slots/tools | [`image_tracer.py`](../../tentacle/tentacle/slots/tools/image_tracer.py) |
 | tentacle · slots/tools | [`shadow_rig.py`](../../tentacle/tentacle/slots/tools/shadow_rig.py) |

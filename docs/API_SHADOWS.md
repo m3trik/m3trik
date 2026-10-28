@@ -317,7 +317,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `PainterRpcClient`
 - `Preview`
 - `Rail`
-- `ReferenceManagerSlots`
+- `ReferenceManager`
 - `RenderEffects`
 - `RestoreResult`
 - `RigGraphBuilder`
@@ -364,7 +364,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `TelescopeRigBundle`
 - `TextureBaker`
 - `TextureCombine`
-- `TexturePathEditorSlots`
+- `TexturePathEditor`
 - `TextureTransfer`
 - `TransformDiagnostics`
 - `TransportMixin`

@@ -21,7 +21,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L478)
-- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L280)
+- `mayatk` — [`CoreUtils`](mayatk/core_utils/_core_utils.py#L291)
 - `pythontk` — [`CoreUtils`](pythontk/core_utils/_core_utils.py#L16)
 
 ### `Finding` — mayatk, pythontk
@@ -215,7 +215,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (173)
+## Intentional mayatk↔blendertk port parity (174)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -244,6 +244,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `BridgeHost`
 - `CalculatorController`
 - `CamUtils`
+- `CameraVisibility`
 - `Channels`
 - `ColorId`
 - `CombineInputs`

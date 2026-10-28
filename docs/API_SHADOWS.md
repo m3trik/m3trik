@@ -215,7 +215,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (190)
+## Intentional mayatk↔blendertk port parity (188)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -300,7 +300,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `ManifestHost`
 - `MarkerManagerMixin`
 - `MarmosetBridge`
-- `MarmosetBridgeSlots`
 - `MarmosetConnection`
 - `MatManifest`
 - `MatUpdater`
@@ -353,7 +352,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `StaggerKeys`
 - `StyleSetter`
 - `SubstanceBridge`
-- `SubstanceBridgeSlots`
 - `SubstanceConnection`
 - `SubstanceEngine`
 - `Target`

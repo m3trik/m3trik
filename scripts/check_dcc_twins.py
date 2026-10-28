@@ -633,10 +633,15 @@ LEDGER: List[TwinSpec] = [
             "MarmosetBridge.render_template",
             "MarmosetBridge.source_model_path_for",
             "MarmosetBridge.toolbag_path",
+            "MarmosetBridge.params_registry",
+            "MarmosetBridge.list_template_modes",
+            "MarmosetBridge.params_defaults",
         ),
         note=(
-            "10 of 25 shared methods (re-measured 2026-10-12; delivery, the "
-            "template render and the Toolbag and source-model paths joined); "
+            "13 of 27 shared methods (re-measured 2026-10-28: the panel's "
+            "registry, template modes and defaults joined when the panel moved "
+            "to tentacle; 2026-10-12: delivery, the template render and the "
+            "Toolbag and source-model paths); "
             "export, cage, assignment and retirement read each host's scene "
             "(blendertk swaps the baked material per slot)."
         ),

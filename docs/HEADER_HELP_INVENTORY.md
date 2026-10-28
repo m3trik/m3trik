@@ -65,11 +65,11 @@ widget.menu.add(
 | tentacle · slots/tools | [`hdr_manager.py`](../../tentacle/tentacle/slots/tools/hdr_manager.py) |
 | tentacle · slots/tools | [`game_shader.py`](../../tentacle/tentacle/slots/tools/game_shader.py) |
 | tentacle · slots/tools | [`image_to_plane.py`](../../tentacle/tentacle/slots/tools/image_to_plane.py) |
-| mayatk · mat_utils | [`marmoset_bridge/marmoset_bridge_slots.py`](../../mayatk/mayatk/mat_utils/marmoset_bridge/marmoset_bridge_slots.py) |
+| tentacle · slots/tools | [`marmoset_bridge.py`](../../tentacle/tentacle/slots/tools/marmoset_bridge.py) |
 | tentacle · slots/tools | [`mat_updater.py`](../../tentacle/tentacle/slots/tools/mat_updater.py) |
 | tentacle · slots/tools | [`render_effects.py`](../../tentacle/tentacle/slots/tools/render_effects.py) |
 | tentacle · slots/tools | [`shader_templates.py`](../../tentacle/tentacle/slots/tools/shader_templates.py) |
-| mayatk · mat_utils | [`substance_bridge/substance_bridge_slots.py`](../../mayatk/mayatk/mat_utils/substance_bridge/substance_bridge_slots.py) |
+| tentacle · slots/tools | [`substance_bridge.py`](../../tentacle/tentacle/slots/tools/substance_bridge.py) |
 | tentacle · slots/tools | [`texture_path_editor.py`](../../tentacle/tentacle/slots/tools/texture_path_editor.py) |
 | tentacle · slots/tools | [`channels.py`](../../tentacle/tentacle/slots/tools/channels.py) |
 | tentacle · slots/tools | [`image_tracer.py`](../../tentacle/tentacle/slots/tools/image_tracer.py) |

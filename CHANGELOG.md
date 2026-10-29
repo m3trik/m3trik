@@ -1,5 +1,7 @@
 # m3trik — Changelog
 
+- **2026-10-29 - README states the ecosystem goals and the rules in brief (`README.md`).** What each repo holds after the restructure, the four goals, the rules in brief and the check that holds each; the full text stays in `docs/CODE_STANDARD.md`.
+  - Test(s): none (docs).
 - **2026-10-29 - `push.ps1` checks standalone floors (`STANDALONE_FLOORS`, `Get-StandaloneFloorProblems`).** Prepare refuses a release whose hand-set floor on a standalone package (mayatk/blendertk -> unitytk, tentacle -> extapps) names a version PyPI does not have yet; check only, `-SkipPypiCheck` skips it.
   - Test(s): `test/test_push.py` +2 (red first).
 - **2026-10-29 - CODE_STANDARD states the rules the code now follows (`docs/CODE_STANDARD.md`, `workspace.json`, `docs/HEADER_HELP_INVENTORY.md`).** §0 adapters carry a `Pure*` default and the host-binding rule (configure and add, never override; `check_dcc_twins.py` `HOST_BINDINGS`); §5: a removed, renamed or moved public name gets a `MOVED_NAMES` row, a `ptk.Deprecation` alias only where callers need a window; §3 drops the co-located panel shape and the per-host roles; §6 names the ledgered twins as debt; §14 adds the facade rule and extapps' place; §10 the keep-importable rule. The mayatk, blendertk, tentacle and extapps domain lines follow the moves.

@@ -1,5 +1,9 @@
 # m3trik — Changelog
 
+- **2026-10-29 - `push.ps1` checks standalone floors (`STANDALONE_FLOORS`, `Get-StandaloneFloorProblems`).** Prepare refuses a release whose hand-set floor on a standalone package (mayatk/blendertk -> unitytk, tentacle -> extapps) names a version PyPI does not have yet; check only, `-SkipPypiCheck` skips it.
+  - Test(s): `test/test_push.py` +2 (red first).
+- **2026-10-29 - CODE_STANDARD states the rules the code now follows (`docs/CODE_STANDARD.md`, `workspace.json`, `docs/HEADER_HELP_INVENTORY.md`).** §0 adapters carry a `Pure*` default and the host-binding rule (configure and add, never override; `check_dcc_twins.py` `HOST_BINDINGS`); §5: a removed, renamed or moved public name gets a `MOVED_NAMES` row, a `ptk.Deprecation` alias only where callers need a window; §3 drops the co-located panel shape and the per-host roles; §6 names the ledgered twins as debt; §14 adds the facade rule and extapps' place; §10 the keep-importable rule. The mayatk, blendertk, tentacle and extapps domain lines follow the moves.
+  - Test(s): none (docs).
 - **2026-10-28 - `check_dcc_twins.py` holds host bindings (`HOST_BINDINGS`, 12 bindings).** A library class binding a shared pythontk class may configure and add, never override: a method rebound by `def` or by assignment fails, and a shared or binding class missing from a checked-out repo fails (only a repo that is not checked out is skipped). CODE_STANDARD §6 and the `tests.yml` comment follow.
   - Test(s): `test_check_dcc_twins.py`, red first for the assignment-form override and the vanished class.
 - **2026-10-28 - `check_saved_names.py` accepts a merged panel listed in tentacle's `RENAMED_FROM` while the tool's `.ui` carries its widget names; a name two former panels both keep needs `RENAMED_HOSTS` to put them in separate hosts.** CODE_STANDARD §5 names this route.

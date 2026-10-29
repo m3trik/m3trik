@@ -40,7 +40,7 @@ widget.menu.add(
 
 | Package | File |
 |:---|:---|
-| extapps | [`photogrammetry/_panel_slots.py`](../../extapps/extapps/photogrammetry/_panel_slots.py) |
+| tentacle · slots/tools | [`_photogrammetry/panel_slots.py`](../../tentacle/tentacle/slots/tools/_photogrammetry/panel_slots.py) |
 | tentacle · slots/tools | [`blendshape_animator.py`](../../tentacle/tentacle/slots/tools/blendshape_animator.py) |
 | tentacle · slots/tools | [`shots.py`](../../tentacle/tentacle/slots/tools/shots.py) |
 | tentacle · slots/tools | [`shot_manifest.py`](../../tentacle/tentacle/slots/tools/shot_manifest.py) |
@@ -91,9 +91,9 @@ Tools with a `header_init` but no help text yet. Adding
 
 | Package | File | Notes |
 |:---|:---|:---|
-| extapps | [`texture_maps/compositor/slots.py`](../../extapps/extapps/texture_maps/compositor/slots.py) | Standalone tool — add a short workflow summary. |
-| extapps | [`mesh_convert/slots.py`](../../extapps/extapps/mesh_convert/slots.py) | Standalone tool — header_init currently adds a single checkbox; help text would help discoverability. |
-| extapps | [`texture_maps/packer/slots.py`](../../extapps/extapps/texture_maps/packer/slots.py) | Standalone tool — explains the per-channel preset workflow. |
+| tentacle · slots/tools | [`compositor.py`](../../tentacle/tentacle/slots/tools/compositor.py) | Standalone tool — add a short workflow summary. |
+| tentacle · slots/tools | [`mesh_convert.py`](../../tentacle/tentacle/slots/tools/mesh_convert.py) | Standalone tool — header_init currently adds a single checkbox; help text would help discoverability. |
+| tentacle · slots/tools | [`packer.py`](../../tentacle/tentacle/slots/tools/packer.py) | Standalone tool — explains the per-channel preset workflow. |
 
 ## Out of scope — tentacle hub panels
 

@@ -13,15 +13,15 @@
   "units": [
     {"path": "pythontk", "release": "cascade", "domain": "Core utils — DCC-agnostic, zero-dep"},
     {"path": "uitk", "release": "cascade", "domain": "Generic Qt UI library; no DCC/app logic"},
-    {"path": "mayatk", "release": "cascade", "domain": "Maya 2025+ host library (UI moving to tentacle)"},
-    {"path": "blendertk", "release": "cascade", "domain": "Blender 4.x+ host library, mirrors mayatk (UI moving to tentacle)"},
-    {"path": "tentacle", "release": "cascade", "role": "product", "domain": "The product: every tool, panel and Slots class"},
+    {"path": "mayatk", "release": "cascade", "domain": "Maya 2025+ host library; each tool's Maya API half"},
+    {"path": "blendertk", "release": "cascade", "domain": "Blender 4.x+ host library, mirrors mayatk; each tool's Blender API half"},
+    {"path": "tentacle", "release": "cascade", "role": "product", "domain": "The product: the launcher, every tool's panel and Slots class"},
     {"path": "unitytk", "release": "standalone", "domain": "Unity integration"},
     {"path": "server", "release": "none", "domain": "Linux infra, zero-trust secrets"},
     {"path": "m3trik", "release": "none", "domain": "PowerShell DevOps, release automation"},
     {"path": "m3trik/scripts", "release": "none", "domain": "Python maintenance scripts"},
     {"path": "comfyui", "release": "none", "domain": "ComfyUI custom nodes"},
-    {"path": "extapps", "release": "standalone", "domain": "Standalone tools (folding into tentacle)"},
+    {"path": "extapps", "release": "standalone", "domain": "Standalone-app engines; their panels are tentacle's"},
     {"path": "www", "release": "none", "domain": "Web"},
     {"path": "androidtk", "release": "none", "domain": "Android device toolkit (satellite)"}
   ]

@@ -243,6 +243,17 @@ $REQUIRED_PINS = @{
     "tentacle"  = @("pythontk", "uitk", "mayatk", "blendertk")
 }
 
+# Floors a package sets by hand on a standalone (off-cascade) unit -- one that publishes
+# on its own `publish.yml`. Nothing here syncs them; Prepare only checks that PyPI already
+# carries a release each one accepts (Get-StandaloneFloorProblems), so a release cannot
+# ship a floor that installs nowhere: the standalone package publishes first.
+# test_push pins this table to every such floor the cascade's pyprojects declare.
+$STANDALONE_FLOORS = @{
+    "mayatk"    = @("unitytk")
+    "blendertk" = @("unitytk")
+    "tentacle"  = @("extapps")
+}
+
 # Files attached to a package's GitHub Release, relative to its repo, each uploaded
 # as committed at the release tag (Publish-ReleaseAssets). tentacle's one-file
 # installer: its README links releases/latest/download/<name>, which resolves only
@@ -1126,6 +1137,32 @@ function Get-InternalPinUpdates {
         $updates[$dep] = @{ From = $currentFloor; To = $ver }
     }
     return $updates
+}
+
+function Get-StandaloneFloorProblems {
+    # The hand-set floors in *PackageName*'s pyproject.toml on standalone units
+    # ($STANDALONE_FLOORS) that PyPI has no release for: "<dep>>=<floor>" each.
+    # Check only, never an edit. An unreadable index proves nothing, so a floor it
+    # cannot confirm is reported too (as the in-chain pre-check refuses offline).
+    param([string]$PackageName, [string]$RepoPath)
+    $problems = @()
+    if (-not $STANDALONE_FLOORS -or -not $STANDALONE_FLOORS.ContainsKey($PackageName)) {
+        return $problems
+    }
+    $tomlFile = Join-Path $RepoPath "pyproject.toml"
+    if (-not (Test-Path $tomlFile)) { return $problems }
+    $content = Get-Content $tomlFile -Raw
+    foreach ($dep in $STANDALONE_FLOORS[$PackageName]) {
+        $pattern = '"' + $dep + '(\[[^\]]*\])?>=([0-9.]+)"'
+        if ($content -notmatch $pattern) { continue }
+        $floorText = $Matches[2]
+        $floor = ConvertTo-VersionOrNull $floorText
+        $published = ConvertTo-VersionOrNull (Get-PypiMaxVersion (Get-PypiProjectName $dep))
+        if (-not $floor -or -not $published -or $published -lt $floor) {
+            $problems += "$dep>=$floorText"
+        }
+    }
+    return $problems
 }
 
 function Update-InternalPins {
@@ -2544,6 +2581,16 @@ function Invoke-PreparePhase {
                 Write-Err "Use -SkipPypiCheck to override, but this can break installs."
                 return $null
             }
+        }
+    }
+    # So must its hand-set floors on standalone packages, which publish on their own.
+    if (-not $SkipPypiCheck) {
+        $unmet = @(Get-StandaloneFloorProblems $PackageName $RepoPath)
+        if ($unmet.Count -gt 0) {
+            Write-Err "PyPI has no release satisfying $($unmet -join ', ') yet (or cannot be reached)."
+            Write-Err "Publish the standalone package first (its own publish.yml on main), then re-run."
+            Write-Err "Use -SkipPypiCheck to override, but this can break installs."
+            return $null
         }
     }
     return $result

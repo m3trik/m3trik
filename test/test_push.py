@@ -2851,6 +2851,68 @@ else:
             self.assertIn("RESULT=True", result.stdout, out)
             self.assertIn("private", out)
 
+    def test_a_standalone_floor_pypi_cannot_satisfy_is_reported(self):
+        """``Get-StandaloneFloorProblems`` names each hand-set floor on a standalone
+        package (``extapps>=0.7.0``) that PyPI has no release for yet, and none
+        once one exists: the Prepare pre-check refuses the release on a name.
+        The index is stubbed (``Get-PypiMaxVersion``), so no network is used."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo = root / "tentacle"
+            repo.mkdir()
+            (repo / "pyproject.toml").write_text(
+                '[project]\ndependencies = ["pythontk>=0.1.0", "extapps>=0.7.0"]\n',
+                encoding="utf-8",
+            )
+            probe = (
+                "$STANDALONE_FLOORS = @{ 'tentacle' = @('extapps') }\n"
+                "function Get-PypiMaxVersion { param([string]$ProjectName) "
+                "return $script:INDEX }\n"
+                "foreach ($published in @('0.6.0', '0.7.0', '0.10.1')) {\n"
+                "    $script:INDEX = $published\n"
+                f"    $unmet = @(Get-StandaloneFloorProblems 'tentacle' '{repo}')\n"
+                '    Write-Output "INDEX=$published UNMET=$($unmet -join \',\')|"\n'
+                "}\n"
+                "$script:INDEX = $null\n"
+                f"$unmet = @(Get-StandaloneFloorProblems 'tentacle' '{repo}')\n"
+                'Write-Output "OFFLINE UNMET=$($unmet -join \',\')|"\n'
+                f"$unmet = @(Get-StandaloneFloorProblems 'uitk' '{repo}')\n"
+                'Write-Output "UNLISTED UNMET=$($unmet -join \',\')|"\n'
+            )
+            result = self._run_push_functions(root, probe)
+            out = result.stdout + result.stderr
+            self.assertIn("INDEX=0.6.0 UNMET=extapps>=0.7.0|", result.stdout, out)
+            self.assertIn("INDEX=0.7.0 UNMET=|", result.stdout, out)
+            self.assertIn("INDEX=0.10.1 UNMET=|", result.stdout, out)
+            # An unreadable index cannot prove the floor: refused, like the in-chain pins.
+            self.assertIn("OFFLINE UNMET=extapps>=0.7.0|", result.stdout, out)
+            self.assertIn("UNLISTED UNMET=|", result.stdout, out)
+
+    def test_every_standalone_floor_a_cascade_package_sets_is_prechecked(self):
+        """The roster, not a hand-kept subset: every floor a cascade package's
+        pyproject sets on a standalone unit (``workspace.json`` ``release:
+        standalone``) is listed in push.ps1's ``$STANDALONE_FLOORS``."""
+        import json
+
+        manifest = json.loads((M3TRIK_DIR / "workspace.json").read_text(encoding="utf-8"))
+        standalone = [u["path"] for u in manifest["units"] if u["release"] == "standalone"]
+        source = (M3TRIK_DIR / "push.ps1").read_text(encoding="utf-8")
+        block = re.search(r"\$STANDALONE_FLOORS = @\{(.*?)\n\}", source, re.S)
+        self.assertIsNotNone(block, "push.ps1 declares no $STANDALONE_FLOORS table")
+        listed = {
+            pkg: set(re.findall(r'"([\w-]+)"', deps))
+            for pkg, deps in re.findall(r'"(\w+)"\s*=\s*@\(([^)]*)\)', block.group(1))
+        }
+        for pkg in manifest["cascade"]:
+            toml = ROOT / pkg / "pyproject.toml"
+            if not toml.is_file():
+                continue
+            text = toml.read_text(encoding="utf-8")
+            for unit in standalone:
+                if re.search(r'"%s(\[[^\]]*\])?>=' % re.escape(unit), text):
+                    with self.subTest(package=pkg, floor=unit):
+                        self.assertIn(unit, listed.get(pkg, set()))
+
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_the_english_gate_stops_a_non_latin_word_and_passes_a_clean_tree(self):
         """``Test-EnglishOnly`` runs ``scripts/check_english_only.py`` over the

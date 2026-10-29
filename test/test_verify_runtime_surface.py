@@ -86,7 +86,7 @@ class TestPrivateBaseRecords(unittest.TestCase):
         return type(name, bases, dict(members, __module__=module))
 
     def test_a_private_mixin_in_a_sibling_module_is_own_surface(self):
-        """``MeshConvert(_Fbx2GltfMixin, ...)`` with each mixin in its own
+        """``Facade(_JobMixin, ...)`` with each mixin in its own
         ``_<job>.py``: the generator documents the mixin's members on the facade,
         so the runtime side must too, or every one reads MISSING at runtime."""
         from pythontk import HelpMixin

@@ -86,7 +86,7 @@ def load_static_surface(pkg_dir: Path) -> dict[str, dict[str, str]]:
 def _own_and_private_base_records(obj: type) -> list:
     """Records for *obj*'s own members plus those it inherits from a PRIVATE
     base of its own package -- declared alongside it or in a sibling module
-    (``MeshConvert(_Fbx2GltfMixin, ...)``, each mixin in its own ``_<job>.py``),
+    (``Facade(_JobMixin, ...)``, each mixin in its own ``_<job>.py``),
     followed through private bases only.
 
     Mirrors ``generate_api_registry.py``'s static rule exactly, so the two

@@ -57,6 +57,15 @@ the layout and the four libraries. Copies that call different hosts are a tool's
 two halves, the mirror; two over one host, or over none, are a copy. It reads no
 library while the layout is empty.
 
+Host bindings
+-------------
+Host behavior is injected (an adapter), never a per-host subclass (CODE_STANDARD
+section 0, Adapters). Where a library keeps its own name for a shared pythontk
+class (``mtk.SceneDataSidecar``), that class is a *binding*: configuration (class
+attributes, the adapter it is bound to) and, where it is the tool's API half,
+host-only additions -- but it defines no method the shared class defines. The
+declared roster is :data:`HOST_BINDINGS`; an override fails ``--check``.
+
 Usage
 -----
     python m3trik/scripts/check_dcc_twins.py           # report (exit 0 always)
@@ -888,6 +897,144 @@ def written_once_violations(
     return sorted(found)
 
 
+# ------------------------------------------------------------- host bindings
+#: The library classes that bind a shared pythontk class to their host:
+#: ``(pythontk module, shared class, ((package, module, binding class), ...))``,
+#: paths relative to each package's inner source dir.
+HOST_BINDINGS: Tuple[Tuple[str, str, Tuple[Tuple[str, str, str], ...]], ...] = (
+    (
+        "core_utils/engines/scene_export/scene_data_sidecar.py",
+        "SceneDataSidecarBase",
+        (
+            ("mayatk", "env_utils/hierarchy_sync/scene_data_sidecar.py", "SceneDataSidecar"),
+            ("blendertk", "env_utils/hierarchy_sync/scene_data_sidecar.py", "SceneDataSidecar"),
+        ),
+    ),
+    (
+        "core_utils/engines/scene_export/hierarchy_baseline.py",
+        "HierarchyBaselineStore",
+        (
+            ("mayatk", "env_utils/hierarchy_sync/hierarchy_baseline.py", "HierarchyBaseline"),
+            ("blendertk", "env_utils/hierarchy_sync/hierarchy_baseline.py", "HierarchyBaseline"),
+        ),
+    ),
+    (
+        "core_utils/engines/scene_export/scene_exporter.py",
+        "SceneExporterBase",
+        (
+            ("mayatk", "env_utils/scene_exporter/_scene_exporter.py", "SceneExporter"),
+            ("blendertk", "env_utils/scene_exporter/_scene_exporter.py", "SceneExporter"),
+        ),
+    ),
+    (
+        "geo_utils/probe_placement.py",
+        "ProbePlacement",
+        (
+            ("mayatk", "light_utils/lightmap_baker/_probe_placement.py", "ProbePlacement"),
+            ("blendertk", "light_utils/lightmap_baker/_probe_placement.py", "ProbePlacement"),
+        ),
+    ),
+    (
+        "geo_utils/curtain_drape.py",
+        "CurtainDrape",
+        (
+            ("mayatk", "edit_utils/curtain/_curtain.py", "CurtainMesh"),
+            ("blendertk", "edit_utils/curtain/_curtain.py", "CurtainMesh"),
+        ),
+    ),
+    (
+        "file_utils/workspace_map.py",
+        "WorkspaceMapBase",
+        (
+            ("mayatk", "env_utils/workspace_map.py", "WorkspaceMap"),
+            ("blendertk", "env_utils/workspace_map.py", "WorkspaceMap"),
+        ),
+    ),
+)
+
+#: What a class-body assignment makes a METHOD of, not configuration:
+#: ``_close = classmethod(lambda ...)`` is a method as much as a ``def`` is.
+_METHOD_WRAPPERS = frozenset({"staticmethod", "classmethod", "property", "partialmethod"})
+
+
+def _is_method_value(value: Optional[ast.expr]) -> bool:
+    if isinstance(value, ast.Lambda):
+        return True
+    if isinstance(value, ast.Call):
+        func = value.func
+        name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+        return name in _METHOD_WRAPPERS
+    return False
+
+
+def class_members(path: str, name: str) -> Optional[Dict[str, Tuple[int, bool]]]:
+    """``{member: (line, is_method)}`` the body of class *name* in *path* binds:
+    each ``def``, and each assigned or annotated name -- a method when its value
+    is a lambda or a ``staticmethod``/``classmethod``/``property`` wrap, else
+    configuration. ``None`` when the file or the class is not there."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+    except (OSError, SyntaxError, ValueError):
+        return None
+    for node in tree.body:
+        if not (isinstance(node, ast.ClassDef) and node.name == name):
+            continue
+        members: Dict[str, Tuple[int, bool]] = {}
+        for item in node.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                members[item.name] = (item.lineno, True)
+            elif isinstance(item, (ast.Assign, ast.AnnAssign)):
+                targets = item.targets if isinstance(item, ast.Assign) else [item.target]
+                method = _is_method_value(item.value)
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        members[target.id] = (item.lineno, method)
+        return members
+    return None
+
+
+def host_binding_overrides(
+    workspace: Optional[str] = None,
+) -> Tuple[List[str], int, List[str]]:
+    """``(failures, bindings checked, bindings absent)`` over
+    :data:`HOST_BINDINGS`: each method of its shared pythontk class a binding
+    class rebinds (by ``def`` or by assignment; configuration may be reset).
+    Only a package that is not checked out is absent: a binding class gone from
+    a checked-out package, or a shared class gone from a checked-out pythontk,
+    is a failure -- the binding can no longer be held to the rule."""
+    workspace = workspace or REPO
+    failures: List[str] = []
+    absent: List[str] = []
+    checked = 0
+    pythontk_root = os.path.join(workspace, "pythontk", "pythontk")
+    for module, shared, bindings in HOST_BINDINGS:
+        base = class_members(os.path.join(pythontk_root, *module.split("/")), shared)
+        methods = {m for m, (_, is_method) in (base or {}).items() if is_method}
+        for package, rel, name in bindings:
+            label = f"{package}/{rel}::{name}"
+            root = os.path.join(workspace, package, package)
+            if not os.path.isdir(pythontk_root) or not os.path.isdir(root):
+                absent.append(label)
+                continue
+            checked += 1
+            if base is None:
+                failures.append(
+                    f"{label}  (shared class pythontk {module}::{shared} not found)"
+                )
+                continue
+            own = class_members(os.path.join(root, *rel.split("/")), name)
+            if own is None:
+                failures.append(f"{label}  (binding class not found)")
+                continue
+            failures.extend(
+                f"{label}.{member} (line {line}) overrides pythontk {shared}.{member}"
+                for member, (line, _) in sorted(own.items())
+                if member in methods
+            )
+    return failures, checked, absent
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
@@ -955,6 +1102,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     for line in copies:
         print(f"  COPY    {line}")
 
+    overrides, bound, unbound = host_binding_overrides()
+    for line in overrides:
+        print(f"  OVERRIDE {line}")
+    for label in unbound:
+        print(f"  skipped {label}  (sibling not checked out)")
+
     if not checked:
         # Same rule the sibling workflows apply to test counts: a run that
         # compared nothing is not a pass. Without this, a job whose checkout
@@ -964,8 +1117,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     print(
         f"\n{checked} twin(s) compared, {len(bad)} with drift; "
-        f"{len(copies)} body(ies) written twice on the new layout."
+        f"{len(copies)} body(ies) written twice on the new layout; "
+        f"{bound} host binding(s), {len(overrides)} override(s)."
     )
+    if overrides and args.check:
+        print(
+            "\nA host binding overrides its shared class. Move the host's half "
+            "into the adapter\nthe shared class is injected with, never a "
+            "subclass override (CODE_STANDARD.md §0)."
+        )
     if copies and args.check:
         print(
             "\nA body on the new layout is written twice. Keep one copy -- the "
@@ -979,7 +1139,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "differ.\nCODE_STANDARD.md §6: a vendored copy is sanctioned only "
             "while it is guarded."
         )
-    if (bad or copies) and args.check:
+    if (bad or copies or overrides) and args.check:
         return 1
     if bad:
         print("(report mode: exit 0. Wire --check once the ledger is clear.)")

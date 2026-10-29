@@ -12,7 +12,14 @@ names. A move changes paths, never these, so they are frozen by name, not by
 path: a ``.ui`` may move between packages (a panel into tentacle, two twins into
 one shared panel) and pass, while a stem or a widget name that disappears from
 every package fails, and so does a record key or an old name (a rename passes
-when the old key goes into ``renamed_from``).
+when the old key goes into ``renamed_from``). A panel renamed or merged into
+another passes the same way: tentacle's ``slots.tools.RENAMED_FROM`` lists it
+under the tool that took its name, whose ``.ui`` carries each of its widget
+names (under its new name where the table renames it), and whose launcher
+carries the users' values across (uitk's ``PanelRenames``). A name two former
+panels of one tool both keep would merge their values on one key, so it passes
+only when ``RENAMED_HOSTS`` puts the two in separate hosts (each stored values
+in its own host's store) or the table renames one.
 
 New names are not failures; ``--update`` freezes them, and its diff is the
 review, as is the reason for a name that goes on purpose. A partial checkout
@@ -43,6 +50,12 @@ BASELINE = SCRIPTS / "saved_names_baseline.json"
 #: The record registry, workspace-relative: every key a scene stores is declared there.
 RECORDS_FILE = "pythontk/pythontk/core_utils/engines/scene_export/scene_records.py"
 SKIP_DIRS = {"__pycache__", "templates", "temp_tests"}
+#: The panel-rename table, workspace-relative: ``RENAMED_FROM = {tool: {former
+#: panel: {former widget name: its name now}}}``, read as a literal.
+RENAMES_FILE = "tentacle/tentacle/slots/tools/__init__.py"
+RENAMES_NAME = "RENAMED_FROM"
+#: ``{former panel: (hosts it served,)}`` beside it, read as a literal too.
+RENAMED_HOSTS_NAME = "RENAMED_HOSTS"
 
 
 def _registry_set() -> Sequence[str]:
@@ -111,12 +124,49 @@ def _strings(node: ast.AST) -> List[str]:
     ]
 
 
+def _module_literal(path: Path, name: str) -> object:
+    """The literal *path* assigns to *name* at module level, else None. Parsed,
+    never imported: the gate runs without the package's dependencies."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return None
+    for node in tree.body:
+        targets = getattr(node, "targets", None) or [getattr(node, "target", None)]
+        if any(getattr(t, "id", None) == name for t in targets):
+            try:
+                return ast.literal_eval(node.value)
+            except (ValueError, TypeError, SyntaxError):
+                return None
+    return None
+
+
+def panel_renames(path: Path) -> Dict[str, list]:
+    """``{former panel: [tool, {former widget name: its name now}]}`` from the
+    ``RENAMED_FROM`` literal *path* declares ({} when it holds none)."""
+    table = _module_literal(path, RENAMES_NAME) or {}
+    return {
+        former: [tool, dict(widgets or {})]
+        for tool, formers in table.items()
+        for former, widgets in formers.items()
+    }
+
+
+def renamed_hosts(path: Path) -> Dict[str, list]:
+    """``{former panel: [hosts it served]}`` from the ``RENAMED_HOSTS`` literal
+    *path* declares ({} when it holds none)."""
+    table = _module_literal(path, RENAMED_HOSTS_NAME) or {}
+    return {former: sorted(hosts) for former, hosts in table.items()}
+
+
 def scan(
     workspace: Path = WORKSPACE, packages: Optional[Sequence[str]] = None
 ) -> Dict[str, object]:
     """``{"ui": {stem: [names]}, "homes": {stem: [packages]}, "records":
-    [keys], "present": [packages]}`` over every package: a stem's names are the
-    union of every ``.ui`` that carries it, wherever."""
+    [keys], "renamed": {former stem: [tool, {name: name now}]},
+    "renamed_hosts": {former stem: [hosts]}, "present": [packages]}`` over every
+    package: a stem's names are the union of every ``.ui`` that carries it,
+    wherever."""
     ui: Dict[str, set] = {}
     homes: Dict[str, set] = {}
     present = []
@@ -135,6 +185,8 @@ def scan(
         "ui": {stem: sorted(names) for stem, names in sorted(ui.items())},
         "homes": {stem: sorted(pkgs) for stem, pkgs in sorted(homes.items())},
         "records": record_keys(registry) if registry else None,
+        "renamed": panel_renames(workspace / RENAMES_FILE),
+        "renamed_hosts": renamed_hosts(workspace / RENAMES_FILE),
         "present": present,
     }
 
@@ -178,10 +230,15 @@ def lost(
         if run is not None and not carriers & run:
             continue
         now = current["ui"].get(stem)
+        renamed = (current.get("renamed") or {}).get(stem)
+        if now is None and renamed and renamed[0] in current["ui"]:
+            found += _lost_into(stem, names, renamed, current["ui"][renamed[0]])
+            continue
         if now is None:
             found.append(f"{stem}.ui: (the whole panel)")
             continue
         found += [f"{stem}.ui: {name}" for name in names if name not in set(now)]
+    found += _kept_twice(baseline, current, run)
     if current["records"] is not None and (run is None or "pythontk" in run):
         found += [
             f"SceneRecords: {key}"
@@ -189,6 +246,53 @@ def lost(
             if key not in set(current["records"])
         ]
     return found
+
+
+def _kept_twice(baseline, current, run) -> List[str]:
+    """The names two gone panels of one tool both keep (as spelled now) while
+    ``RENAMED_HOSTS`` puts them in no separate hosts: their users' values would
+    land on one key of the tool's store, the second carry losing to the first."""
+    renamed = current.get("renamed") or {}
+    hosts = current.get("renamed_hosts") or {}
+    present = set(current["present"])
+    by_tool: Dict[str, list] = {}
+    for stem, names in baseline.get("ui", {}).items():
+        stem_homes = set(baseline.get("homes", {}).get(stem, ()))
+        if stem in current["ui"] or stem not in renamed or not stem_homes <= present:
+            continue
+        if run is not None and not stem_homes & run:
+            continue
+        tool, widgets = renamed[stem]
+        kept = {widgets.get(name, name) for name in names if name != stem}
+        by_tool.setdefault(tool, []).append((stem, kept))
+    found = []
+    for tool, formers in sorted(by_tool.items()):
+        formers.sort()
+        for i, (first, kept_first) in enumerate(formers):
+            for second, kept_second in formers[i + 1 :]:
+                a, b = set(hosts.get(first, ())), set(hosts.get(second, ()))
+                if a and b and not a & b:
+                    continue  # per-host alternatives: never one store
+                found += [
+                    f"{tool}.ui: {name} (kept by {first} and {second}, which "
+                    "RENAMED_HOSTS puts in no separate hosts: declare their hosts "
+                    "or rename one)"
+                    for name in sorted(kept_first & kept_second)
+                ]
+    return found
+
+
+def _lost_into(stem: str, names, renamed, tool_names) -> List[str]:
+    """The names of the gone panel *stem* its tool (``renamed`` = ``[tool,
+    {name: name now}]``) does not carry. A name that is the panel's own is its
+    root widget, which stores nothing: the window takes the panel's name."""
+    tool, widgets = renamed
+    carried = set(tool_names)
+    return [
+        f"{stem}.ui: {name} (renamed into {tool}.ui as {widgets.get(name, name)})"
+        for name in names
+        if name != stem and widgets.get(name, name) not in carried
+    ]
 
 
 def merged(baseline: Dict[str, object], current: Dict[str, object]) -> Dict[str, object]:
@@ -234,7 +338,13 @@ def write_baseline(current: Dict[str, object], path: Path = BASELINE) -> None:
             "check_saved_names.py --update."
         )
     }
-    data.update({k: v for k, v in current.items() if k != "present"})
+    data.update(
+        {
+            k: v
+            for k, v in current.items()
+            if k not in ("present", "renamed", "renamed_hosts")
+        }
+    )
     data["records"] = current["records"] or []
     path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
 

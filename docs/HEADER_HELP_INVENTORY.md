@@ -61,7 +61,7 @@ widget.menu.add(
 | tentacle · slots/tools | [`hierarchy_sync.py`](../../tentacle/tentacle/slots/tools/hierarchy_sync.py) |
 | tentacle · slots/tools | [`reference_manager.py`](../../tentacle/tentacle/slots/tools/reference_manager.py) |
 | tentacle · slots/tools | [`scene_exporter.py`](../../tentacle/tentacle/slots/tools/scene_exporter.py) |
-| tentacle · slots/tools | [`workspace_map.py`](../../tentacle/tentacle/slots/tools/workspace_map.py) |
+| tentacle · slots/tools | [`workspaces.py`](../../tentacle/tentacle/slots/tools/workspaces.py) |
 | tentacle · slots/tools | [`hdr_manager.py`](../../tentacle/tentacle/slots/tools/hdr_manager.py) |
 | tentacle · slots/tools | [`game_shader.py`](../../tentacle/tentacle/slots/tools/game_shader.py) |
 | tentacle · slots/tools | [`image_to_plane.py`](../../tentacle/tentacle/slots/tools/image_to_plane.py) |

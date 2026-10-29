@@ -344,6 +344,111 @@ class WrittenOnceTest(unittest.TestCase):
         self.assertEqual(gate.written_once_violations(root), [])
 
 
+class HostBindingsTest(unittest.TestCase):
+    """A library's binding of a shared pythontk class is configuration and
+    additions: it overrides nothing the shared class defines."""
+
+    SHARED = (
+        "class Shared:\n"
+        "    HOST = None\n"
+        "    def build(self):\n        return 1\n"
+        "    def _close(self, paths):\n        return paths\n"
+        "    _clean = staticmethod(lambda paths: set(paths))\n"
+    )
+
+    def tree(self, binding, shared=None):
+        root = tempfile.mkdtemp(prefix="host_bindings_")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        files = {
+            "pythontk/pythontk/core/shared.py": self.SHARED if shared is None else shared,
+            "mayatk/mayatk/host.py": binding,
+            "blendertk/blendertk/host.py": "class Bound(Shared):\n    HOST = 2\n",
+        }
+        for rel, text in files.items():
+            path = os.path.join(root, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        return root
+
+    def run_on(self, root):
+        saved = gate.HOST_BINDINGS
+        gate.HOST_BINDINGS = (
+            (
+                "core/shared.py",
+                "Shared",
+                (("mayatk", "host.py", "Bound"), ("blendertk", "host.py", "Bound")),
+            ),
+        )
+        try:
+            return gate.host_binding_overrides(root)
+        finally:
+            gate.HOST_BINDINGS = saved
+
+    def test_configuration_and_additions_pass(self):
+        binding = (
+            "class Bound(Shared):\n    HOST = 1\n"
+            "    def perform_export(self):\n        return 2\n"
+        )
+        self.assertEqual(self.run_on(self.tree(binding)), ([], 2, []))
+
+    def test_an_override_of_the_shared_class_fails(self):
+        binding = "class Bound(Shared):\n    def _close(self, paths):\n        return set()\n"
+        overrides, checked, _ = self.run_on(self.tree(binding))
+        self.assertEqual(checked, 2)
+        self.assertEqual(len(overrides), 1)
+        self.assertIn("mayatk/host.py::Bound._close", overrides[0])
+
+    def test_an_override_by_assignment_fails(self):
+        """``_close = classmethod(lambda ...)`` is an override as much as a def."""
+        binding = (
+            "class Bound(Shared):\n"
+            "    _close = classmethod(lambda cls, paths: set())\n"
+            "    build: object = staticmethod(lambda: 2)\n"
+        )
+        overrides, checked, _ = self.run_on(self.tree(binding))
+        self.assertEqual(checked, 2)
+        self.assertEqual(len(overrides), 2, overrides)
+        self.assertIn("Bound._close", overrides[0] + overrides[1])
+        self.assertIn("Bound.build", overrides[0] + overrides[1])
+
+    def test_a_method_the_shared_class_assigns_cannot_be_overridden(self):
+        binding = "class Bound(Shared):\n    def _clean(paths):\n        return paths\n"
+        overrides, _, _ = self.run_on(self.tree(binding))
+        self.assertEqual(len(overrides), 1, overrides)
+        self.assertIn("Bound._clean", overrides[0])
+
+    def test_a_vanished_binding_class_is_not_a_silent_pass(self):
+        overrides, _, _ = self.run_on(self.tree("class Other:\n    pass\n"))
+        self.assertEqual(len(overrides), 1)
+        self.assertIn("not found", overrides[0])
+
+    def test_a_vanished_shared_class_is_a_failure_not_a_skip(self):
+        """pythontk is checked out but the shared class moved or was renamed:
+        the bindings can no longer be held to the rule."""
+        root = self.tree("class Bound(Shared):\n    HOST = 1\n", shared="class Renamed:\n    pass\n")
+        overrides, checked, absent = self.run_on(root)
+        self.assertEqual(absent, [])
+        self.assertEqual(checked, 2)
+        self.assertEqual(len(overrides), 2, overrides)
+        self.assertTrue(all("shared class" in o for o in overrides), overrides)
+
+    def test_only_a_missing_checkout_is_absent(self):
+        root = self.tree("class Bound(Shared):\n    HOST = 1\n")
+        shutil.rmtree(os.path.join(root, "blendertk"))
+        overrides, checked, absent = self.run_on(root)
+        self.assertEqual((overrides, checked), ([], 1))
+        self.assertEqual(absent, ["blendertk/host.py::Bound"])
+
+    def test_the_declared_bindings_hold_today(self):
+        overrides, checked, absent = gate.host_binding_overrides()
+        self.assertEqual(overrides, [])
+        self.assertEqual(absent, [], "every repo is checked out in the monorepo")
+        self.assertEqual(
+            checked, sum(len(bindings) for _, _, bindings in gate.HOST_BINDINGS)
+        )
+
+
 class ZeroComparedTest(unittest.TestCase):
     def test_comparing_nothing_fails(self):
         """A run that checked nothing is not a pass -- same rule as test counts."""

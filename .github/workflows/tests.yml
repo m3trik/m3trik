@@ -200,8 +200,8 @@ jobs:
         run: python m3trik/scripts/check_dcc_twins.py --check
 
       # extapps' vendored-engine guard (Marmoset engine x3 across extapps /
-      # mayatk / blendertk, the mayatk<->blendertk Substance and curtain-drape
-      # pairs). It is a pytest module, and extapps' own CI checks out extapps
+      # mayatk / blendertk, the mayatk<->blendertk Substance pair). It is a
+      # pytest module, and extapps' own CI checks out extapps
       # alone, so every sibling comparison there skipTests: until 2026-09-26 it
       # ran in NO workflow -- the gap the comment above describes, left open
       # for this one guard (the copies drifted 2026-09-09 and only a local run

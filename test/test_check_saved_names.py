@@ -171,6 +171,93 @@ class TestSavedNames(unittest.TestCase):
         )
 
 
+class TestRenamedPanels(unittest.TestCase):
+    """A panel renamed or merged into a tool passes when tentacle's
+    ``RENAMED_FROM`` lists it under the tool and the tool's ``.ui`` carries each
+    of its names (under its new name where the table renames it). A name two
+    former panels both keep passes only when ``RENAMED_HOSTS`` puts them in
+    separate hosts: otherwise their values would meet in one store."""
+
+    BEFORE = {
+        "tentacle/tentacle/ui/tools/old_map.ui": UI.format(
+            stem="old_map", extra='<widget class="QLineEdit" name="txt000"/>'
+        ),
+        "tentacle/tentacle/ui/tools/old_editor.ui": UI.format(
+            stem="old_editor", extra='<widget class="QLineEdit" name="txt000"/>'
+        ),
+    }
+    TABLE = textwrap.dedent(
+        """\
+        RENAMED_FROM = {
+            "merged": {"old_map": {}, "old_editor": {"txt000": "txt002"}},
+        }
+        RENAMED_HOSTS = {"old_map": ("maya",), "old_editor": ("blender",)}
+        """
+    )
+
+    def scan(self, files: dict) -> dict:
+        with tempfile.TemporaryDirectory() as tmp:
+            return gate.scan(_tree(Path(tmp), files), packages=("tentacle",))
+
+    def _after(self, extra: str, table: str = None) -> dict:
+        return {
+            "tentacle/tentacle/ui/tools/merged.ui": UI.format(stem="merged", extra=extra),
+            gate.RENAMES_FILE: self.TABLE if table is None else table,
+        }
+
+    def test_the_table_is_read_as_a_literal(self):
+        found = self.scan(self._after(""))
+        self.assertEqual(
+            found["renamed"],
+            {"old_map": ["merged", {}], "old_editor": ["merged", {"txt000": "txt002"}]},
+        )
+
+    def test_a_merge_that_keeps_every_name_loses_nothing(self):
+        """Each former root (named after its panel) stores nothing and is not
+        looked for; ``txt000`` stays the map's, the editor's moved to txt002."""
+        extra = '<widget class="QLineEdit" name="txt000"/><widget class="QLineEdit" name="txt002"/>'
+        self.assertEqual(gate.lost(self.scan(self.BEFORE), self.scan(self._after(extra))), [])
+
+    def test_a_name_the_tool_does_not_carry_is_lost(self):
+        extra = '<widget class="QLineEdit" name="txt000"/>'
+        self.assertEqual(
+            gate.lost(self.scan(self.BEFORE), self.scan(self._after(extra))),
+            ["old_editor.ui: txt000 (renamed into merged.ui as txt002)"],
+        )
+
+    def test_a_panel_the_table_does_not_list_is_lost_whole(self):
+        extra = '<widget class="QLineEdit" name="txt000"/><widget class="QLineEdit" name="txt002"/>'
+        table = 'RENAMED_FROM = {"merged": {"old_map": {}}}'
+        self.assertEqual(
+            gate.lost(self.scan(self.BEFORE), self.scan(self._after(extra, table))),
+            ["old_editor.ui: (the whole panel)"],
+        )
+
+    def test_a_name_two_formers_keep_needs_separate_hosts(self):
+        """Both formers keep ``b000`` and ``central``: with no hosts row (or one
+        host for both) their values would land on one key, which fails."""
+        extra = '<widget class="QLineEdit" name="txt000"/><widget class="QLineEdit" name="txt002"/>'
+        frozen = self.scan(self.BEFORE)
+        lost = [
+            "merged.ui: b000 (kept by old_editor and old_map, which RENAMED_HOSTS "
+            "puts in no separate hosts: declare their hosts or rename one)",
+            "merged.ui: central (kept by old_editor and old_map, which RENAMED_HOSTS "
+            "puts in no separate hosts: declare their hosts or rename one)",
+        ]
+        no_row = self.TABLE.split("RENAMED_HOSTS")[0]
+        self.assertEqual(gate.lost(frozen, self.scan(self._after(extra, no_row))), lost)
+        one_host = self.TABLE.replace('("blender",)', '("maya",)')
+        self.assertEqual(gate.lost(frozen, self.scan(self._after(extra, one_host))), lost)
+
+    def test_the_table_never_enters_the_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _tree(Path(tmp), self._after(""))
+            gate.main(["--update", "--workspace", str(root)])
+            frozen = gate.load_baseline(gate.baseline_file(root))
+        self.assertNotIn("renamed", frozen)
+        self.assertNotIn("renamed_hosts", frozen)
+
+
 class TestWorkspaceBaseline(unittest.TestCase):
     """A baseline describes the workspace it was frozen from, so ``--workspace``
     judges that workspace against its own copy: a fixture with a bare tentacle

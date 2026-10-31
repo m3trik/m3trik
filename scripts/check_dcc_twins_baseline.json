@@ -1,0 +1,31 @@
+{
+ "_doc": "Bodies mayatk and blendertk both write over no host, frozen when check_dcc_twins.py --written-once started holding them to the rule (CODE_STANDARD section 14: host-free logic is written once, in pythontk). Shrink it: move a copy to pythontk, or ledger it as a twin with its reason. --written-once --update drops the paid pairs; nothing adds one.",
+ "copies": [
+  "mayatk/anim_utils/_curve_optimize.py::_CurveOptimizeInternal._normalize_optimize_level = blendertk/anim_utils/_anim_utils.py::AnimUtils.normalize_optimize_level",
+  "mayatk/anim_utils/blendshape_animator/_blendshape_animator.py::BlendshapeAnimator.edit_apply_tweens = blendertk/anim_utils/blendshape_animator/_blendshape_animator.py::BlendshapeAnimator.edit_apply_tweens",
+  "mayatk/anim_utils/blendshape_animator/_blendshape_animator.py::BlendshapeAnimator.edit_frame_based = blendertk/anim_utils/blendshape_animator/_blendshape_animator.py::BlendshapeAnimator.edit_frame_based",
+  "mayatk/anim_utils/blendshape_animator/_blendshape_animator.py::BlendshapeAnimator.edit_weight_based = blendertk/anim_utils/blendshape_animator/_blendshape_animator.py::BlendshapeAnimator.edit_weight_based",
+  "mayatk/anim_utils/shots/shot_sequencer/sequencer_host.py::SequencerHost.node_icon = blendertk/anim_utils/shots/shot_sequencer/sequencer_host.py::SequencerHost.node_icon",
+  "mayatk/anim_utils/smart_bake/_smart_bake.py::SmartBake.bake = blendertk/anim_utils/smart_bake/_smart_bake.py::SmartBake.bake",
+  "mayatk/core_utils/auto_instancer/_auto_instancer.py::AutoInstancer.__init__ = blendertk/core_utils/auto_instancer/_auto_instancer.py::AutoInstancer.__init__",
+  "mayatk/core_utils/auto_instancer/geometry_matcher.py::GeometryMatcher.__init__ = blendertk/core_utils/auto_instancer/geometry_matcher.py::GeometryMatcher.__init__",
+  "mayatk/edit_utils/macros/_macros.py::MacroManager.apply_saved_macros = blendertk/edit_utils/macros/_macros.py::MacroManager.apply_saved_macros",
+  "mayatk/edit_utils/macros/_macros.py::MacroManager.get_editor_registry = blendertk/edit_utils/macros/_macros.py::MacroManager.get_editor_registry",
+  "mayatk/env_utils/fbx_utils.py::FbxUtils.embed_dependencies = blendertk/env_utils/fbx_utils.py::FbxUtils.embed_dependencies",
+  "mayatk/env_utils/material_records.py::MaterialRecords.export_record = blendertk/env_utils/material_records.py::MaterialRecords.export_record",
+  "mayatk/env_utils/reference_manager/_reference_manager.py::ReferenceManager.is_current = blendertk/env_utils/reference_manager.py::ReferenceManager.is_current",
+  "mayatk/env_utils/scene_exporter/_task_checks.py::_TaskChecksMixin.check_output_writable = blendertk/env_utils/scene_exporter/_task_checks.py::_TaskChecksMixin.check_output_writable",
+  "mayatk/env_utils/scene_exporter/_task_data.py::_TaskDataMixin._resolved_output_type = blendertk/env_utils/scene_exporter/_task_data.py::_TaskDataMixin._resolved_output_type",
+  "mayatk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._rebake = blendertk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._rebake",
+  "mayatk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._reused_tile = blendertk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._reused_tile",
+  "mayatk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._write_in_place = blendertk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._write_in_place",
+  "mayatk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker.combine_sizes = blendertk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker.combine_sizes",
+  "mayatk/light_utils/lightmap_baker/lightmap_records.py::LightmapRecords.fork_lightmap = blendertk/light_utils/lightmap_baker/lightmap_records.py::LightmapRecords.fork_lightmap",
+  "mayatk/light_utils/lightmap_baker/lightmap_records.py::LightmapRecords.heal_lightmap_paths = blendertk/light_utils/lightmap_baker/lightmap_records.py::LightmapRecords.heal_lightmap_paths",
+  "mayatk/mat_utils/texture_path_editor.py::TexturePathEditor.normalize_lightmaps = blendertk/mat_utils/texture_path_editor.py::TexturePathEditor.normalize_lightmaps",
+  "mayatk/node_utils/data_nodes.py::DataNodes._record_scene_source = blendertk/node_utils/data_nodes.py::DataNodes._record_scene_source",
+  "mayatk/rig_utils/shadow_rig/_shadow_rig.py::ShadowRig.unpack_atlas = blendertk/rig_utils/shadow_rig/_shadow_rig.py::ShadowRig.unpack_atlas",
+  "mayatk/rig_utils/telescope_rig.py::TelescopeRig.teardown = blendertk/rig_utils/telescope_rig.py::TelescopeRig.teardown",
+  "mayatk/rig_utils/tube_rig/_tube_rig.py::_TubeRigInternal._report = blendertk/rig_utils/tube_rig/_tube_rig.py::TubeRig._report"
+ ]
+}

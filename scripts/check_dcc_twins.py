@@ -57,20 +57,45 @@ the layout and the four libraries. Copies that call different hosts are a tool's
 two halves, the mirror; two over one host, or over none, are a copy. It reads no
 library while the layout is empty.
 
+Written once between the hosts
+------------------------------
+Host-free logic both DCC packages carry is written once, in pythontk
+(CODE_STANDARD section 14), so the rule runs between mayatk and blendertk too: a
+body of 8+ lines the two write over no host (or over the same one) is a copy,
+unless the ledger guards it as a twin or another drift guard holds its file
+(:data:`GUARDED_ELSEWHERE`). The copies older than the rule are frozen in
+``check_dcc_twins_baseline.json``, one ``mayatk/<rel>::<name> =
+blendertk/<rel>::<name>`` pair each; ``--check`` fails on a pair it does not list
+and reports a listed one that no longer occurs. The baseline only shrinks:
+``--written-once --update`` drops the paid pairs and never freezes a new one.
+
 Host bindings
 -------------
 Host behavior is injected (an adapter), never a per-host subclass (CODE_STANDARD
-section 0, Adapters). Where a library keeps its own name for a shared pythontk
-class (``mtk.SceneDataSidecar``), that class is a *binding*: configuration (class
-attributes, the adapter it is bound to) and, where it is the tool's API half,
-host-only additions -- but it defines no method the shared class defines. The
-declared roster is :data:`HOST_BINDINGS`; an override fails ``--check``.
+section 0, Adapters). Where a library keeps its own name for a shared class
+(pythontk's ``SceneDataSidecarBase`` as ``mtk.SceneDataSidecar``, uitk's
+``PreviewController`` as ``mtk.Preview``), that class is a *binding*:
+configuration (class attributes, the adapter it is bound to) and, where it is
+the tool's API half, host-only additions -- but nothing in it, or ahead of the
+shared class in its MRO, replaces a method the shared class or its lineage
+defines (a library copy behind it is dead code, reported as SHADOWED). The
+roster is derived, never hand-listed (CODE_STANDARD section 6): every mayatk /
+blendertk class that derives from a pythontk or uitk class -- through the
+package root (``ptk.X``, ``uitk.X``), a ``from`` import or a lazy export,
+directly or through other classes of its library -- is a binding, unless that
+base is a reasoned exemption (:data:`BINDING_EXEMPT`: template-method kits and
+frameworks, bases not yet given an adapter) or declares itself one by name (a
+seam's ``Pure<X>Host`` defaults, a ``<X>Mixin`` capability).
+:data:`HOST_BINDINGS` documents the known pairs, and one the derivation misses
+fails; an override fails ``--check``.
 
 Usage
 -----
     python m3trik/scripts/check_dcc_twins.py           # report (exit 0 always)
     python m3trik/scripts/check_dcc_twins.py --check   # exit 1 on drift
     python m3trik/scripts/check_dcc_twins.py --list    # print the ledger
+    python m3trik/scripts/check_dcc_twins.py --written-once [--check] [pkg ...]
+    python m3trik/scripts/check_dcc_twins.py --written-once --update  # drop paid copies
 
 Report mode is the default so a bare run is always safe to try. CI runs
 ``--check``: the rule is that a guard must not go RED the day it lands (that is
@@ -85,13 +110,14 @@ import argparse
 import ast
 import difflib
 import io
+import json
 import os
 import re
 import subprocess
 import sys
 import textwrap
 import tokenize
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -486,6 +512,41 @@ LEDGER: List[TwinSpec] = [
         ),
         symbols=("UnfoldResult",),
     ),
+    TwinSpec(
+        rel="uv_utils/rizom_bridge/parameters.py",
+        reason=(
+            "The RizomUV bridge's Lua placeholder registry and its derived pack "
+            "gutters: one text in both packages, mayatk's the SSoT, so a preset "
+            "sent from either host reads the same knobs. RizomUV-specific, so "
+            "the app-agnostic pythontk cannot host it; the gutter rule it calls "
+            "is each host's own UvUtils, imported relatively."
+        ),
+        note=(
+            "Whole file since 2026-10-29: the copies had drifted in prose only "
+            "(blendertk also imported its UvUtils by package name)."
+        ),
+    ),
+    TwinSpec(
+        rel="uv_utils/rizom_bridge/_rizom_bridge.py",
+        reason=(
+            "The RizomUV bridge's host-free reads of the app itself -- its "
+            "version (parsed from the install), the preset modes its templates "
+            "offer, and why a clean exit wrote no FBX -- on the bridge class "
+            "beside the scene I/O that differs. RizomUV-specific, so the "
+            "app-agnostic pythontk cannot host them."
+        ),
+        symbols=(
+            "_RizomUVBridgeInternal._parse_rizom_version",
+            "RizomUVBridge.rizom_version",
+            "RizomUVBridge.list_template_modes",
+            "RizomUVBridge._no_save_diagnosis",
+        ),
+        note=(
+            "4 shared methods (2026-10-29, the written-once rule's first pass; "
+            "_no_save_diagnosis took mayatk's line wrapping). Export, send and "
+            "the round trip read each host's scene."
+        ),
+    ),
 ]
 
 
@@ -639,6 +700,76 @@ def _read(path: str) -> List[str]:
         return fh.read().splitlines()
 
 
+#: The decorators that make a def another half of one property (``@v.setter``).
+_ACCESSORS = ("getter", "setter", "deleter")
+
+
+def _def_name(fn: ast.AST) -> str:
+    """*fn*'s own name, a property accessor's with its half: ``v.setter`` for
+    a def under ``@v.setter`` -- its getter (under ``@property``) is ``v``."""
+    for deco in getattr(fn, "decorator_list", ()):
+        if (
+            isinstance(deco, ast.Attribute)
+            and deco.attr in _ACCESSORS
+            and isinstance(deco.value, ast.Name)
+            and deco.value.id == fn.name
+        ):
+            return f"{fn.name}.{deco.attr}"
+    return fn.name
+
+
+def _unique(name: str, seen: Dict[str, int]) -> str:
+    """*name* the first time a file defines it, ``name#k`` for its k-th
+    definition (a def repeated in if/else or try branches)."""
+    seen[name] = seen.get(name, 0) + 1
+    return name if seen[name] == 1 else f"{name}#{seen[name]}"
+
+
+def _named_defs(
+    node: ast.AST,
+    prefix: str = "",
+    seen: Optional[Dict[str, int]] = None,
+    nested: bool = True,
+    in_class: bool = False,
+):
+    """Each class and function under *node*, in source order, with a qualified
+    name no other definition in the file shares: ``Class.method``,
+    ``outer.inner``, a property's halves apart (``C.v``, ``C.v.setter``) and a
+    repeated def numbered (``C.v#2``). Without *nested*, only what a module and
+    its top-level classes define, through their if/try blocks: no function
+    inside a function, no class inside a class."""
+    seen = {} if seen is None else seen
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.ClassDef):
+            if in_class and not nested:
+                continue
+            name = _unique(f"{prefix}{child.name}", seen)
+            yield name, child
+            yield from _named_defs(child, f"{name}.", seen, nested, True)
+        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            name = _unique(f"{prefix}{_def_name(child)}", seen)
+            yield name, child
+            if nested:
+                yield from _named_defs(child, f"{name}.", seen, nested, False)
+        else:
+            yield from _named_defs(child, prefix, seen, nested, in_class)
+
+
+def _covers(symbol: str, name: str) -> bool:
+    """Whether a ledger *symbol* holds *name*: itself, its other halves and
+    repeats (``C.v.setter``, ``C.v#2``), and what it encloses (a class its
+    methods, a method its inner functions)."""
+    return name == symbol or name.startswith((f"{symbol}.", f"{symbol}#"))
+
+
+def _halves(symbol: str, names: Iterable[str]) -> List[str]:
+    """The keys of *names* a ledger *symbol* compares: itself and its other
+    definitions -- a property's accessors and a repeated def -- which a whole
+    class or method text does not include."""
+    pattern = re.compile(re.escape(symbol) + r"(\.(getter|setter|deleter))?(#\d+)?")
+    return sorted(n for n in set(names) if pattern.fullmatch(n))
+
+
 def extract_symbols(path: str, rel: str) -> Dict[str, List[str]]:
     """Map symbol name -> normalized source lines for every function and class in *path*.
 
@@ -651,7 +782,9 @@ def extract_symbols(path: str, rel: str) -> Dict[str, List[str]]:
 
     TOP-LEVEL definitions only: a class nested in a class or a function defined
     inside another is not extracted, and a ledger naming one reports ``missing``
-    -- loudly, which is the safe direction for a narrowing.
+    -- loudly, which is the safe direction for a narrowing. Names are
+    :func:`_named_defs`': a property's halves and a repeated def are keyed
+    apart, so neither stands in for the other.
 
     Each function is dedented and normalized INDEPENDENTLY. Normalizing the
     whole file and slicing by line number does not work: ``collapse_docstrings``
@@ -669,17 +802,11 @@ def extract_symbols(path: str, rel: str) -> Dict[str, List[str]]:
         block = textwrap.dedent("\n".join(raw[start - 1 : fn.end_lineno]))
         out[key] = twin_normalized(block.splitlines(), rel)
 
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            # The class as a whole too -- decorators, fields and every method --
-            # for a twin that is one small type (a dataclass both packages
-            # return) rather than a few shared methods of a larger class.
-            _add(node.name, node)
-            for fn in node.body:
-                if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    _add(f"{node.name}.{fn.name}", fn)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _add(node.name, node)
+    # A class as a whole too -- decorators, fields and every method -- for a
+    # twin that is one small type (a dataclass both packages return) rather
+    # than a few shared methods of a larger class.
+    for key, node in _named_defs(tree, nested=False):
+        _add(key, node)
     return out
 
 
@@ -718,7 +845,12 @@ def compare(spec: TwinSpec) -> Tuple[str, List[str]]:
         extract_symbols(b_path, spec.rel),
     )
     detail, drifted, missing = [], [], []
-    for name in spec.symbols:
+    names = [
+        key
+        for symbol in spec.symbols
+        for key in (_halves(symbol, set(a_syms) | set(b_syms)) or [symbol])
+    ]
+    for name in names:
         if name not in a_syms or name not in b_syms:
             where = spec.a if name not in a_syms else spec.b
             missing.append(f"{name}: not found in {where}")
@@ -826,18 +958,25 @@ def _host_of(body: List[ast.stmt]) -> Optional[str]:
     return hosts[0] if len(hosts) == 1 else None
 
 
+def _functions(node: ast.AST):
+    """Each function under *node* with its qualified name, unique in the file
+    (:func:`_named_defs`), in source order."""
+    for name, child in _named_defs(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield name, child
+
+
 def function_bodies(path: str) -> List[Tuple[int, str, str, Optional[str]]]:
-    """``(line, name, normalized body, host)`` for each function in *path* whose
-    body, docstring dropped and reformatted, runs to the minimum length."""
+    """``(line, qualified name, normalized body, host)`` for each function in
+    *path* whose body, docstring dropped and reformatted, runs to the minimum
+    length."""
     try:
         with open(path, encoding="utf-8", errors="ignore") as fh:
             tree = ast.parse(fh.read())
     except (OSError, SyntaxError, ValueError):
         return []
     found = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
+    for qualname, node in _functions(tree):
         if node.end_lineno - node.lineno < WRITTEN_ONCE_MIN_LINES:
             continue  # cheap: a body shorter in source is shorter unparsed too
         body = node.body
@@ -855,7 +994,7 @@ def function_bodies(path: str) -> List[Tuple[int, str, str, Optional[str]]]:
             continue
         for pattern, neutral in _ALIAS_FOLD:
             text = pattern.sub(neutral, text)
-        found.append((node.lineno, node.name, text, _host_of(body)))
+        found.append((node.lineno, qualname, text, _host_of(body)))
     return found
 
 
@@ -897,10 +1036,222 @@ def written_once_violations(
     return sorted(found)
 
 
+# ---------------------------------------------- written once between the hosts
+#: The two DCC packages the written-once rule also holds to each other: host-free
+#: logic both carry is written once, in pythontk (CODE_STANDARD section 14).
+HOST_PACKAGES = ("mayatk", "blendertk")
+#: Files another drift guard already compares, by path under each package's
+#: source dir (a trailing ``/`` holds a folder), with that guard's path: the rule
+#: leaves them to it.
+_VENDOR_SYNC = "extapps/test/test_vendor_sync.py"
+GUARDED_ELSEWHERE: Dict[str, str] = {
+    # mirrored from m3trik/pm_doctor.py, the SSoT, beside package-manager.bat
+    "env_utils/pm_doctor.py": "m3trik/scripts/sync_shared_bat.py",
+    "env_utils/unity_bridge/parameters.py": _VENDOR_SYNC,
+    "mat_utils/marmoset_bridge/_marmoset_engine.py": _VENDOR_SYNC,
+    "mat_utils/marmoset_bridge/_toolbag_helpers.py": _VENDOR_SYNC,
+    "mat_utils/marmoset_bridge/template_params.py": _VENDOR_SYNC,
+    "mat_utils/marmoset_bridge/toolbag_log.py": _VENDOR_SYNC,
+    "mat_utils/marmoset_bridge/parameters.py": _VENDOR_SYNC,
+    "mat_utils/marmoset_bridge/marmoset_rpc/": _VENDOR_SYNC,
+    "mat_utils/substance_bridge/_substance_engine.py": _VENDOR_SYNC,
+    "mat_utils/substance_bridge/connection.py": _VENDOR_SYNC,
+    "mat_utils/substance_bridge/parameters.py": _VENDOR_SYNC,
+    "mat_utils/substance_bridge/substance_rpc/": _VENDOR_SYNC,
+}
+#: The copies older than the rule, under the workspace it was frozen from.
+HOST_COPY_BASELINE = "m3trik/scripts/check_dcc_twins_baseline.json"
+
+
+def _guarded_twin(a: Tuple[str, str], b: Tuple[str, str]) -> bool:
+    """Whether a mayatk place and a blendertk place, each ``(rel, name)``, are
+    one guarded twin: the same file on both sides, which another guard
+    compares (:data:`GUARDED_ELSEWHERE`) or the ledger does -- whole, or as a
+    symbol both are (:func:`_covers`). Two guards never excuse a copy between
+    the files they hold."""
+    (rel, name), (b_rel, b_name) = a, b
+    if rel != b_rel:
+        return False
+    for path in GUARDED_ELSEWHERE:
+        if rel == path or (path.endswith("/") and rel.startswith(path)):
+            return True
+    for spec in LEDGER:
+        if spec.rel != rel or {spec.a, spec.b} != set(HOST_PACKAGES):
+            continue
+        if spec.symbols is None or (
+            name == b_name and any(_covers(s, name) for s in spec.symbols)
+        ):
+            return True
+    return False
+
+
+def host_copies(workspace: Optional[str] = None) -> Dict[str, str]:
+    """``{pair: detail}`` for each body mayatk and blendertk both write over no
+    host (or over the same one), but for a guarded twin itself
+    (:func:`_guarded_twin`). A pair reads ``mayatk/<rel>::<name> =
+    blendertk/<rel>::<name>``: qualified names unique in each file
+    (:func:`_named_defs`), never line numbers, so it survives an edit above
+    it; three places make two pairs. Empty unless both packages are checked
+    out."""
+    workspace = workspace or REPO
+    groups: Dict[Tuple[str, Optional[str]], Dict[str, list]] = {}
+    for package in HOST_PACKAGES:
+        base = os.path.join(workspace, package, package)
+        if not os.path.isdir(base):
+            return {}
+        for path in _released_files(workspace, f"{package}/{package}"):
+            rel = os.path.relpath(path, base).replace(os.sep, "/")
+            for line, name, text, host in function_bodies(path):
+                place = (rel, name, line)
+                groups.setdefault((text, host), {}).setdefault(package, []).append(place)
+    found: Dict[str, str] = {}
+    a_pkg, b_pkg = HOST_PACKAGES
+    for (text, _), places in groups.items():
+        lines = text.count("\n") + 1
+        for a_rel, a_name, a_line in places.get(a_pkg, ()):
+            for b_rel, b_name, b_line in places.get(b_pkg, ()):
+                if _guarded_twin((a_rel, a_name), (b_rel, b_name)):
+                    continue
+                key = f"{a_pkg}/{a_rel}::{a_name} = {b_pkg}/{b_rel}::{b_name}"
+                found[key] = f"{lines} lines, at lines {a_line} / {b_line}"
+    return found
+
+
+def compared_elsewhere(workspace: Optional[str] = None) -> Dict[str, Set[str]]:
+    """``{guard: the package paths it compares}`` for the guards
+    :data:`GUARDED_ELSEWHERE` leaves files to, read from the guards themselves:
+    ``sync_shared_bat.PAIRS``' mirrors, and each ``_DccPairSyncMixin`` case of
+    extapps' vendor-sync test -- its ``subpath`` with each of its
+    ``top_files``, and each of its ``subdirs`` as a folder (a trailing ``/``).
+    A file a guard only lists (a host half it never compares) is in none; a
+    guard that is not there compares nothing."""
+    workspace = workspace or REPO
+    out: Dict[str, Set[str]] = {}
+    bat = os.path.join(workspace, "m3trik", "scripts", "sync_shared_bat.py")
+    if os.path.isfile(bat):
+        import importlib.util
+
+        loader = importlib.util.spec_from_file_location("_twins_sync_shared_bat", bat)
+        module = importlib.util.module_from_spec(loader)
+        loader.loader.exec_module(module)
+        held = out.setdefault("m3trik/scripts/sync_shared_bat.py", set())
+        for _source, mirrors in module.PAIRS:
+            for mirror in mirrors:
+                for package in HOST_PACKAGES:
+                    root = module.REPO_ROOT / package / package
+                    if root in mirror.parents:
+                        held.add(mirror.relative_to(root).as_posix())
+    sync = os.path.join(workspace, *_VENDOR_SYNC.split("/"))
+    if os.path.isfile(sync):
+        with open(sync, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        consts: Dict[str, Any] = {}
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target = node.targets[0]
+                if isinstance(target, ast.Name):
+                    try:
+                        consts[target.id] = ast.literal_eval(node.value)
+                    except ValueError:
+                        pass
+        held = out.setdefault(_VENDOR_SYNC, set())
+        for node in tree.body:
+            if not (
+                isinstance(node, ast.ClassDef)
+                and any(getattr(b, "id", None) == "_DccPairSyncMixin" for b in node.bases)
+            ):
+                continue
+            attrs: Dict[str, Any] = {}
+            for item in node.body:
+                if isinstance(item, ast.Assign) and len(item.targets) == 1:
+                    target, value = item.targets[0], item.value
+                    if isinstance(target, ast.Name):
+                        if isinstance(value, ast.Name):
+                            attrs[target.id] = consts.get(value.id, ())
+                        else:
+                            try:
+                                attrs[target.id] = ast.literal_eval(value)
+                            except ValueError:
+                                pass
+            sub = "/".join(attrs.get("subpath", ()))
+            held.update(f"{sub}/{name}" for name in attrs.get("top_files", ()))
+            held.update(f"{sub}/{name}/" for name in attrs.get("subdirs", ()))
+    return out
+
+
+def _host_copy_baseline_path(workspace: str) -> str:
+    return os.path.join(workspace, *HOST_COPY_BASELINE.split("/"))
+
+
+def load_host_copy_baseline(workspace: Optional[str] = None) -> List[str]:
+    """The frozen pairs of *workspace*'s own baseline; none when it has none."""
+    path = _host_copy_baseline_path(workspace or REPO)
+    if not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as fh:
+        return list(json.load(fh).get("copies", []))
+
+
+def write_host_copy_baseline(copies: Sequence[str], workspace: Optional[str] = None) -> str:
+    """Write *copies* as *workspace*'s baseline; returns its path."""
+    path = _host_copy_baseline_path(workspace or REPO)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = {
+        "_doc": (
+            "Bodies mayatk and blendertk both write over no host, frozen when "
+            "check_dcc_twins.py --written-once started holding them to the rule "
+            "(CODE_STANDARD section 14: host-free logic is written once, in "
+            "pythontk). Shrink it: move a copy to pythontk, or ledger it as a "
+            "twin with its reason. --written-once --update drops the paid pairs; "
+            "nothing adds one."
+        ),
+        "copies": sorted(set(copies)),
+    }
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(data, indent=1) + "\n")
+    return path
+
+
+def _host_copy_state(
+    workspace: Optional[str], packages: Optional[Sequence[str]]
+) -> Optional[Tuple[Dict[str, str], List[str]]]:
+    """``(copies, frozen pairs)``, or ``None`` when the rule does not apply: the
+    run names neither host package, or one is not checked out."""
+    workspace = workspace or REPO
+    if packages and not set(HOST_PACKAGES) & set(packages):
+        return None
+    if not all(os.path.isdir(os.path.join(workspace, p, p)) for p in HOST_PACKAGES):
+        return None
+    return host_copies(workspace), load_host_copy_baseline(workspace)
+
+
+def host_copy_findings(
+    workspace: Optional[str] = None, packages: Optional[Sequence[str]] = None
+) -> Tuple[List[str], List[str], List[str]]:
+    """``(new, frozen, paid)`` pairs: a copy the baseline does not list, one it
+    lists, and a listed one that no longer occurs. A run naming *packages* judges
+    them only when one is mayatk or blendertk; nothing is judged unless both are
+    checked out."""
+    state = _host_copy_state(workspace, packages)
+    if state is None:
+        return [], [], []
+    found, baseline = state
+    frozen = set(baseline)
+    return (
+        sorted(k for k in found if k not in frozen),
+        sorted(k for k in found if k in frozen),
+        sorted(frozen - set(found)),
+    )
+
+
 # ------------------------------------------------------------- host bindings
-#: The library classes that bind a shared pythontk class to their host:
-#: ``(pythontk module, shared class, ((package, module, binding class), ...))``,
-#: paths relative to each package's inner source dir.
+#: The library classes known to bind a shared class to their host:
+#: ``(shared module, shared class, ((package, module, binding class), ...))``,
+#: paths relative to each package's inner source dir; a shared module is
+#: pythontk's unless spelled ``"<package>:<path>"`` (``"uitk:..."``).
+#: Documentation, and a check on the derivation: the bindings checked are
+#: derived (:func:`derived_bindings`), so a binding missing here is checked all
+#: the same.
 HOST_BINDINGS: Tuple[Tuple[str, str, Tuple[Tuple[str, str, str], ...]], ...] = (
     (
         "core_utils/engines/scene_export/scene_data_sidecar.py",
@@ -950,6 +1301,48 @@ HOST_BINDINGS: Tuple[Tuple[str, str, Tuple[Tuple[str, str, str], ...]], ...] = (
             ("blendertk", "env_utils/workspace_map.py", "WorkspaceMap"),
         ),
     ),
+    (
+        "core_utils/engines/key_stash/key_stash_model.py",
+        "KeyStash",
+        (
+            ("mayatk", "anim_utils/key_stash/_key_stash.py", "KeyStash"),
+            ("blendertk", "anim_utils/key_stash/_key_stash.py", "KeyStash"),
+        ),
+    ),
+    (
+        "core_utils/engines/textures/emissive_groups.py",
+        "EmissiveGroupsModel",
+        (
+            ("mayatk", "mat_utils/emissive_groups.py", "EmissiveGroups"),
+            ("blendertk", "mat_utils/emissive_groups.py", "EmissiveGroups"),
+        ),
+    ),
+    (
+        "uitk:managers/preview_controller.py",
+        "PreviewController",
+        (
+            ("mayatk", "core_utils/preview.py", "Preview"),
+            ("blendertk", "core_utils/preview.py", "Preview"),
+        ),
+    ),
+    (
+        "vid_utils/sequence_exporter.py",
+        "SequenceExporter",
+        (
+            ("mayatk", "anim_utils/playblast_exporter.py", "PlayblastExporter"),
+            ("blendertk", "anim_utils/playblast_exporter.py", "PlayblastExporter"),
+        ),
+    ),
+    # Its base, read apart (the check reads one class body): the encoder half
+    # (``sequence_fps``, ``_notify``, ...) is shared too.
+    (
+        "vid_utils/sequence_exporter.py",
+        "SequenceEncoder",
+        (
+            ("mayatk", "anim_utils/playblast_exporter.py", "PlayblastExporter"),
+            ("blendertk", "anim_utils/playblast_exporter.py", "PlayblastExporter"),
+        ),
+    ),
 )
 
 #: What a class-body assignment makes a METHOD of, not configuration:
@@ -967,21 +1360,14 @@ def _is_method_value(value: Optional[ast.expr]) -> bool:
     return False
 
 
-def class_members(path: str, name: str) -> Optional[Dict[str, Tuple[int, bool]]]:
-    """``{member: (line, is_method)}`` the body of class *name* in *path* binds:
-    each ``def``, and each assigned or annotated name -- a method when its value
-    is a lambda or a ``staticmethod``/``classmethod``/``property`` wrap, else
-    configuration. ``None`` when the file or the class is not there."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            tree = ast.parse(fh.read())
-    except (OSError, SyntaxError, ValueError):
-        return None
-    for node in tree.body:
-        if not (isinstance(node, ast.ClassDef) and node.name == name):
-            continue
-        members: Dict[str, Tuple[int, bool]] = {}
-        for item in node.body:
+def _members_of(node: ast.ClassDef) -> Dict[str, Tuple[int, bool]]:
+    """``{member: (line, is_method)}`` the body of *node* binds (:func:`class_members`),
+    a statement nested in it (``if`` / ``try`` / ``with`` / a loop / ``match``)
+    included; a nested function's or class's own body is not the class's."""
+    members: Dict[str, Tuple[int, bool]] = {}
+
+    def walk(statements) -> None:
+        for item in statements:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 members[item.name] = (item.lineno, True)
             elif isinstance(item, (ast.Assign, ast.AnnAssign)):
@@ -990,49 +1376,523 @@ def class_members(path: str, name: str) -> Optional[Dict[str, Tuple[int, bool]]]
                 for target in targets:
                     if isinstance(target, ast.Name):
                         members[target.id] = (item.lineno, method)
-        return members
+            elif not isinstance(item, ast.ClassDef):
+                for field in ("body", "orelse", "finalbody"):
+                    walk(getattr(item, field, None) or ())
+                for branch in getattr(item, "handlers", None) or ():
+                    walk(branch.body)
+                for branch in getattr(item, "cases", None) or ():
+                    walk(branch.body)
+
+    walk(node.body)
+    return members
+
+
+def class_members(path: str, name: str) -> Optional[Dict[str, Tuple[int, bool]]]:
+    """``{member: (line, is_method)}`` the body of class *name* in *path* binds:
+    each ``def``, and each assigned or annotated name -- a method when its value
+    is a lambda or a ``staticmethod``/``classmethod``/``property`` wrap, else
+    configuration. ``None`` when the file or the class is not there."""
+    tree = _parse(path)
+    for node in (tree or _NO_MODULE).body:
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return _members_of(node)
     return None
 
 
-def host_binding_overrides(
+# ------------------------------------------------------- the derived roster
+#: The libraries whose classes are held to the binding rule: every class there
+#: that derives from a shared class -- directly, or through other classes of
+#: its library -- binds it, listed in :data:`HOST_BINDINGS` or not (CODE_STANDARD
+#: section 6: a guard derives its roster, never a hand-listed subset).
+BINDING_LIBRARIES = ("mayatk", "blendertk")
+#: The packages whose classes the libraries share: host-free pythontk, and
+#: uitk's generic Qt (``uitk.PreviewController``).
+SHARED_PACKAGES = ("pythontk", "uitk")
+
+#: The shared classes a library may subclass with overrides, and why: their
+#: subclasses are not bindings. A *kit* is built to be specialized, its hooks
+#: the extension points; an *unconverted* base still asks each host for a
+#: per-host subclass and leaves this table when it gets an adapter, as
+#: ``ShotStore`` and ``KeyStash`` did. Two kinds of base need no row, their
+#: names declare them (:data:`_BY_NAME`): ``Pure<X>Host`` IS an adapter seam's
+#: pure defaults, which the host adapter built on it overrides by design, and
+#: ``<X>Mixin`` lends a capability several classes share (CODE_STANDARD
+#: section 0), so a class using it is no host half of it.
+BINDING_EXEMPT: Dict[str, str] = {
+    "HandoffBridge": (
+        "kit: the app-bridge Template-Method kit (core_utils/handoff) -- "
+        "_produce / _deliver / params_defaults are the hooks a bridge fills"
+    ),
+    "ScriptLaunchBridge": "kit: the handoff kit's script-launch bridge (its templates)",
+    "PreviewBridge": "kit: the handoff kit's preview bridge (net_utils/preview)",
+    "Deliverer": "kit: the handoff kit's delivery strategy (deliver / preflight)",
+    "RpcClient": (
+        "kit: the generic JSON-RPC transport (net_utils/rpc) -- 'subclass to "
+        "bind defaults for a specific DCC'"
+    ),
+    "TaskFactory": (
+        "kit: the generic task pipeline -- a subclass is its task set, and "
+        "extends __init__ / run_tasks through super()"
+    ),
+    "SchemaSpec": (
+        "kit: the declarative template schema -- a spec is a dataclass of its "
+        "fields, and 'override from_dict / to_dict' for an irregular shape is "
+        "its documented extension point"
+    ),
+    "CancelProvider": (
+        "kit: uitk's cancellation strategy -- 'base class for host providers: "
+        "override only what the host can do' (each DCC's CancelProvider)"
+    ),
+    "ParamRegistry": (
+        "kit: uitk's bridge parameter registry -- 'a registry whose rule "
+        "differs overrides the method' and reaches the default through super()"
+    ),
+    "BaseHandler": (
+        "kit: uitk's Switchboard handler framework (CONFIG_BRANCH, DEFAULTS, "
+        "the singleton instance) a handler specializes"
+    ),
+    "UiHandler": (
+        "kit: uitk's UI handler, specialized by each DCC's native-menu handler "
+        "(construction, can_resolve / get / show)"
+    ),
+    "SceneStoreBase": (
+        "unconverted: 'subclass with the primitives' (read / write / values) "
+        "is its declared contract; DataNodes is each host's"
+    ),
+    "ShotManifest": (
+        "unconverted: the manifest engine's per-host hooks (_apply_one, "
+        "_key_samples, ...) on mayatk's ShotManifest / blendertk's BlenderShotManifest"
+    ),
+    "ShotSequencer": "unconverted: _ShotSequencerHooks, each host's ShotSequencer",
+    "Behaviors": (
+        "unconverted: each host's Behaviors re-binds the shared loops "
+        "(apply_to_shots, compute_duration) with its own defaults"
+    ),
+}
+_BY_NAME = (
+    (re.compile(r"Pure\w*Host"), "an adapter over its seam's pure defaults"),
+    (re.compile(r"\w*Mixin"), "a capability mixin: its user is no host half of it"),
+)
+_NO_MODULE = ast.Module(body=[], type_ignores=[])
+
+#: A class as the derivation names it: ``(package, module, class)``, the module
+#: dotted below the package (``""``: its ``__init__``).
+_Key = Tuple[str, str, str]
+
+
+def _parse(path: str) -> Optional[ast.Module]:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return ast.parse(fh.read())
+    except (OSError, SyntaxError, ValueError):
+        return None
+
+
+class _Source:
+    """The ecosystem packages read as source: where each class a base names is
+    defined -- through a package root (``ptk.X``, the root ``DEFAULT_INCLUDE``),
+    a ``from`` import (absolute or relative), a ``lazy_exports`` package, or the
+    module's own classes -- and each class's MRO over the classes it can
+    resolve. Only the shared packages and the one a class lives in are followed;
+    every other base (the standard library, Qt) is outside the rule. Parses
+    each module once."""
+
+    def __init__(self, workspace: str):
+        self.workspace = workspace
+        self._trees: Dict[Tuple[str, str], Optional[ast.Module]] = {}
+        self._names: Dict[str, Dict[str, str]] = {}
+        self._mro: Dict[_Key, List[_Key]] = {}
+        self._classes: Dict[_Key, ast.ClassDef] = {}
+        self._scopes: Dict[Tuple[str, str], tuple] = {}
+
+    def root(self, package: str) -> str:
+        return os.path.join(self.workspace, package, package)
+
+    def path(self, package: str, dotted: str) -> Optional[str]:
+        base = os.path.join(self.root(package), *dotted.split(".")) if dotted else self.root(package)
+        for path in (base + ".py", os.path.join(base, "__init__.py")):
+            if os.path.isfile(path):
+                return path
+        return None
+
+    def tree(self, package: str, dotted: str) -> Optional[ast.Module]:
+        if (package, dotted) not in self._trees:
+            path = self.path(package, dotted)
+            self._trees[package, dotted] = _parse(path) if path else None
+        return self._trees[package, dotted]
+
+    def names(self, package: str) -> Dict[str, str]:
+        """``{root name: module}`` from *package*'s root ``DEFAULT_INCLUDE`` (a
+        ``"*"`` module publishes its public classes)."""
+        if package not in self._names:
+            include: dict = {}
+            for node in (self.tree(package, "") or _NO_MODULE).body:
+                if (
+                    isinstance(node, ast.Assign)
+                    and getattr(node.targets[0], "id", None) == "DEFAULT_INCLUDE"
+                ):
+                    try:
+                        include = ast.literal_eval(node.value)
+                    except ValueError:
+                        include = {}
+            names: Dict[str, str] = {}
+            for module, value in include.items():
+                if value == "*":
+                    for node in (self.tree(package, module) or _NO_MODULE).body:
+                        if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+                            names[node.name] = module
+                else:
+                    for name in [value] if isinstance(value, str) else value:
+                        names[name] = module
+            self._names[package] = names
+        return self._names[package]
+
+    def scope(self, package: str, dotted: str):
+        """``(imports, aliases, local classes)`` of a module: ``{local name:
+        (package, module or None for its root, name)}`` for what it imports
+        from a shared package or its own, ``{alias: package}`` for each root
+        it imports whole (``import pythontk as ptk``), ``{name: ClassDef}``."""
+        if (package, dotted) in self._scopes:
+            return self._scopes[package, dotted]
+        tree = self.tree(package, dotted)
+        path = self.path(package, dotted) or ""
+        followed = {*SHARED_PACKAGES, package}
+        imports: Dict[str, Tuple[str, Optional[str], str]] = {}
+        aliases: Dict[str, str] = {}
+        for node in (tree or _NO_MODULE).body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name in followed:
+                        aliases[alias.asname or alias.name] = alias.name
+                continue
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            module = node.module or ""
+            if node.level:
+                parts = dotted.split(".") if dotted else []
+                if not path.endswith("__init__.py"):
+                    parts = parts[:-1]
+                parts = parts[: len(parts) - (node.level - 1)]
+                ref: Tuple[str, Optional[str]] = (
+                    package, ".".join(parts + ([module] if module else []))
+                )
+            else:
+                head, _, rest = module.partition(".")
+                if head not in followed:
+                    continue
+                ref = (head, rest or None)
+            for alias in node.names:
+                imports[alias.asname or alias.name] = (ref[0], ref[1], alias.name)
+        local = {n.name: n for n in (tree or _NO_MODULE).body if isinstance(n, ast.ClassDef)}
+        self._scopes[package, dotted] = (imports, aliases, local)
+        return imports, aliases, local
+
+    def base_ref(self, package: str, dotted: str, base: ast.expr):
+        """``(package, module or None, name)`` a base expression names, when it
+        is a class of a shared package or of *package*; else ``None``."""
+        imports, aliases, local = self.scope(package, dotted)
+        if isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+            owner = aliases.get(base.value.id)
+            return (owner, None, base.attr) if owner else None
+        if isinstance(base, ast.Name):
+            if base.id in imports:
+                return imports[base.id]
+            if base.id in local:
+                return (package, dotted, base.id)
+        return None
+
+    def find(self, package: str, dotted: Optional[str], name: str, depth: int = 0):
+        """The ``_Key`` of class *name* reached from *dotted* in *package*
+        (``None``: its root) -- defined there, imported, or lazily exported --
+        or ``None``."""
+        if dotted is None:
+            dotted = self.names(package).get(name)
+        tree = self.tree(package, dotted) if dotted is not None and depth < 8 else None
+        if tree is None:
+            return None
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == name:
+                key = (package, dotted, name)
+                self._classes[key] = node
+                return key
+        imports, _, _ = self.scope(package, dotted)
+        if name in imports:
+            return self.find(*imports[name], depth=depth + 1)
+        for node in tree.body:  # a package's lazy_exports(globals(), {sub: names})
+            call = node.value if isinstance(node, ast.Expr) else None
+            if not (
+                isinstance(call, ast.Call)
+                and getattr(call.func, "id", None) == "lazy_exports"
+                and len(call.args) > 1
+            ):
+                continue
+            try:
+                table = ast.literal_eval(call.args[1])
+            except ValueError:
+                continue
+            for sub, exported in table.items():
+                if name in ([exported] if isinstance(exported, str) else exported):
+                    return self.find(package, f"{dotted}.{sub}", name, depth + 1)
+        return None
+
+    def node(self, key: _Key) -> ast.ClassDef:
+        return self._classes[key]
+
+    def bases(self, key: _Key) -> List[_Key]:
+        """The resolved bases of *key*, in order (unresolvable ones dropped)."""
+        found = []
+        for base in self._classes[key].bases:
+            ref = self.base_ref(key[0], key[1], base)
+            hit = self.find(*ref) if ref is not None else None
+            if hit is not None and hit != key:
+                found.append(hit)
+        return found
+
+    def mro(self, key: _Key, _active: Optional[set] = None) -> List[_Key]:
+        """*key*'s method resolution order over the classes the source
+        resolves: C3, as Python computes it; a hierarchy C3 rejects (no running
+        program has one) falls back to depth-first, first occurrence."""
+        if key in self._mro:
+            return self._mro[key]
+        active = set() if _active is None else _active
+        if key in active:
+            return [key]  # a cycle on disk (a half-written file): stop here
+        active.add(key)
+        bases = self.bases(key)
+        seqs = [list(self.mro(b, active)) for b in bases] + [list(bases)]
+        merged: List[_Key] = [key]
+        while any(seqs):
+            head = next(
+                (
+                    s[0]
+                    for s in seqs
+                    if s and not any(s[0] in other[1:] for other in seqs)
+                ),
+                None,
+            )
+            if head is None:  # inconsistent: depth-first, first occurrence
+                for seq in seqs:
+                    merged.extend(k for k in seq if k not in merged)
+                break
+            merged.append(head)
+            seqs = [[k for k in s if k != head] for s in seqs]
+        active.discard(key)
+        self._mro[key] = merged
+        return merged
+
+
+def _label(key: _Key, workspace_rel: Dict[_Key, str]) -> str:
+    return workspace_rel.get(key) or f"{key[0]}/{key[1]}::{key[2]}"
+
+
+def derived_bindings(
     workspace: Optional[str] = None,
-) -> Tuple[List[str], int, List[str]]:
-    """``(failures, bindings checked, bindings absent)`` over
-    :data:`HOST_BINDINGS`: each method of its shared pythontk class a binding
-    class rebinds (by ``def`` or by assignment; configuration may be reset).
-    Only a package that is not checked out is absent: a binding class gone from
-    a checked-out package, or a shared class gone from a checked-out pythontk,
-    is a failure -- the binding can no longer be held to the rule."""
+) -> Tuple[Dict[str, dict], List[str], List[str]]:
+    """``({label: binding}, failures, exempt)``: every class of
+    :data:`BINDING_LIBRARIES` whose MRO reaches a shared class (of
+    :data:`SHARED_PACKAGES`) through a base that neither :data:`BINDING_EXEMPT`
+    nor a name rule (:data:`_BY_NAME`) exempts -- a direct base, or one reached
+    through other classes of its library (a subclass of a binding binds it
+    too).
+
+    A binding is ``{"lineage": the shared classes' names,
+    "overrides": [...], "shadowed": [...]}``. Members are read in MRO order: a
+    library class ahead of the shared class that defines a shared method
+    overrides it (reported once, where it is written: on the binding itself,
+    or on the first binding over a mixin that is none); one behind it is dead
+    code, shadowed, and reported as such. A base naming a shared class the
+    source does not hold is a failure: the binding can no longer be held to
+    the rule. *exempt* lists ``label <- base (reason)`` for each class's own
+    exempt bases, for the report."""
     workspace = workspace or REPO
+    src = _Source(workspace)
+    bindings: Dict[str, dict] = {}
     failures: List[str] = []
+    exempt: List[str] = []
+    present = {p for p in SHARED_PACKAGES if os.path.isdir(src.root(p))}
+    if not present:
+        return bindings, failures, exempt
+    rel: Dict[_Key, str] = {}
+    classes: List[_Key] = []
+    for package in BINDING_LIBRARIES:
+        inner = src.root(package)
+        for path in sorted(_released_files(workspace, f"{package}/{package}")):
+            module_rel = os.path.relpath(path, inner).replace(os.sep, "/")
+            dotted = module_rel[:-3].replace("/", ".")
+            if dotted.endswith("__init__"):
+                dotted = dotted[: -len("__init__")].rstrip(".")
+            tree = src.tree(package, dotted)
+            for node in (tree or _NO_MODULE).body:
+                if isinstance(node, ast.ClassDef):
+                    key = src.find(package, dotted, node.name)
+                    if key is not None:
+                        rel[key] = f"{package}/{module_rel}::{node.name}"
+                        classes.append(key)
+
+    def reason_for(name: str) -> Optional[str]:
+        return BINDING_EXEMPT.get(name) or next(
+            (why for rule, why in _BY_NAME if rule.fullmatch(name)), None
+        )
+
+    shared_of: Dict[_Key, set] = {}
+    for key in classes:
+        label = _label(key, rel)
+        entries: List[_Key] = []
+        for klass in src.mro(key):
+            if klass[0] in SHARED_PACKAGES:
+                continue
+            for base in src.node(klass).bases:
+                ref = src.base_ref(klass[0], klass[1], base)
+                if ref is None or ref[0] not in present:
+                    continue  # not a shared class (or its package is not checked out)
+                hit = src.find(*ref)
+                reason = reason_for(ref[2])
+                if reason is not None:
+                    if klass == key:
+                        exempt.append(f"{label} <- {ref[2]}  ({reason})")
+                    continue
+                if hit is None:
+                    if klass == key:
+                        where = ref[1] or src.names(ref[0]).get(ref[2]) or "root"
+                        failures.append(
+                            f"{label}  (shared class {ref[0]} {where}::{ref[2]} not found)"
+                        )
+                    continue
+                if hit not in entries:
+                    entries.append(hit)
+        shared = {k for entry in entries for k in src.mro(entry) if k[0] in SHARED_PACKAGES}
+        if shared:
+            shared_of[key] = shared
+    for key, shared in shared_of.items():
+        label = _label(key, rel)
+        order = src.mro(key)
+        members = {klass: _members_of(src.node(klass)) for klass in order}
+        methods = {
+            name
+            for klass in shared
+            for name, (_, is_method) in members[klass].items()
+            if is_method
+        }
+        overrides, shadowed = [], []
+        for name in sorted(methods):
+            winner = next(k for k in order if name in members[k])
+            definer = next(k for k in order if k in shared and name in members[k])
+            for klass in order:
+                if klass[0] in SHARED_PACKAGES or name not in members[klass]:
+                    continue
+                if klass != key and klass in shared_of:
+                    continue  # that binding reports what it writes
+                line = members[klass][name][0]
+                where = "" if klass == key else f", in {_label(klass, rel)}"
+                if klass == winner:
+                    overrides.append(
+                        f"{label}.{name} (line {line}{where}) overrides "
+                        f"{definer[0]} {definer[2]}.{name}"
+                    )
+                elif order.index(klass) > order.index(definer):
+                    shadowed.append(
+                        f"{label}.{name} (line {line}{where}) is shadowed by "
+                        f"{definer[0]} {definer[2]}.{name}: dead code"
+                    )
+        bindings[label] = {
+            "lineage": {k[2] for k in shared},
+            "overrides": overrides,
+            "shadowed": shadowed,
+        }
+    return bindings, failures, exempt
+
+
+def host_binding_overrides(
+    workspace: Optional[str] = None, shadowed: Optional[List[str]] = None
+) -> Tuple[List[str], int, List[str]]:
+    """``(failures, bindings checked, bindings absent)``: each method of its
+    shared classes (pythontk's, uitk's) a binding replaces in its MRO, by
+    ``def`` or by assignment (configuration may be reset). *shadowed*, when
+    given, collects the library copies the MRO never reaches (reported, not
+    failed).
+
+    The bindings are derived (:func:`derived_bindings`); :data:`HOST_BINDINGS`
+    documents the known pairs, and a pair the derivation does not see is a
+    failure -- the roster would be missing it. Only a package that is not
+    checked out is absent: a binding class gone from a checked-out package, or
+    a shared class gone from a checked-out shared package, is a failure -- the
+    binding can no longer be held to the rule."""
+    workspace = workspace or REPO
+    bindings, failures, _ = derived_bindings(workspace)
     absent: List[str] = []
-    checked = 0
-    pythontk_root = os.path.join(workspace, "pythontk", "pythontk")
-    for module, shared, bindings in HOST_BINDINGS:
-        base = class_members(os.path.join(pythontk_root, *module.split("/")), shared)
-        methods = {m for m, (_, is_method) in (base or {}).items() if is_method}
-        for package, rel, name in bindings:
+    seen = set(bindings)
+    for module, shared, rows in HOST_BINDINGS:
+        owner, _, module = module.rpartition(":")
+        owner = owner or "pythontk"
+        shared_root = os.path.join(workspace, owner, owner)
+        for package, rel, name in rows:
             label = f"{package}/{rel}::{name}"
             root = os.path.join(workspace, package, package)
-            if not os.path.isdir(pythontk_root) or not os.path.isdir(root):
+            if not os.path.isdir(shared_root) or not os.path.isdir(root):
                 absent.append(label)
                 continue
-            checked += 1
-            if base is None:
+            seen.add(label)
+            if label in bindings:
+                if shared not in bindings[label]["lineage"]:
+                    failures.append(
+                        f"{label}  (declared over {owner} {shared}, which is not "
+                        "in its shared lineage)"
+                    )
+                continue
+            if any(f.startswith(f"{label}  ") for f in failures):
+                continue  # already failed: its shared class is gone
+            if class_members(os.path.join(shared_root, *module.split("/")), shared) is None:
                 failures.append(
-                    f"{label}  (shared class pythontk {module}::{shared} not found)"
+                    f"{label}  (shared class {owner} {module}::{shared} not found)"
                 )
-                continue
-            own = class_members(os.path.join(root, *rel.split("/")), name)
-            if own is None:
+            elif class_members(os.path.join(root, *rel.split("/")), name) is None:
                 failures.append(f"{label}  (binding class not found)")
-                continue
-            failures.extend(
-                f"{label}.{member} (line {line}) overrides pythontk {shared}.{member}"
-                for member, (line, _) in sorted(own.items())
-                if member in methods
-            )
-    return failures, checked, absent
+            else:
+                failures.append(
+                    f"{label}  (declared, but no base of it resolves to {owner} "
+                    f"{shared}: the derived roster misses it)"
+                )
+    for label, binding in sorted(bindings.items()):
+        failures.extend(binding["overrides"])
+        if shadowed is not None:
+            shadowed.extend(binding["shadowed"])
+    return failures, len(seen), absent
+
+
+_HOST_COPY_HINT = (
+    "\nmayatk and blendertk both write a body that names no host. Move it to "
+    "pythontk and call it\nfrom both (host-free logic is written once there, "
+    "CODE_STANDARD.md §14), or ledger it\nas a twin with the reason it cannot "
+    "move (§6)."
+)
+
+
+def _print_host_copies(state: Optional[Tuple[Dict[str, str], List[str]]]) -> List[str]:
+    """Print the host copies outside the baseline and the paid pairs; returns the new ones."""
+    if state is None:
+        return []
+    found, baseline = state
+    frozen = set(baseline)
+    new = sorted(k for k in found if k not in frozen)
+    for key in new:
+        print(f"  HOST    {key}  ({found[key]})")
+    for key in sorted(frozen - set(found)):
+        print(f"  PAID    {key}  no longer written twice (--written-once --update drops it)")
+    return new
+
+
+def _host_copy_summary(state: Optional[Tuple[Dict[str, str], List[str]]]) -> str:
+    if state is None:
+        return "host copies not compared (a host package is not in the run)"
+    found, baseline = state
+    frozen = set(baseline)
+    new = sum(1 for k in found if k not in frozen)
+    paid = len(frozen - set(found))
+    return (
+        f"{new} host copy(ies) outside the baseline "
+        f"({len(found) - new} frozen, {paid} paid)"
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -1048,6 +1908,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="run only the new layout's written-once rule",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="with --written-once: drop the baseline's paid host copies (adds none)",
+    )
     parser.add_argument("--workspace", default=None, help="the monorepo root")
     parser.add_argument(
         "packages",
@@ -1055,6 +1920,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="with --written-once: check only when one of these is tentacle or a library",
     )
     args = parser.parse_args(argv)
+    if args.update and not args.written_once:
+        parser.error("--update needs --written-once")
+    if args.update and args.packages:
+        parser.error("--update rewrites the whole baseline: name no packages")
 
     if args.written_once:
         involved = {"tentacle"} | {top.split("/")[0] for top in LIBRARIES}
@@ -1064,8 +1933,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         copies = written_once_violations(args.workspace, args.packages)
         for line in copies:
             print(f"  COPY    {line}")
-        print(f"{len(copies)} body(ies) written twice on the new layout.")
-        return 1 if copies and args.check else 0
+        state = _host_copy_state(args.workspace, args.packages)
+        new = _print_host_copies(state)
+        if args.update:
+            if state is not None:
+                found, baseline = state
+                kept = sorted(set(baseline) & set(found))
+                path = write_host_copy_baseline(kept, args.workspace)
+                print(f"[WROTE] {path}: {len(kept)} frozen host copy(ies)")
+            return 1 if new else 0
+        print(
+            f"{len(copies)} body(ies) written twice on the new layout; "
+            f"{_host_copy_summary(state)}."
+        )
+        if new and args.check:
+            print(_HOST_COPY_HINT)
+        return 1 if (copies or new) and args.check else 0
 
     if args.list:
         for spec in LEDGER:
@@ -1101,10 +1984,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     copies = written_once_violations()
     for line in copies:
         print(f"  COPY    {line}")
+    host_state = _host_copy_state(None, None)
+    host_new = _print_host_copies(host_state)
 
-    overrides, bound, unbound = host_binding_overrides()
+    shadowed: List[str] = []
+    overrides, bound, unbound = host_binding_overrides(shadowed=shadowed)
     for line in overrides:
         print(f"  OVERRIDE {line}")
+    for line in shadowed:  # dead code the MRO never reaches: reported, not failed
+        print(f"  SHADOWED {line}")
     for label in unbound:
         print(f"  skipped {label}  (sibling not checked out)")
 
@@ -1118,6 +2006,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(
         f"\n{checked} twin(s) compared, {len(bad)} with drift; "
         f"{len(copies)} body(ies) written twice on the new layout; "
+        f"{_host_copy_summary(host_state)}; "
         f"{bound} host binding(s), {len(overrides)} override(s)."
     )
     if overrides and args.check:
@@ -1132,6 +2021,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             "model, core/ or the\nlibrary that owns it -- and call it from the "
             "other place (CODE_STANDARD.md §3)."
         )
+    if host_new and args.check:
+        print(_HOST_COPY_HINT)
     if bad and args.check:
         print(
             "\nA declared twin has diverged. Either port the change to the other "
@@ -1139,7 +2030,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "differ.\nCODE_STANDARD.md §6: a vendored copy is sanctioned only "
             "while it is guarded."
         )
-    if (bad or copies or overrides) and args.check:
+    if (bad or copies or host_new or overrides) and args.check:
         return 1
     if bad:
         print("(report mode: exit 0. Wire --check once the ledger is clear.)")

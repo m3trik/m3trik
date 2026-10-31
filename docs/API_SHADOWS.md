@@ -68,24 +68,24 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`OpRegistry`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L84)
 - `pythontk` — [`OpRegistry`](pythontk/net_utils/rpc/plugin_core.py#L84)
 
-### `Parameters` — blendertk, mayatk, tentacle, uitk
+### `Parameters` — blendertk, extapps, mayatk, uitk
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L149)
-- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L167)
+- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L61)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L266)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L532)
+- `extapps` — [`Parameters`](extapps/marmoset_workflow/parameters.py#L49)
+- `extapps` — [`Parameters`](extapps/photogrammetry/gaussian_splat_workflow/parameters.py#L117)
+- `extapps` — [`Parameters`](extapps/photogrammetry/metashape_workflow/parameters.py#L372)
+- `extapps` — [`Parameters`](extapps/photogrammetry/realityscan_workflow/parameters.py#L164)
+- `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L157)
+- `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L360)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L508)
-- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
+- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L63)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L527)
-- `tentacle` — [`Parameters`](tentacle/slots/tools/_marmoset_workflow/parameters.py#L52)
-- `tentacle` — [`Parameters`](tentacle/slots/tools/_photogrammetry/gaussian_splat_parameters.py#L119)
-- `tentacle` — [`Parameters`](tentacle/slots/tools/_photogrammetry/metashape_parameters.py#L374)
-- `tentacle` — [`Parameters`](tentacle/slots/tools/_photogrammetry/realityscan_parameters.py#L166)
-- `tentacle` — [`Parameters`](tentacle/slots/tools/_unity_workflow/parameters.py#L127)
-- `tentacle` — [`Parameters`](tentacle/slots/tools/_webxr_preview/parameters.py#L363)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
 
 ### `ProbePlacement` — blendertk, mayatk, pythontk
@@ -157,7 +157,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L42)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L64)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1259)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1295)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1123)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L289)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L314)
@@ -199,7 +199,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (182)
+## Intentional mayatk↔blendertk port parity (181)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -312,7 +312,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SceneDiagnostics`
 - `SceneExporter`
 - `SceneInfoSection`
-- `SceneState`
 - `ScriptConsole`
 - `ScriptJobManager`
 - `SegmentCollector`

@@ -2925,6 +2925,89 @@ else:
                 if re.search(r'"%s(\[[^\]]*\])?>=' % re.escape(unit), text):
                     with self.subTest(package=pkg, floor=unit):
                         self.assertIn(unit, listed.get(pkg, set()))
+        # A range is a floor too: each one is prechecked the same way.
+        ranges = re.search(r"\$STANDALONE_RANGES = @\{(.*?)\n\}", source, re.S)
+        self.assertIsNotNone(ranges, "push.ps1 declares no $STANDALONE_RANGES table")
+        for pkg, deps in re.findall(r'"(\w+)"\s*=\s*@\(([^)]*)\)', ranges.group(1)):
+            for dep in re.findall(r'"([\w-]+)"', deps):
+                with self.subTest(range_package=pkg, dep=dep):
+                    self.assertIn(dep, listed.get(pkg, set()))
+
+    def test_a_standalone_range_ratchets_to_the_published_minor(self):
+        """On a release of the depending package, ``Update-StandaloneRanges``
+        writes each ``$STANDALONE_RANGES`` floor as ``>=<latest published>,<<next
+        minor>``: the range a tentacle release declares and its runtime gates
+        extapps with, so the two move together. The floor never lowers (a
+        hand-raised one keeps its place and the cap follows it), an unreadable
+        index changes nothing, the [extras] survive, and a floor-only standalone
+        (mayatk's unitytk) stays as written. ``Get-StandaloneFloorProblems``
+        reads the range and wants a release INSIDE it. The index is stubbed, so
+        no network is used."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            tentacle, mayatk = root / "tentacle", root / "mayatk"
+            for repo, body in (
+                (
+                    tentacle,
+                    '[project]\ndependencies = ["pythontk>=0.1.0"]\n\n'
+                    "[project.optional-dependencies]\n"
+                    'apps = ["extapps[x]>=0.7.0"]\n',
+                ),
+                (mayatk, '[project]\ndependencies = ["unitytk>=0.1.0"]\n'),
+            ):
+                repo.mkdir()
+                (repo / "pyproject.toml").write_text(body, encoding="utf-8")
+            toml = tentacle / "pyproject.toml"
+            probe = (
+                "$STANDALONE_FLOORS = @{ 'tentacle' = @('extapps'); 'mayatk' = @('unitytk') }\n"
+                "$STANDALONE_RANGES = @{ 'tentacle' = @('extapps') }\n"
+                "function Get-PypiMaxVersion { param([string]$ProjectName) "
+                "return $script:INDEX }\n"
+                "function Get-PypiVersions { param([string]$ProjectName) "
+                "return $script:LISTED }\n"
+                "function Show-AppsLine([string]$Tag) {\n"
+                f"    $line = (Select-String -Path '{toml}' -Pattern '^apps').Line\n"
+                '    Write-Output "$Tag=$line|"\n'
+                "}\n"
+                "$script:INDEX = '0.8.3'; $script:LISTED = @('0.7.0', '0.8.3')\n"
+                f"$plan = Get-StandaloneRangeUpdates 'tentacle' '{tentacle}'\n"
+                "Write-Output \"PLAN=$($plan['extapps'].From)->$($plan['extapps'].To)|\"\n"
+                f"$null = Update-StandaloneRanges 'tentacle' '{tentacle}'\n"
+                "Show-AppsLine 'FIRST'\n"
+                f"$unmet = @(Get-StandaloneFloorProblems 'tentacle' '{tentacle}')\n"
+                "Write-Output \"UNMET=$($unmet -join ',')|\"\n"
+                f"Write-Output \"AGAIN=$((Get-StandaloneRangeUpdates 'tentacle' '{tentacle}').Count)|\"\n"
+                "$script:LISTED = @('0.7.0', '0.9.0')\n"
+                f"$unmet = @(Get-StandaloneFloorProblems 'tentacle' '{tentacle}')\n"
+                "Write-Output \"OUTSIDE=$($unmet -join ',')|\"\n"
+                "$script:INDEX = '0.9.0'\n"
+                f"$null = Update-StandaloneRanges 'tentacle' '{tentacle}'\n"
+                "Show-AppsLine 'MINOR'\n"
+                "$script:INDEX = $null\n"
+                f"Write-Output \"OFFLINE=$((Get-StandaloneRangeUpdates 'tentacle' '{tentacle}').Count)|\"\n"
+                f"(Get-Content '{toml}' -Raw) -replace '>=0\\.9\\.0,<0\\.10', '>=1.2.0' |"
+                f" Set-Content '{toml}' -NoNewline\n"
+                "$script:INDEX = '0.9.4'\n"
+                f"$null = Update-StandaloneRanges 'tentacle' '{tentacle}'\n"
+                "Show-AppsLine 'KEPT'\n"
+                f"Write-Output \"FLOOR_ONLY=$((Get-StandaloneRangeUpdates 'mayatk' '{mayatk}').Count)|\"\n"
+            )
+            result = self._run_push_functions(root, probe)
+            out = result.stdout + result.stderr
+            self.assertIn("PLAN=>=0.7.0->>=0.8.3,<0.9|", result.stdout, out)
+            self.assertIn('FIRST=apps = ["extapps[x]>=0.8.3,<0.9"]|', result.stdout, out)
+            self.assertIn("UNMET=|", result.stdout, out)
+            self.assertIn("AGAIN=0|", result.stdout, out)
+            # Only a release past the cap is listed: nothing installs inside it.
+            self.assertIn("OUTSIDE=extapps>=0.8.3,<0.9|", result.stdout, out)
+            self.assertIn('MINOR=apps = ["extapps[x]>=0.9.0,<0.10"]|', result.stdout, out)
+            self.assertIn("OFFLINE=0|", result.stdout, out)
+            self.assertIn('KEPT=apps = ["extapps[x]>=1.2.0,<1.3"]|', result.stdout, out)
+            self.assertIn("FLOOR_ONLY=0|", result.stdout, out)
+            self.assertEqual(
+                (mayatk / "pyproject.toml").read_text(encoding="utf-8"),
+                '[project]\ndependencies = ["unitytk>=0.1.0"]\n',
+            )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_the_english_gate_stops_a_non_latin_word_and_passes_a_clean_tree(self):

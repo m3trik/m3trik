@@ -26,8 +26,8 @@ re-run after ANY abort resumes at the right place instead of re-doing or skippin
 - Prepare    classifies the dev delta (Test-ReleaseDelta). An ARTIFACT delta (anything
              that ships, or an upstream floor that must ratchet) becomes ONE commit,
              `Release X.Y.Z`: the version (Resolve-ReleaseVersion — stepped from what is
-             PUBLISHED, never from the file), the internal floors, and a fresh API
-             registry. One release = one version = one commit; every version number
+             PUBLISHED, never from the file), the internal floors, the standalone
+             ranges ($STANDALONE_RANGES), and a fresh API registry. One release = one version = one commit; every version number
              reaches PyPI. A hand-edited __version__ above the published one is honored
              as a deliberate minor/major bump.
 - Push       dev -> origin/dev when ahead.
@@ -244,14 +244,26 @@ $REQUIRED_PINS = @{
 }
 
 # Floors a package sets by hand on a standalone (off-cascade) unit -- one that publishes
-# on its own `publish.yml`. Nothing here syncs them; Prepare only checks that PyPI already
-# carries a release each one accepts (Get-StandaloneFloorProblems), so a release cannot
+# on its own `publish.yml`. Nothing here syncs them (except the $STANDALONE_RANGES below);
+# Prepare checks that PyPI already carries a release each one accepts (Get-StandaloneFloorProblems), so a release cannot
 # ship a floor that installs nowhere: the standalone package publishes first.
 # test_push pins this table to every such floor the cascade's pyprojects declare.
 $STANDALONE_FLOORS = @{
     "mayatk"    = @("unitytk")
     "blendertk" = @("unitytk")
     "tentacle"  = @("extapps")
+}
+
+# The standalone floors of $STANDALONE_FLOORS that Prepare writes as a RANGE on the
+# depending package's release (Update-StandaloneRanges): the floor rises to the latest
+# published release, never lower than declared, and a cap follows it to the next minor
+# (`extapps>=0.8.3,<0.9`) -- the releases that package was released against. Its runtime
+# reads the range back from its own metadata to gate the provider it opens (uitk's
+# ExternalAppHandler.add_provider), so the two cannot drift. A ratchet alone is not a
+# reason to release: it rides on a release the package makes anyway. The others
+# (mayatk/blendertk's unitytk) keep a hand-set floor.
+$STANDALONE_RANGES = @{
+    "tentacle" = @("extapps")
 }
 
 # Files attached to a package's GitHub Release, relative to its repo, each uploaded
@@ -1141,7 +1153,8 @@ function Get-InternalPinUpdates {
 
 function Get-StandaloneFloorProblems {
     # The hand-set floors in *PackageName*'s pyproject.toml on standalone units
-    # ($STANDALONE_FLOORS) that PyPI has no release for: "<dep>>=<floor>" each.
+    # ($STANDALONE_FLOORS) that PyPI has no release for: "<dep>>=<floor>" each, with
+    # its cap when it is a range ("<dep>>=<floor>,<<cap>": a release inside it).
     # Check only, never an edit. An unreadable index proves nothing, so a floor it
     # cannot confirm is reported too (as the in-chain pre-check refuses offline).
     param([string]$PackageName, [string]$RepoPath)
@@ -1153,16 +1166,94 @@ function Get-StandaloneFloorProblems {
     if (-not (Test-Path $tomlFile)) { return $problems }
     $content = Get-Content $tomlFile -Raw
     foreach ($dep in $STANDALONE_FLOORS[$PackageName]) {
-        $pattern = '"' + $dep + '(\[[^\]]*\])?>=([0-9.]+)"'
+        $pattern = '"' + $dep + '(\[[^\]]*\])?>=([0-9.]+)(?:\s*,\s*<\s*([0-9.]+))?"'
         if ($content -notmatch $pattern) { continue }
         $floorText = $Matches[2]
+        $capText = $Matches[3]
         $floor = ConvertTo-VersionOrNull $floorText
+        if ($capText) {
+            $cap = ConvertTo-VersionOrBound $capText
+            $versions = Get-PypiVersions (Get-PypiProjectName $dep)
+            $inside = @($versions | ForEach-Object { ConvertTo-VersionOrNull $_ } |
+                Where-Object { $_ -and $floor -and $cap -and $_ -ge $floor -and $_ -lt $cap })
+            if ($inside.Count -eq 0) { $problems += "$dep>=$floorText,<$capText" }
+            continue
+        }
         $published = ConvertTo-VersionOrNull (Get-PypiMaxVersion (Get-PypiProjectName $dep))
         if (-not $floor -or -not $published -or $published -lt $floor) {
             $problems += "$dep>=$floorText"
         }
     }
     return $problems
+}
+
+function ConvertTo-VersionOrBound {
+    # [version] for a bound a specifier names: MAJOR.MINOR or MAJOR.MINOR.PATCH,
+    # padded to three parts ("0.9" -> 0.9.0, so 0.9.0 is not below it). $null
+    # for anything else.
+    param([string]$Text)
+    if ($Text -match '^\d+\.\d+$') { $Text = "$Text.0" }
+    return ConvertTo-VersionOrNull $Text
+}
+
+function Get-StandaloneRangeUpdates {
+    # The range edits Update-StandaloneRanges would make on *PackageName*'s
+    # pyproject.toml: @{ dep = @{ From; To } }, each the specifier after the name
+    # (">=0.7.0" -> ">=0.8.3,<0.9"). Pure computation over the file and the
+    # index's latest release ($STANDALONE_RANGES): the floor rises to what is
+    # published and is NEVER lowered (a declared floor above it stays, and the cap
+    # follows it), the cap is the floor's next minor. Nothing for a dep the index
+    # cannot answer for -- a ratchet that cannot see what is published keeps what
+    # is declared -- or whose specifier is not a floor with an optional cap (a
+    # hand-written spec is left alone).
+    param([string]$PackageName, [string]$RepoPath)
+    $updates = @{}
+    if (-not $STANDALONE_RANGES -or -not $STANDALONE_RANGES.ContainsKey($PackageName)) {
+        return $updates
+    }
+    $tomlFile = Join-Path $RepoPath "pyproject.toml"
+    if (-not (Test-Path $tomlFile)) { return $updates }
+    $content = Get-Content $tomlFile -Raw
+    foreach ($dep in $STANDALONE_RANGES[$PackageName]) {
+        $pattern = '"' + $dep + '(\[[^\]]*\])?(?<spec>>=\s*(?<floor>[0-9.]+)(?:\s*,\s*<\s*[0-9.]+)?)"'
+        if ($content -notmatch $pattern) { continue }
+        $current = $Matches['spec']
+        $floorText = $Matches['floor']
+        $floor = ConvertTo-VersionOrBound $floorText
+        $published = ConvertTo-VersionOrNull (Get-PypiMaxVersion (Get-PypiProjectName $dep))
+        if (-not $floor -or -not $published) { continue }
+        $target = $published
+        $targetText = $published.ToString()
+        if ($floor -gt $published) {
+            Write-Host "    Keeping $dep>=$floorText (declared floor is above the published $published)" -ForegroundColor DarkGray
+            $target = $floor
+            $targetText = $floorText
+        }
+        $to = ">=$targetText,<$($target.Major).$($target.Minor + 1)"
+        if (($current -replace '\s', '') -ne $to) {
+            $updates[$dep] = @{ From = $current; To = $to }
+        }
+    }
+    return $updates
+}
+
+function Update-StandaloneRanges {
+    # Apply Get-StandaloneRangeUpdates to pyproject.toml, at every place the dep
+    # is required (a dependency and an extra alike), keeping its [extras]. Pure
+    # edit: no version bump, no commit -- Prepare folds it into the Release commit.
+    param([string]$PackageName, [string]$RepoPath)
+    $updates = Get-StandaloneRangeUpdates $PackageName $RepoPath
+    if ($updates.Count -eq 0) { return $false }
+    $tomlFile = Join-Path $RepoPath "pyproject.toml"
+    $content = Get-Content $tomlFile -Raw
+    foreach ($dep in $updates.Keys) {
+        $pattern = '"' + $dep + '(\[[^\]]*\])?>=\s*[0-9.]+(?:\s*,\s*<\s*[0-9.]+)?"'
+        $replacement = '"' + $dep + '$1' + $updates[$dep].To + '"'
+        $content = $content -replace $pattern, $replacement
+        Write-Host "    Pinned $dep$($updates[$dep].To) (was $($updates[$dep].From))" -ForegroundColor Cyan
+    }
+    Set-Content -Path $tomlFile -Value $content -NoNewline
+    return $true
 }
 
 function Update-InternalPins {
@@ -2438,6 +2529,10 @@ function Invoke-PreparePhase {
         foreach ($dep in $pins.Keys) {
             Write-Step "[DryRun] Would pin $dep>=$($pins[$dep].To) (was >=$($pins[$dep].From))"
         }
+        $ranges = Get-StandaloneRangeUpdates $PackageName $RepoPath
+        foreach ($dep in $ranges.Keys) {
+            Write-Step "[DryRun] Would pin $dep$($ranges[$dep].To) (was $($ranges[$dep].From))"
+        }
         if (Test-Path (Join-Path $RepoPath "docs\PARITY_AUDIT.md")) {
             Write-Step "[DryRun] Would regenerate the API registry + parity artifacts and commit 'Release $version'"
         } else {
@@ -2466,6 +2561,7 @@ function Invoke-PreparePhase {
             $changed = $true
         }
         if (Update-InternalPins $PackageName $RepoPath $Versions) { $changed = $true }
+        if (Update-StandaloneRanges $PackageName $RepoPath) { $changed = $true }
         # push.ps1's own edit is the new pinned tree: what the Release commit holds.
         $null = Set-GatedTree $PackageName $RepoPath
 

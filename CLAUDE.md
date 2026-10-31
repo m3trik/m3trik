@@ -32,7 +32,7 @@
 Two pre-passes run **before any mutation**, so a failure costs nothing:
 
 - **Behind `origin/dev`** (any `-Merge`; deliberately *not* waivable by `-SkipReview`, which waives only the review receipt). Releasing behind rewrites every tree and *then* fails at push. Pull first, **then** record receipts: a pull that brings in *source* changes the tree and voids anything recorded before it (a sidecar-only pull does not).
-- **Concurrent writer.** A receipt-gate failure also lists changed files whose mtime is under 15 min (generated `API_*` sidecars excluded — regenerating them right before a release is normal). Fresh mtimes mean another session is editing that tree: **wait for it to settle**. Re-recording pins a receipt to a moving tree, and `-Merge` does `git add -A` — it would publish their in-progress work to PyPI, unrecallably.
+- **Concurrent writer.** A receipt-gate failure also lists changed files whose mtime is under 15 min (generated `API_*` sidecars excluded). Fresh mtimes mean another session is editing that tree: **wait for it to settle**. Re-recording pins a receipt to a moving tree, and `-Merge` does `git add -A` — it would publish their in-progress work to PyPI, unrecallably.
 
 **Checkpoint to `dev` as work lands.** Don't let `push.ps1`'s `git add .` be the first commit a change ever sees: between releases the only copy is a cloud-synced drive, and a multi-day pile-up is what turns a release into one undifferentiated sweep.
 
@@ -51,6 +51,7 @@ Bypasses: `-SkipTestsReceipt` waives the `tests` half alone, printing a loud ban
 
 - [docs/TEST_BADGE_STANDARD.md](docs/TEST_BADGE_STANDARD.md) — README **Tests** badges count *individual test cases* (never suites/modules/categories), skips excluded. One writer: `ptk.StatusBadge`. Read before touching any `test/run_tests.py` or a CI badge step.
 - [docs/CODE_STANDARD.md](docs/CODE_STANDARD.md) — the long form of the root one-line rules: architecture, style, deprecation, vendoring, hygiene, export, tool behavior.
+- [docs/CODEBASE_MANIFEST.md](docs/CODEBASE_MANIFEST.md) — architecture of record: roles, placement, decisions.
 - [docs/DOCS_STANDARD.md](docs/DOCS_STANDARD.md) · [docs/CONTEXT_BUDGET.md](docs/CONTEXT_BUDGET.md) — markdown wiring + instruction-surface size caps.
 
 See [CHANGELOG.md](CHANGELOG.md) for history.

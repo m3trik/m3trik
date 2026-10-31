@@ -249,8 +249,6 @@ $REQUIRED_PINS = @{
 # ship a floor that installs nowhere: the standalone package publishes first.
 # test_push pins this table to every such floor the cascade's pyprojects declare.
 $STANDALONE_FLOORS = @{
-    "mayatk"    = @("unitytk")
-    "blendertk" = @("unitytk")
     "tentacle"  = @("extapps")
 }
 
@@ -260,8 +258,8 @@ $STANDALONE_FLOORS = @{
 # (`extapps>=0.8.3,<0.9`) -- the releases that package was released against. Its runtime
 # reads the range back from its own metadata to gate the provider it opens (uitk's
 # ExternalAppHandler.add_provider), so the two cannot drift. A ratchet alone is not a
-# reason to release: it rides on a release the package makes anyway. The others
-# (mayatk/blendertk's unitytk) keep a hand-set floor.
+# reason to release: it rides on a release the package makes anyway. A floor listed
+# above and not here keeps its hand-set value.
 $STANDALONE_RANGES = @{
     "tentacle" = @("extapps")
 }

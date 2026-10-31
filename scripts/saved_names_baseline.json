@@ -2139,17 +2139,6 @@
    "toolbox_steps",
    "txt000"
   ],
-  "unity_bridge": [
-   "QtUi",
-   "b000",
-   "central_widget",
-   "cmb000",
-   "footer",
-   "grp_process",
-   "header",
-   "output_grp",
-   "txt000"
-  ],
   "unity_workflow": [
    "QtUi",
    "b000",
@@ -2791,9 +2780,6 @@
    "tentacle"
   ],
   "tube_rig": [
-   "tentacle"
-  ],
-  "unity_bridge": [
    "tentacle"
   ],
   "unity_workflow": [

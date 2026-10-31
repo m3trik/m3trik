@@ -225,27 +225,31 @@ class TestProductAndRoles(unittest.TestCase):
             },
         )
 
-    def test_tentacles_halves_each_stay_off_the_other(self):
-        """tentacle's own table: a tool's Maya half may not import its Blender
-        half, nor the reverse -- the other host, one import removed."""
+    def test_tentacles_slots_reach_a_host_only_through_the_toolkit(self):
+        """tentacle's own table: a Slots module -- a composed category or a
+        shared tool -- imports no host package and no launcher; it reaches the
+        host through ``self.tk``. (tentacle has no per-host halves since the
+        2026-10-29 restructure, so the halves rule this replaced has nothing
+        left to hold.)"""
         pyproject = cl.WORKSPACE / "tentacle" / "pyproject.toml"
         if not pyproject.is_file():
             self.skipTest("tentacle is not checked out")
         declared = cl.roles(cl.tomllib.loads(pyproject.read_text(encoding="utf-8")))
         files = {
             "tentacle/__init__.py": "",
-            "tentacle/tools/__init__.py": "",
-            "tentacle/tools/spin/__init__.py": "",
-            "tentacle/tools/spin/maya.py": "from tentacle.tools.spin import blender\n",
-            "tentacle/tools/spin/blender.py": "import tentacle.tools.spin.maya\n",
+            "tentacle/slots/__init__.py": "",
+            "tentacle/slots/normals.py": "import mayatk\n",
+            "tentacle/slots/tools/__init__.py": "",
+            "tentacle/slots/tools/spin.py": "import bpy\nimport tentacle.tcl_maya\n",
         }
         with tempfile.TemporaryDirectory() as tmp:
             found = cl.role_violations(_package(Path(tmp), files), "tentacle", declared)
         self.assertEqual(
             found,
             {
-                "tools/spin/maya.py -> tentacle.tools.spin.blender (tools/*/maya)",
-                "tools/spin/blender.py -> tentacle.tools.spin.maya (tools/*/blender)",
+                "slots/normals.py -> mayatk (slots)",
+                "slots/tools/spin.py -> bpy (slots)",
+                "slots/tools/spin.py -> tentacle.tcl_maya (slots)",
             },
         )
 

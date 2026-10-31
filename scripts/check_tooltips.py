@@ -117,7 +117,7 @@ RESET_ALLOWLIST = {
         "QDialogButtonBox's standard RestoreDefaults button; the dialog's caller "
         "decides what it does"
     ),
-    "uitk/uitk/widgets/widgetComboBox.py": (
+    "uitk/uitk/widgets/widget_combo_box_parts/_widget_defaults.py": (
         "a dropdown action row (a QAction: no button to host the gesture) that "
         "restores embedded widgets to their in-memory add-time snapshot; nothing "
         "persisted to save or forget"
@@ -297,14 +297,27 @@ def scan_reset_python(rel, tree, failures):
     return seen
 
 
+def _sibling_slots(folder):
+    """The ``slots`` tree beside the nearest ``ui`` folder at or above *folder*
+    (``""`` when there is none, which ``os.walk`` reads as nothing)."""
+    current = os.path.abspath(folder)
+    while True:
+        if os.path.basename(current) == "ui":
+            return os.path.join(os.path.dirname(current), "slots")
+        parent = os.path.dirname(current)
+        if parent == current:
+            return ""
+        current = parent
+
+
 def _slots_modules(ui_path, trees):
     """The modules the Switchboard binds *ui_path* to, found the way it looks.
 
     uitk's ``switchboard.names``: a class ``<Name>Slots``, else ``<Name>``, else a
     slot-file name (``name.py``, ``name_slots.py``, ``nameSlots.py``,
     ``_name.py``) -- searched beside the ``.ui`` and, for tentacle's layout,
-    under its sibling ``slots`` tree, where the Maya and Blender slots each bind
-    the same file.
+    under the ``slots`` tree beside the ``ui`` folder that holds it (a tool's
+    ``ui/tools/<tool>.ui`` binds ``slots/tools/<tool>.py``).
     """
     stem = os.path.basename(ui_path)[: -len(".ui")].split("#")[0]
     folder = os.path.dirname(ui_path)
@@ -313,9 +326,7 @@ def _slots_modules(ui_path, trees):
         for n in sorted(os.listdir(folder))
         if n.endswith(".py") and not n.endswith(SKIP_SUFFIX)
     ]
-    for dirpath, dirnames, filenames in os.walk(
-        os.path.join(os.path.dirname(folder), "slots")
-    ):
+    for dirpath, dirnames, filenames in os.walk(_sibling_slots(folder)):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         candidates += [
             os.path.join(dirpath, n) for n in sorted(filenames) if n.endswith(".py")

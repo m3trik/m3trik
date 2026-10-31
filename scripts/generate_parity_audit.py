@@ -15,7 +15,7 @@ shared Slots class calls, resolved on mayatk and blendertk); Layer 4 the librari
   * Layer 2 -- category toolkit calls: chains and call sites, the one-host operations
     (hidden or guarded where the library lacks them), the gaps.
   * Layer 3 -- tool panels: the same per tool, with the hosts each serves
-    (``slots.tools.HOSTS`` / ``STANDALONE``).
+    (``slots.tools.HOSTS``).
   * Layer 4 -- helper surface: shared public names / mayatk public names (idiom-neutral).
 
 Usage:
@@ -320,7 +320,7 @@ def build():
     w("---\n\n## Layer 3 — Tool panels")
     w("")
     w("Each tool's one Slots class (`slots/tools/<tool>.py`, its helpers in `_<tool>/`). *hosts*: "
-      "the hosts it serves (`slots.tools.HOSTS`; `standalone` = its own switchboard, no host). "
+      "the hosts it serves (`slots.tools.HOSTS`). "
       "*one-host*: distinct chains one library lacks, hidden or guarded there.")
     w("")
     w("| tool | hosts | chains | sites | one-host | gap sites |")

@@ -2,7 +2,7 @@
 
 Tech-art tooling for game-art and DCC pipelines: one product of tools that behaves the same in Maya and Blender, built on general libraries that are each useful on their own.
 
-**[pythontk](https://github.com/m3trik/pythontk) → [uitk](https://github.com/m3trik/uitk) → {[mayatk](https://github.com/m3trik/mayatk), [blendertk](https://github.com/m3trik/blendertk)} → [tentacle](https://github.com/m3trik/tentacle)**
+**[pythontk](https://github.com/m3trik/pythontk) → [uitk](https://github.com/m3trik/uitk) → {[mayatk](https://github.com/m3trik/mayatk), [blendertk](https://github.com/m3trik/blendertk)} → [tentacle](https://github.com/m3trik/tentacle)**, and **uitk → [extapps](https://github.com/m3trik/extapps)**
 
 | Repo | What it is |
 |---|---|
@@ -10,8 +10,8 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 | [uitk](https://github.com/m3trik/uitk) | A convention-driven Qt framework: *name it, and it connects.* Qt Designer files and Slots classes become working tools with no glue code. Generic: it names no DCC and no product. |
 | [mayatk](https://github.com/m3trik/mayatk) | The Maya 2025+ library (`cmds` and OpenMaya, no PyMEL): host operations, every tool's Maya half, and bridges into Marmoset, Substance, RizomUV, Blender and Unity. No UI. |
 | [blendertk](https://github.com/m3trik/blendertk) | The Blender 4.x+ library. It mirrors mayatk's public API by name and behavior, so one panel serves both hosts. No UI. |
-| [tentacle](https://github.com/m3trik/tentacle) | The product: the marking-menu launcher (hold a key, flick toward a wedge, release) and every tool's panel and Slots class, for Maya, Blender and standalone use. Each tool's logic lives in the libraries below it. |
-| [extapps](https://github.com/m3trik/extapps) | The engines of the standalone tools: photogrammetry, Substance Painter, Marmoset Toolbag, texture maps. Their panels are tentacle's. |
+| [tentacle](https://github.com/m3trik/tentacle) | The DCC product: the marking-menu launcher (hold a key, flick toward a wedge, release) and every tool's panel and Slots class, for Maya and Blender. Each tool's logic lives in the libraries below it. |
+| [extapps](https://github.com/m3trik/extapps) | The standalone product: host-free apps for photogrammetry, Substance Painter, Marmoset Toolbag, texture maps, mesh conversion, Unity and WebXR hand-off and Look Match, each with its engine, panel and Slots class, on pythontk and uitk alone. tentacle's menus open them by name. |
 
 ## Goals
 
@@ -22,7 +22,7 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 
 ## The rules, in brief
 
-**Placement: libraries hold the logic, tentacle holds the UI.** A tool's operations live in mayatk and blendertk, mirrored. Logic both hosts share, and that is truly reusable, lives once in pythontk behind a small adapter each host implements. Generic Qt lives in uitk. tentacle holds the launcher, the UIs and the Slots classes, and reaches the host only through the library API. Dependencies point down only; no library imports tentacle.
+**Placement: libraries hold the logic, tentacle holds the UI.** A tool's operations live in mayatk and blendertk, mirrored. Logic both hosts share, and that is truly reusable, lives once in pythontk behind a small adapter each host implements. Generic Qt lives in uitk. tentacle holds the launcher, the UIs and the Slots classes, and reaches the host only through the library API. A host-free app (no host half, needing no DCC to run) is the other product's, extapps': its engine, panel and Slots class together, with no host and no tentacle import, opened by name through uitk's external-app handler. Dependencies point down only; nothing imports a product.
 
 **Construction: small parts, composed.**
 - A large object is a facade over small collaborators that own their own state. A mixin is only for a capability several classes share.
@@ -43,7 +43,7 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 
 | Check | What fails |
 |---|---|
-| `check_layers.py` | An import against the layer order, or a role rule (a panel that imports a host) |
+| `check_layers.py` | An import against the layer order, a role rule (a panel that imports a host), or an import of a product (tentacle, extapps) |
 | `check_dcc_twins.py` | A body written twice, a drifted copy, a host binding that overrides shared behavior |
 | `check_saved_names.py` | A saved widget or record name that disappeared |
 | `generate_api_registry.py --semver` | A removed public name with no moved-names entry and no deprecation |

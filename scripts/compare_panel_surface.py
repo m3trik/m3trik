@@ -26,8 +26,7 @@ What keeps a read off a host:
   runs it on every host (``MainWindow.register_widget`` applies the policy, then
   ``init_slot``). A ``requires`` speaks for the Slots class only, not another class of
   the module with a method of the same name.
-* **HOSTS / STANDALONE** -- the tool serves one host (``slots.tools.HOSTS``), or is a
-  standalone panel with no host at all (``slots.tools.STANDALONE``).
+* **HOSTS** -- the tool serves one host (``slots.tools.HOSTS``).
 * **a capability check is a host limit** -- ``hasattr(X, "f")``, ``getattr(X, "f", d)``
   (``is None`` / ``is not None`` / truth), directly, through a local, through a helper
   method whose ``return`` makes one (``self._has(*ops)``, ``self._unsupported(button)``,
@@ -1872,7 +1871,7 @@ class SweepResult:
     gaps: List[Gap]
     unverified: Dict[Tuple[str, str], str]  # (chain, host) -> why
     lint: List[str]
-    tools: Dict[str, str]  # tool stem -> "both" / "maya" / "standalone"
+    tools: Dict[str, str]  # tool stem -> "both" / "maya"
     #: (chain, host lacking it, what hides it there) -> its sites: the one-host operations
     one_host: Dict[Tuple[str, str, str], List[Site]] = field(default_factory=dict)
     #: (chain, "starred" | "forwarded") -> sites whose signature check was skipped
@@ -1886,8 +1885,8 @@ class SweepResult:
 
 
 def _tools_table(slots_dir: Path):
-    """``(HOSTS, STANDALONE)`` from ``slots/tools/__init__.py``, read as literals."""
-    hosts, standalone = {}, ()
+    """``HOSTS`` from ``slots/tools/__init__.py``, read as a literal."""
+    hosts = {}
     init = slots_dir / "tools" / "__init__.py"
     if init.is_file():
         for node in ast.parse(init.read_text(encoding="utf-8-sig")).body:
@@ -1895,9 +1894,7 @@ def _tools_table(slots_dir: Path):
                 name = getattr(node.targets[0], "id", "")
                 if name == "HOSTS":
                     hosts = ast.literal_eval(node.value)
-                elif name == "STANDALONE":
-                    standalone = ast.literal_eval(node.value)
-    return {k: frozenset(v) for k, v in hosts.items()}, frozenset(standalone)
+    return {k: frozenset(v) for k, v in hosts.items()}
 
 
 def _requires_of(ui_files) -> Dict[str, FrozenSet[str]]:
@@ -2033,7 +2030,7 @@ def sweep(root=None) -> SweepResult:
     root = Path(root or ROOT)
     tentacle = root / "tentacle" / "tentacle"
     slots_dir, ui_dir = tentacle / "slots", tentacle / "ui"
-    hosts_table, standalone = _tools_table(slots_dir)
+    hosts_table = _tools_table(slots_dir)
     ws = Workspace(root)
     for pkg in HOST_PACKAGES.values():  # an unreadable include map fails before any verdict
         if ws.package(pkg) is not None:
@@ -2061,15 +2058,12 @@ def sweep(root=None) -> SweepResult:
     for rel, path, tool in _slot_files(slots_dir):
         base = ALL_HOSTS
         why = {}
-        if tool in standalone:
-            base, why = frozenset(), {h: "standalone panel (slots.tools.STANDALONE)" for h in ALL_HOSTS}
-        elif tool in hosts_table:
+        if tool in hosts_table:
             base = hosts_table[tool] & ALL_HOSTS
             why = {h: "tool serves " + "/".join(sorted(base)) + " (slots.tools.HOSTS)"
                    for h in ALL_HOSTS - base}
         if tool and "/" not in rel[len("tools/"):]:
-            tools[tool] = ("standalone" if tool in standalone else
-                           "/".join(sorted(base)) if base != ALL_HOSTS else "both")
+            tools[tool] = "/".join(sorted(base)) if base != ALL_HOSTS else "both"
         try:
             ui_files = _paired_ui(ui_dir, rel)
             scan = _FileScan(path, rel, _requires_of(ui_files), shared, _ui_parents(ui_files))
@@ -2188,7 +2182,7 @@ def report(result: SweepResult) -> str:
       "by hand. One Slots class per category and per tool serves both hosts through `self.tk`, so "
       "parity is: every toolkit chain a shared Slots class reads resolves on mayatk AND blendertk "
       "(same name, a signature that takes the call), unless the host that lacks it never runs it -- "
-      "its widget's `requires` tag, `slots.tools.HOSTS` / `STANDALONE`, or a capability check "
+      "its widget's `requires` tag, `slots.tools.HOSTS`, or a capability check "
       "(`hasattr` / `getattr`, a hide over one) whose answer rules that host out. A **gap** fails "
       "the gate (exit 1): add the operation to that host's library, or hide the call there. "
       "Resolution is static, from both libraries' sources (the script docstring has the rules).")

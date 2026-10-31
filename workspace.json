@@ -3,7 +3,7 @@
     "The workspace declared as data: what cannot be measured about each unit (CODE_STANDARD section 0).",
     "Membership is measured, not listed here: a folder holding .git belongs (check_temp_artifacts.py).",
     "cascade: the release order push.ps1 walks; blendertk shares mayatk's tier, after it and before tentacle.",
-    "units: every front door with a CLAUDE.md, in root dispatch-table order. release is cascade, standalone (own publish.yml) or none; role product marks the unit no other package may import (check_layers.py).",
+    "units: every front door with a CLAUDE.md, in root dispatch-table order. release is cascade, standalone (own publish.yml) or none; role product marks a unit no other package may import (check_layers.py): tentacle, and extapps.",
     "line_budget: the ceiling on the registry set's source lines -- non-blank lines of the .py files a release would commit, outside test/ (check_context_budget.py counts them; push.ps1 refuses a release past it). Set 2026-10-26 to the count then; raised or lowered as docs/CONTEXT_BUDGET.md says.",
     "Readers: push.ps1, generate_api_registry.py, generate_workspace_inventory.py, check_context_budget.py.",
     "Restatements (root CLAUDE.md dispatch table, CI sibling lists) are checked by scripts/sync_workspace.py --check."
@@ -21,7 +21,7 @@
     {"path": "m3trik", "release": "none", "domain": "PowerShell DevOps, release automation"},
     {"path": "m3trik/scripts", "release": "none", "domain": "Python maintenance scripts"},
     {"path": "comfyui", "release": "none", "domain": "ComfyUI custom nodes"},
-    {"path": "extapps", "release": "standalone", "domain": "Standalone-app engines; their panels are tentacle's"},
+    {"path": "extapps", "release": "standalone", "role": "product", "domain": "Standalone apps: each host-free app's engine, panel and Slots class"},
     {"path": "www", "release": "none", "domain": "Web"},
     {"path": "androidtk", "release": "none", "domain": "Android device toolkit (satellite)"}
   ]

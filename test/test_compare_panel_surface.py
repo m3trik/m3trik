@@ -9,7 +9,7 @@ runs the static sweep over it -- nothing is imported, no DCC is needed.
 
 The cases pin both directions: a chain one host cannot resolve, an arity
 mismatch and a moved name fail; a call its widget's ``requires`` tag hides, a
-``slots.tools.HOSTS`` tool and a STANDALONE panel pass. A capability check
+``slots.tools.HOSTS`` tool passes. A capability check
 (``hasattr`` / ``getattr``, directly or through a helper) is a HOST LIMIT: the
 code it guards is excused on exactly the hosts where the checked name is missing,
 read with its polarity, so a check on another name, on an owner, or the wrong
@@ -145,7 +145,7 @@ class Workspace:
                        BOOT.format(include='{"core_utils._core_utils": "*"}', moved=moved))
             self.write(f"{pkg}/{pkg}/core_utils/__init__.py", "")
             self.write(f"{pkg}/{pkg}/core_utils/_core_utils.py", core)
-        self.tools(hosts="{}", standalone="()")
+        self.tools(hosts="{}")
 
     def write(self, rel, text):
         path = self.root / rel
@@ -153,9 +153,8 @@ class Workspace:
         path.write_text(textwrap.dedent(text), encoding="utf-8")
         return path
 
-    def tools(self, hosts, standalone):
-        self.write("tentacle/tentacle/slots/tools/__init__.py",
-                   f"STANDALONE = {standalone}\nHOSTS = {hosts}\n")
+    def tools(self, hosts):
+        self.write("tentacle/tentacle/slots/tools/__init__.py", f"HOSTS = {hosts}\n")
 
     def slots(self, rel, body):
         """A Slots module at ``slots/<rel>`` whose one class has *body*."""
@@ -354,7 +353,7 @@ class TestRequiresHides(unittest.TestCase):
 class TestHostScopedTools(unittest.TestCase):
     def test_a_hosts_listed_tool_needs_only_its_hosts(self):
         ws = Workspace(self)
-        ws.tools(hosts='{"rigger": ("maya",)}', standalone="()")
+        ws.tools(hosts='{"rigger": ("maya",)}')
         ws.slots("tools/rigger.py", """
             def b000(self):
                 self.tk.CoreUtils.maya_only()
@@ -373,15 +372,6 @@ class TestHostScopedTools(unittest.TestCase):
                 self.tk.CoreUtils.maya_only()
         """)
         self.assertEqual(_gaps(ws.sweep()), {("CoreUtils.maya_only", "blender")})
-
-    def test_a_standalone_panel_has_no_host_contract(self):
-        ws = Workspace(self)
-        ws.tools(hosts="{}", standalone='("packer",)')
-        ws.slots("tools/packer.py", """
-            def b000(self):
-                self.tk.CoreUtils.maya_only()
-        """)
-        self.assertEqual(_gaps(ws.sweep()), set())
 
 
 class TestHostLimits(unittest.TestCase):

@@ -227,6 +227,28 @@ jobs:
             exit 1
           fi
 
+      # tentacle opens extapps' standalone apps BY NAME (no import, no
+      # dependency), so the names its slots launch are held to extapps'
+      # entry-point table -- read from extapps' pyproject.toml beside it, which
+      # only this job checks out (tentacle's own CI skips the case). A skip
+      # HERE can only mean the extapps sibling went missing, so it fails the step.
+      - name: tentacle's launched app names are extapps' entry points
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONPATH: pythontk:uitk
+        run: |
+          set +e
+          python -m pytest tentacle/test/test_package.py -q -rs -p no:cacheprovider -k launched_name 2>&1 | tee launch_names_out.txt
+          RC=${PIPESTATUS[0]}
+          if [ "$RC" -ne 0 ]; then
+            echo "::error::the launched-name check exited $RC"
+            exit 1
+          fi
+          if grep -qi "skipped" launch_names_out.txt; then
+            echo "::error::the launched-name check skipped -- extapps is not beside tentacle"
+            exit 1
+          fi
+
       # Scene records: ONE declaration (pythontk SceneRecords) and two things
       # derived from it outside pythontk -- the records table in mayatk's
       # owner doc, and the channel list unitytk's importers read. Both were

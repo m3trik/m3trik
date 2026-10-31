@@ -11,9 +11,7 @@
 | Script | Emits | Notes |
 |:--|:--|:--|
 | `generate_api_registry.py [pkg…]` | per package `API_INDEX.md` / `API_REGISTRY.md` / `API_REGISTRY.json` / `API_CHANGES.md` + `docs/API_SHADOWS.md` | Package set: `../workspace.json` (via `sync_workspace`) — never re-list. Single-package runs still refresh the whole shadow report; `API_CHANGES` diffs vs `origin/main`'s sidecar. `--check` = CI staleness gate. |
-| `compare_panel_surface.py --all --write` / `--panel <name>` | `tentacle/docs/PARITY_SURFACE.md` | Static mayatk↔blendertk + tentacle maya↔blender control-surface diff. UNTRIAGED rows in `tentacle/docs/parity_map.py` ⇒ exit 1 (CI gate). |
-| `generate_parity_audit.py` | `tentacle/docs/PARITY_AUDIT.md` | Coarse depth scoreboard; refuses stale registry input (`--allow-stale`); `--check` exits 1 if stale. Trust its `surface` column over line ratios. |
-| `generate_dcc_coverage.py` | `tentacle/docs/DCC_COVERAGE.md` | tentacle DCC slot-coverage report. |
+| `compare_panel_surface.py --all --write` / `--panel <n>`; `generate_parity_audit.py` | `tentacle/docs/PARITY_SURFACE.md`, `PARITY_AUDIT.md` | Every `self.tk` chain resolves on both hosts, else hidden/guarded; gap ⇒ exit 1. |
 | `generate_workspace_inventory.py` (+ `Generate-WorkspaceInventory.ps1`) | `docs/workspace_repo_inventory.{md,json}` | Direct child repos: package/code roots, tracked LOC. |
 | `build_stingray_ao_presets.py [--check]` | `mayatk/mat_utils/shaderfx/Standard_{Masked,Transparent}_AO.sfx` | Maya's opacity presets + the opaque preset's AO chain, spliced as text (ShaderFX has no `saveGraph`). `--check` = drift gate. Tested. |
 
@@ -36,7 +34,10 @@
 | `sync_scene_records.py [--check]` | `ptk.SceneRecords` vs doc table, Unity channels + versions, both PRODUCERS; emits `records.js`, `*.g.cs` | Tested. |
 | `sync_workspace.py [--check]` | `../workspace.json` vs root Dispatch, CI loops, charters | §0. |
 | `sync_github_about.py [--check]` / `--apply` | a repo's GitHub About (description, topics, PyPI homepage) vs its pyproject | `--apply` needs your `gh` login. |
-| `check_layers.py [--check]` / `--update` | undeclared ecosystem import; import up `[tool.m3trik.layers]` | Frozen baseline beside it. |
+| `check_layers.py [--check]` / `--update` | undeclared ecosystem import; import up `[tool.m3trik.layers]`; a product or `roles`-forbidden import | Layers baselined. |
+| `check_dcc_twins.py [--written-once]` | a ledgered twin drifting; an 8+-line body written twice | |
+| `check_saved_names.py` / `--update` | a frozen `.ui` stem, widget or record name gone | §5 |
+| `check_version_bump.py <pkg> --published <v>` | an off-chain push to `main` shipping changes unversioned | |
 | `check_js_types.py` | `tsc --checkJs` errors in `PROJECTS` | No compiler = exit 2. |
 
 ## Rules

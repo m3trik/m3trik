@@ -151,11 +151,11 @@ RUNNERS: Dict[str, Runner] = {
     "mayatk": Runner(("mayatk/test/run_tests.py",)),
     "blendertk": Runner(("blendertk/test/run_tests.py",), k_flag=None),
     # ``_host.MAYA_AVAILABLE`` is the suite's shared probe; the Maya host itself
-    # (``TclMaya``, the Maya slots) builds only inside Maya, so a test importing
-    # it skips everywhere else, under whatever guard it wrote locally.
+    # (``TclMaya``) builds only inside Maya, so a test importing it skips
+    # everywhere else, under whatever guard it wrote locally.
     "tentacle": Runner(("tentacle/test/run_tests.py",), maya_flag="--in-maya",
                        host_probes=("MAYA_AVAILABLE",),
-                       host_modules=("tentacle.tcl_maya", "tentacle.slots.maya")),
+                       host_modules=("tentacle.tcl_maya",)),
     "unitytk": Runner(("unitytk/test/run_tests.py",)),
     "extapps": Runner(("extapps/test/run_tests.py",)),
 }

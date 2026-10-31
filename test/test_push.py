@@ -1331,12 +1331,12 @@ class TestPushScriptRegressions(unittest.TestCase):
             )
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_untriaged_parity_sweep_fails_before_anything_is_pushed(self):
+    def test_failing_parity_sweep_fails_before_anything_is_pushed(self):
         """The sweep is a hard gate, and it fails while a failure is still free.
 
-        compare_panel_surface.py exits 1 on untriaged deltas. Catching that in
-        Prepare costs seconds; the same failure reaching CI costs a merged PR
-        whose publish never runs.
+        compare_panel_surface.py exits 1 on a gap (a toolkit call one host cannot
+        resolve). Catching that in Prepare costs seconds; the same failure
+        reaching CI costs a merged PR whose publish never runs.
         """
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -1356,7 +1356,8 @@ class TestPushScriptRegressions(unittest.TestCase):
             out = result.stdout + result.stderr
             self.assertNotEqual(result.returncode, 0, out)
             self.assertIn("Parity sweep FAILS", out)
-            self.assertIn("parity_map.py", out)
+            # ...and says how to close a gap: the library, or hiding the call.
+            self.assertIn("slots.tools.HOSTS", out)
             # --write writes the report BEFORE returning its code, so the rows
             # are on disk while stdout is only "Wrote ...". The message has to
             # send the operator to the file, or it names a problem with no way
@@ -1371,18 +1372,30 @@ class TestPushScriptRegressions(unittest.TestCase):
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_dirty_engine_tree_refuses_the_parity_regen(self):
-        """The parity pair derives from mayatk + blendertk SOURCE.
+        """The parity pair derives from library SOURCE (mayatk + blendertk, and
+        the pythontk / uitk bases their classes inherit from).
 
         Regenerating over another session's uncommitted engine work would bake
         it into what this release publishes -- the same trap that makes a
         registry refresh during a concurrent edit unsafe. Refuse, and name the
         tree, rather than produce a plausible-looking artifact.
         """
+        self._assert_a_dirty_tree_refuses_the_parity_regen("mayatk")
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_dirty_base_library_tree_refuses_the_parity_regen_too(self):
+        """The gate follows the hosts' classes into pythontk and uitk, so their
+        uncommitted work would reach the parity pair the same way."""
+        for library in ("pythontk", "uitk"):
+            with self.subTest(library=library):
+                self._assert_a_dirty_tree_refuses_the_parity_regen(library)
+
+    def _assert_a_dirty_tree_refuses_the_parity_regen(self, library):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, origin = self._init_dummy_repo(root, "tentacle", "0.1.0", [])
             self._stub_parity_scripts(root)
-            engine = root / "mayatk"
+            engine = root / library
             engine.mkdir(parents=True, exist_ok=True)
             self._git(engine, "init")
             self._git(engine, "config", "user.email", "ci@example.com")
@@ -1407,7 +1420,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, out)
             # Name the offending tree and say what is wrong with it -- asserting
             # the meaning, not one adjective the message happens to use.
-            self.assertIn("mayatk", out)
+            self.assertIn(library, out)
             self.assertIn("uncommitted", out)
             self.assertFalse((root / "_sweep_ran").exists(), out)
             self.assertNotIn("v0.1.1", self._git(origin, "tag", "--list").stdout)

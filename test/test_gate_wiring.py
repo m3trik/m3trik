@@ -66,11 +66,6 @@ WIRING_EXEMPT = {
         "Wire it only behind a self-hosted runner that has Maya, or after the "
         "--check path stops reading the stock presets."
     ),
-    "generate_dcc_coverage": (
-        "Generator, not a gate: writes a coverage table for humans to read. It "
-        "has no --check mode, so there is nothing for CI to fail on. Wire it "
-        "only if the table ever becomes a reviewed artifact."
-    ),
 }
 
 

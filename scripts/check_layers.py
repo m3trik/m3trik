@@ -37,7 +37,7 @@ section 3):
        maya = ["maya", "pymel", "mayatk"]
        [tool.m3trik.roles.forbid]
        "tools/*/model" = ["maya", "blender", "qt"]
-       "slots/maya" = []                    # exempt until its category merges
+       "tools/legacy" = []                  # exempt until it merges
 
    A path segment ``*`` matches any one segment and the most specific path wins;
    a group lists dotted roots (``maya`` covers ``maya.cmds``, never ``mayatk``),

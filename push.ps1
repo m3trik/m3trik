@@ -2493,12 +2493,13 @@ function Invoke-PreparePhase {
         # entry and would otherwise re-dispatch the doomed publish first).
         # Keyed off the artifact rather than the package name: only tentacle has one.
         if (Test-Path (Join-Path $RepoPath "docs\PARITY_AUDIT.md")) {
-            # Both artifacts are DERIVED from mayatk + blendertk source, so a dirty
-            # engine tree would bake another session's WIP into what this release
-            # publishes. In a cascade both are already released and clean; this
+            # Both artifacts are DERIVED from library source (mayatk + blendertk,
+            # and the pythontk / uitk bases their classes inherit from), so a dirty
+            # library tree would bake another session's WIP into what this release
+            # publishes. In a cascade all four are already released and clean; this
             # guards the standalone -Packages tentacle run.
             $dirtyEngines = @()
-            foreach ($eng in @('mayatk', 'blendertk')) {
+            foreach ($eng in @('pythontk', 'uitk', 'mayatk', 'blendertk')) {
                 $engPath = Join-Path $ROOT $eng
                 if (Test-Path (Join-Path $engPath ".git")) {
                     if (git -C $engPath status --porcelain 2>$null) { $dirtyEngines += $eng }
@@ -2509,8 +2510,10 @@ function Invoke-PreparePhase {
                 Write-Err "Regenerating now would bake that work into what this release publishes. Settle it first."
                 return $null
             }
-            # The sweep is a HARD gate: it exits 1 on untriaged deltas or a
-            # customwidgets lint. Failing here costs seconds; the same failure
+            # The sweep is a HARD gate: it exits 1 on a gap (a toolkit call a
+            # shared Slots class makes that one host cannot resolve, or whose
+            # signature does not take it) or a customwidgets lint. Failing here
+            # costs seconds; the same failure
             # found in CI costs a merged PR whose publish never runs.
             # --write writes the report BEFORE returning its code, so a failure
             # leaves docs/PARITY_SURFACE.md on disk listing the offending rows --
@@ -2520,9 +2523,9 @@ function Invoke-PreparePhase {
             if (Test-Path $sweep) {
                 & $PYTHON $sweep --all --write | Out-Null
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Err "Parity sweep FAILS for $PackageName (untriaged deltas, or a customwidgets lint)."
-                    Write-Err "The rows are under '>> UNTRIAGED' in docs/PARITY_SURFACE.md, just rewritten."
-                    Write-Err "Fix each gap or ledger it in docs/parity_map.py, then re-run."
+                    Write-Err "Parity sweep FAILS for $PackageName (a toolkit call one host cannot resolve, or a customwidgets lint)."
+                    Write-Err "The rows are under 'Gaps' in docs/PARITY_SURFACE.md, just rewritten."
+                    Write-Err "Add each operation to that host's library, or hide the call there (requires / slots.tools.HOSTS / a getattr guard), then re-run."
                     return $null
                 }
             }

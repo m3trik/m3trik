@@ -5,15 +5,18 @@
 Everything quantitative is computed from source so the numbers can never drift or be
 hand-fumbled (this audit was wrong three times from hand arithmetic + shallow metrics).
 
-Metrics, and *why* — learned the hard way:
-  * Button presence and a matching ``.ui`` skeleton are PRESENCE, not depth — worthless for
-    "is it faithful". In this architecture the real UI (option boxes, menus, sub-controls) is
-    built in *code*; depth must be measured there.
-  * Panel "feel" depth  = static interactive ``.ui`` widgets + code-built controls (``.add``)
-    + option boxes (weighted x2 — each is a whole sub-menu).
-  * Panel "logic" depth = source lines (often far below the feel number).
-  * Slot depth          = dynamic controls built in code per shared menu.
-  * Helper coverage      = shared public names / mayatk public names (idiom-neutral).
+One Slots class per category and per tool serves both hosts through ``self.tk``, so there
+is no Maya panel to measure a Blender twin against: parity is what each host can run.
+Layers 1-3 read the parity gate (``compare_panel_surface.sweep``, every toolkit chain a
+shared Slots class calls, resolved on mayatk and blendertk); Layer 4 the libraries.
+
+  * Layer 1 -- menu buttons: each category's ``.ui`` widgets with a handler, and the ones
+    a ``requires`` tag hides on each host (presence, never depth on its own).
+  * Layer 2 -- category toolkit calls: chains and call sites, the one-host operations
+    (hidden or guarded where the library lacks them), the gaps.
+  * Layer 3 -- tool panels: the same per tool, with the hosts each serves
+    (``slots.tools.HOSTS`` / ``STANDALONE``).
+  * Layer 4 -- helper surface: shared public names / mayatk public names (idiom-neutral).
 
 Usage:
     python generate_parity_audit.py                  # write the doc
@@ -23,8 +26,7 @@ Usage:
 Inputs that are NOT source (guarded): the L4 layer reads mayatk/blendertk API_REGISTRY.json —
 the 2026-06-19 audit shipped "nurbs_utils ABSENT" because it was generated from a stale
 working-tree registry. The freshness guard refuses to run when a registry predates the
-package source (regenerate via generate_api_registry.py first). Maya-only panel triage comes
-from tentacle/docs/parity_map.py (the shared ledger), not a local table.
+package source (regenerate via generate_api_registry.py first).
 """
 from __future__ import annotations
 import argparse
@@ -34,6 +36,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 
 import compare_panel_surface as cps
 
@@ -68,23 +71,11 @@ def rp(*a):
 
 
 # --------------------------------------------------------------------------- shared helpers
-INTERACTIVE = {
-    "LineEdit", "QLineEdit", "ComboBox", "QComboBox", "SpinBox", "QSpinBox", "QDoubleSpinBox",
-    "CheckBox", "QCheckBox", "PushButton", "QPushButton", "ToolButton", "QToolButton",
-    "RadioButton", "QRadioButton", "TableWidget", "QTableWidget", "ListWidget", "QListWidget",
-    "TreeWidget", "QTreeWidget", "Slider", "QSlider", "QPlainTextEdit", "TextEdit", "QTextEdit",
-}
 HANDLER = re.compile(r"^(tb|b|chk|cmb|list|s|d|i|w)\d+$")
 
 
 def read(path):
     return open(path, encoding="utf-8", errors="ignore").read()
-
-
-def ui_interactive(ui_path):
-    if not os.path.isfile(ui_path):
-        return 0
-    return sum(1 for c in re.findall(r'<widget class="([^"]+)"', read(ui_path)) if c in INTERACTIVE)
 
 
 def is_message_box(node):
@@ -114,8 +105,7 @@ def code_metrics(path):
     — i.e. parity theater: a visible control that does nothing. This is deliberately narrow.
     A guard clause (`if not selection: message_box(...); return`) on a handler that goes on to
     do real work is NOT hollow, and neither is a control correctly retired via
-    `<name>_init -> setVisible(False)` (the documented treatment for a no-Blender-equivalent
-    control — see tentacle/docs/parity_map.py). An earlier substring heuristic ("mentions
+    `<name>_init -> setVisible(False)`. An earlier substring heuristic ("mentions
     message_box, calls no `btk.`/`bpy.ops`/`cmds.`") could see neither shape: it flagged
     blendertk's 11 guard clauses plus its 2 correctly-hidden controls, putting "13 hollow
     handlers" in the headline scorecard when the true count on both DCCs is 0.
@@ -170,67 +160,65 @@ def flat_names(reg_path):
         s = per.setdefault(top, set())
         for fn in mod.get("functions", []):
             if not fn["name"].startswith("_"):
-                s.add(fn["name"]); alln.add(fn["name"])
+                s.add(fn["name"])
+                alln.add(fn["name"])
         for c in mod.get("classes", []):
             for m in c.get("members", []):
                 if not m["name"].startswith("_"):
-                    s.add(m["name"]); alln.add(m["name"])
+                    s.add(m["name"])
+                    alln.add(m["name"])
     return per, alln
 
 
-# --------------------------------------------------------------------------- L3 panels
-# Maya-only panel triage lives in the shared ledger (tentacle/docs/parity_map.py PANELS):
-# status na -> N/A by design, counterpart -> mirrored pair, pending -> tracked open port.
-# An unledgered Maya-only panel is UNTRIAGED and flagged loudly.
+# --------------------------------------------------------------------------- L1 menu buttons
+def category_buttons(rel):
+    """``(widgets with a handler, {host: of them hidden there})`` for one category: its
+    ``.ui`` widgets whose name (or ``<name>_init``) the category's Slots class defines."""
+    ui_dir = Path(rp("tentacle", "tentacle", "ui"))
+    requires = cps._requires_of(cps._paired_ui(ui_dir, rel))
+    tree = ast.parse(read(rp("tentacle", "tentacle", "slots", rel)))
+    methods = {f.name for c in tree.body if isinstance(c, ast.ClassDef)
+               for f in c.body if isinstance(f, ast.FunctionDef)}
+    handled = {w for w in requires if HANDLER.match(w) and (w in methods or f"{w}_init" in methods)}
+    hidden = {h: sum(1 for w in handled if h not in requires[w]) for h in cps.HOST_PACKAGES}
+    return handled, hidden
 
 
-def find_panels(pkg_root):
-    out = {}
-    for f in glob.glob(rp(pkg_root, "**", "*.py"), recursive=True):
-        if "__pycache__" in f:
+# --------------------------------------------------------------------------- L2 / L3 from the gate
+def gate_rows(result):
+    """``{owner: row}`` from the sweep: *owner* is a category file (``scene.py``) or a
+    tool (its ``slots/tools/<tool>.py`` plus its ``_<tool>/`` helpers)."""
+    gap_sites = {id(s) for g in result.gaps for s in g.sites}
+    one_host = {}
+    for (chain, host, _), sites in result.one_host.items():
+        for s in sites:
+            one_host.setdefault(_owner(s.rel, result.tools), set()).add((chain, host))
+    rows = {}
+    for rel, sites in result.files.items():
+        owner = _owner(rel, result.tools)
+        if owner is None:
             continue
-        for cn in re.findall(r"^class (\w+Slots)\b", read(f), re.M):
-            out[cn] = f
-    return out
+        row = rows.setdefault(owner, dict(chains=set(), sites=0, gaps=0))
+        row["chains"] |= {s.chain for s in sites}
+        row["sites"] += len(sites)
+        row["gaps"] += sum(1 for s in sites if id(s) in gap_sites)
+    for owner, row in rows.items():
+        row["one_host"] = len(one_host.get(owner, ()))
+    return rows
 
 
-def panel_metrics(pyfile):
-    uipath = os.path.splitext(pyfile)[0] + ".ui"
-    if not os.path.isfile(uipath):
-        cands = glob.glob(os.path.join(os.path.dirname(pyfile), "*.ui"))
-        uipath = cands[0] if len(cands) == 1 else uipath
-    uw = ui_interactive(uipath)
-    # HYBRID/dynamic panels build their options body at runtime from AttributeSpec dicts
-    # (TubeRig) — count those statically-declared option keys as UI surface, or dynamic
-    # panels score 3/16 "thin shell" while actually rendering 7+ controls.
-    spec = cps.Surface(pyfile).spec_options
-    uw += len({k for keys in spec.values() for k in keys})
-    m = code_metrics(pyfile)
-    return dict(ui=uw, controls=m["controls"], opt=m["opt_boxes"], lines=m["lines"])
-
-
-# --------------------------------------------------------------------------- L2/L1 shared menus
-DOMAINS = [
-    "animation", "cameras", "crease", "deformation", "display", "duplicate", "edit", "editors", "hud",
-    "lighting", "main", "materials", "normals", "nurbs", "pivot", "polygons", "preferences", "rendering",
-    "rigging", "scene", "selection", "settings", "subdivision", "symmetry", "transform", "utilities", "uv",
-]
-WNAME = re.compile(r'name="((?:tb|b|chk|cmb|list|s|d|i|w)\d+)"')
-DEFP = re.compile(r"^\s{4}def\s+([a-zA-Z_]\w*)\s*\(", re.M)
-
-
-def ui_widget_names(domain):
-    names = set()
-    for p in glob.glob(rp("tentacle/tentacle/ui", domain + ".ui")) + glob.glob(
-        rp("tentacle/tentacle/ui", domain + "#*.ui")
-    ):
-        names |= set(WNAME.findall(read(p)))
-    return names
-
-
-def slot_defs(folder, domain):
-    p = rp("tentacle/tentacle/slots", folder, domain + ".py")
-    return set(DEFP.findall(read(p))) if os.path.isfile(p) else set()
+def _owner(rel, tools):
+    """``scene.py`` -> itself; ``tools/x.py`` and ``tools/_x/...`` -> ``tools/x``; a
+    helper package no tool owns (shared by several) -> ``tools/_x``; else None."""
+    parts = rel.split("/")
+    if len(parts) == 1:
+        return None if rel.startswith("_") else rel
+    if parts[0] != "tools" or parts[1] == "__init__.py":
+        return None
+    if len(parts) == 2:
+        return f"tools/{Path(parts[1]).stem}"
+    name = parts[1][1:] if parts[1].startswith("_") else parts[1]
+    return f"tools/{name}" if name in tools else f"tools/{parts[1]}"
 
 
 # =========================================================================== build
@@ -244,81 +232,68 @@ def build():
     helper_cov = pct(len(Ma & Ba), len(Ma))
     absent_mods = sorted(m for m in M if M[m] and not B.get(m))
 
-    # ---- L3 ----
-    ledger = cps.load_ledger()
-    pan_ledger = ledger["panels"]
-    MP, BP = find_panels("mayatk/mayatk"), find_panels("blendertk/blendertk")
-    present = sorted(set(MP) & set(BP))
-    missing = sorted(set(MP) - set(BP))
-    bonly = sorted(set(BP) - set(MP))
-    panel_rows = []
-    for cn in present:
-        m, b = panel_metrics(MP[cn]), panel_metrics(BP[cn])
-        stem = os.path.splitext(os.path.basename(MP[cn]))[0]
-        d = cps.diff_pair(MP[cn], BP[cn], stem, ledger, is_slot=False)
-        surf = (len(d["untriaged"]), len(d["pending"]))
-        panel_rows.append((cn, m, b, pct(b["lines"], m["lines"]), pct(b["ui"], m["ui"]), surf))
-    panel_rows.sort(key=lambda r: (r[3] if r[3] is not None else 999))
-    untriaged_missing = [c for c in missing if c not in pan_ledger]
-    open_ports = [c for c in missing if pan_ledger.get(c, {}).get("status") == "pending"]
-    na_panels = [c for c in missing if pan_ledger.get(c, {}).get("status") == "na"]
-    counterpart = [c for c in missing if pan_ledger.get(c, {}).get("status") == "counterpart"]
+    # ---- L1-L3: the parity gate ----
+    result = cps.sweep(ROOT)
+    rows = gate_rows(result)
+    categories = sorted(k for k in rows if not k.startswith("tools/"))
+    tools = sorted(k for k in rows if k.startswith("tools/"))
+    hosts_of = {f"tools/{t}": h for t, h in result.tools.items()}
+    hosts_of.update({t: "shared helpers" for t in tools if t.startswith("tools/_")})
+    l1 = {}
+    for rel in categories:
+        handled, hidden = category_buttons(rel)
+        l1[rel] = (len(handled), hidden, code_metrics(rp("tentacle", "tentacle", "slots", rel)))
+    n_buttons = sum(v[0] for v in l1.values())
+    n_hidden = {h: sum(v[1][h] for v in l1.values()) for h in cps.HOST_PACKAGES}
+    n_hollow = sum(v[2]["hollow"] for v in l1.values())
 
-    # ---- L2 / L1 ----
-    slot_rows = []
-    tmc = tbc = thol = 0
-    l1_maya = l1_blen = l1_gap = 0
-    for d in DOMAINS:
-        mp, bp = rp("tentacle/tentacle/slots/maya", d + ".py"), rp("tentacle/tentacle/slots/blender", d + ".py")
-        m = code_metrics(mp) if os.path.isfile(mp) else dict(controls=0, opt_boxes=0, hollow=0, lines=0)
-        b = code_metrics(bp) if os.path.isfile(bp) else dict(controls=0, opt_boxes=0, hollow=0, lines=0)
-        slot_rows.append((d, m, b, pct(b["controls"], m["controls"])))
-        tmc += m["controls"]; tbc += b["controls"]; thol += b["hollow"]
-        wn = ui_widget_names(d)
-        mi, bi = wn & slot_defs("maya", d), wn & slot_defs("blender", d)
-        l1_maya += len(mi); l1_blen += len(bi); l1_gap += len(mi - bi)
-    slot_depth = pct(tbc, tmc)
+    def total(keys, field):
+        return sum(len(rows[k][field]) if field == "chains" else rows[k][field] for k in keys)
+
+    served = {}
+    for t in tools:
+        served.setdefault(hosts_of.get(t, "both"), []).append(t)
 
     # ===================================================================== render
     w("# tentacle / blendertk — Maya↔Blender Parity Audit")
     w("")
     w("> **Auto-generated by `m3trik/scripts/generate_parity_audit.py` — measured & fully "
       "reproducible.** Do not edit by hand; re-run the script (commit date records when). Every number "
-      "below is computed from the registries, the shared `ui/*.ui`, and the slot/panel source — no "
-      "hand arithmetic.")
+      "below is computed from the registries, the shared `ui/*.ui`, and the slot source — no hand "
+      "arithmetic.")
     w("")
     w("**Why this doc exists:** the port was declared \"100%/100% complete\" three times. That number "
-      "measured *button presence*; a matching `.ui` skeleton is likewise presence, not depth. Real "
-      "parity lives one layer down — option boxes, menus, sub-controls (built in code) and engine "
-      "logic. This audit measures *that*, per panel and per menu.")
+      "measured *button presence*. One Slots class per category and per tool now serves both hosts "
+      "through `self.tk`, so parity is what each host can run: every toolkit chain a shared Slots "
+      "class calls must resolve on mayatk and blendertk, or be hidden or guarded where it does not. "
+      "The per-chain truth is [`PARITY_SURFACE.md`](PARITY_SURFACE.md) (the gate, "
+      "`compare_panel_surface.py`); this is its scoreboard.")
     w("")
 
-    # scorecard
-    n_thin = sum(1 for r in panel_rows if r[3] is not None and r[3] < 50)  # by logic (lines) %
     w("## Scorecard")
     w("")
     w("| Layer | What it measures | Result |")
     w("|:--|:--|:--|")
-    w(f"| **1. Menu buttons** | shared-menu widgets with a slot handler | Maya {l1_maya}, Blender "
-      f"{l1_blen} — only **{l1_gap}** Maya-handled widget missing in Blender ⇒ ~100% *(presence; the "
-      "metric that misled)* |")
-    w(f"| **2. Shared-menu slot depth** | `.add(` controls, Blender ÷ Maya | "
-      f"**{slot_depth}%** ({tbc}/{tmc}) — *floor only; undercounts loop-built controls & legit "
-      f"divergence. Spot-checks (pivot, selection) show menus are **largely faithful**.* {thol} hollow "
-      "handlers |")
-    w(f"| **3. Tool panels** | co-located `*Slots` tools | **{len(present)} present** pairs (of "
-      f"Maya's {len(MP)}), {len(open_ports)} open ports (tracked), {len(na_panels)} N/A by design, "
-      f"{len(counterpart)} counterpart-pair"
-      + (f", **{len(untriaged_missing)} UNTRIAGED**" if untriaged_missing else "")
-      + f". {n_thin} below 50% by line count (see per-panel surface column) |")
+    w(f"| **1. Menu buttons** | category `.ui` widgets with a handler in the one Slots class | "
+      f"{n_buttons} across {len(categories)} categories; hidden by `requires` on Maya "
+      f"{n_hidden['maya']}, on Blender {n_hidden['blender']} *(presence)*; {n_hollow} hollow handlers |")
+    w(f"| **2. Category toolkit calls** | `self.tk` chains the categories call, per host | "
+      f"{total(categories, 'chains')} chains at {total(categories, 'sites')} sites; "
+      f"{total(categories, 'one_host')} one-host operations (hidden or guarded); "
+      f"**{total(categories, 'gaps')} gap sites** |")
+    w(f"| **3. Tool panels** | the shared tools, per host | {len(result.tools)} tools: "
+      + ", ".join(f"{len(v)} {k}" for k, v in sorted(served.items()) if k != "shared helpers")
+      + f"; {total(tools, 'chains')} chains at {total(tools, 'sites')} sites; "
+      f"{total(tools, 'one_host')} one-host operations; **{total(tools, 'gaps')} gap sites** |")
     w(f"| **4. Helper surface** | public names, Blender covers of mayatk | **{helper_cov}%** "
-      f"({len(Ma & Ba)}/{len(Ma)} names); {len(absent_mods)} modules absent: {', '.join(absent_mods)} |")
+      f"({len(Ma & Ba)}/{len(Ma)} names); {len(absent_mods)} modules absent"
+      + (f": {', '.join(absent_mods)}" if absent_mods else "") + " |")
     w("")
-    w("**Bottom line:** depth numbers here are coarse floors — the per-element truth (every "
-      "control/widget/handler, classified through the triage ledger) is "
-      "[`PARITY_SURFACE.md`](PARITY_SURFACE.md); its UNTRIAGED and `pending` rows are the real "
-      f"work list. Helper library at {helper_cov}% with {len(absent_mods)} module(s) absent "
-      f"({', '.join(absent_mods)}); {len(open_ports)} panel ports open.")
+    w(f"**Bottom line:** the gate {'FAILS' if result.failed else 'PASSES'} — "
+      f"{len(result.gaps)} gap(s): a call one host cannot resolve, or a signature that does not "
+      f"take it. Helper library at {helper_cov}% with {len(absent_mods)} module(s) absent"
+      + (f" ({', '.join(absent_mods)})" if absent_mods else "")
+      + "; a name blendertk lacks is a gap only where a shared panel calls it.")
     w("")
 
     # L4
@@ -336,108 +311,57 @@ def build():
         w(f"| {mod}{flag} | {len(m)} | {len(b)} | {len(m & b)} | {ps(pct(len(m & b), len(m)))} |")
     w(f"| **TOTAL (unique)** | **{len(Ma)}** | **{len(Ba)}** | **{len(Ma & Ba)}** | **{helper_cov}%** |")
     w("")
-    w("> Caveat: many absent names are *internals of the missing panels* (they arrive when the panel "
-      "is ported), and some mayatk helpers are replaced inline by native `bpy.ops` by design — so the "
-      "absent count overstates *distinct* helper work. The hard gaps are the 3 absent modules plus "
-      "`node_utils` attributes, `core_utils` geometry math, and `xform_utils` pivots.")
+    w("> Caveat: a Maya name with no Blender twin is often Maya machinery the Blender side does "
+      "natively (`bpy.ops`) or does not need; it matters only where a shared panel calls it, "
+      "which Layers 2-3 measure.")
     w("")
 
     # L3
     w("---\n\n## Layer 3 — Tool panels")
     w("")
-    w("Co-located `*Slots` tools (own `.ui` + engine), launched from a menu button. Raw counts straight "
-      "from each slot/`.ui` pair — no weighting. *logic%* = Blender lines ÷ Maya lines (how much the "
-      "panel **does**); *UI%* = Blender interactive `.ui` widgets ÷ Maya's (how complete it **looks**). "
-      "When UI% is high but logic% low, the panel looks complete but does much less.")
+    w("Each tool's one Slots class (`slots/tools/<tool>.py`, its helpers in `_<tool>/`). *hosts*: "
+      "the hosts it serves (`slots.tools.HOSTS`; `standalone` = its own switchboard, no host). "
+      "*one-host*: distinct chains one library lacks, hidden or guarded there.")
     w("")
-    w("> **logic% is a line ratio — it understates panels whose Maya source carries large Maya-only "
-      "machinery** (assemblies, namespaces, `_FileRef`, controllers). It is NOT a control-surface "
-      "verdict: a panel can read low here yet still be control-surface-complete. For the per-panel "
-      "name-level 1:1 check (every `config_buttons` / menu / option-box / action control), run "
-      "`python m3trik/scripts/compare_panel_surface.py --panel <name>`.")
-    w("")
-    w(f"### Present pairs ({len(present)}) — worst first by logic")
-    w("")
-    w("> **The `surface` column is the verdict that matters** — it comes from the name-level "
-      "classified diff (`compare_panel_surface.py` + `parity_map.py`): `clean` = every element "
-      "matched or consciously triaged; `N open` = ledgered pending gaps; `N!` = untriaged. "
-      "A `clean` panel with a low logic% just needs less code in Blender (native-op collapse, "
-      "shared helpers) — that is not a defect.")
-    w("")
-    w("| panel | option boxes M→B | code controls M→B | `.ui` widgets M→B | lines M→B | logic% | UI% | surface |")
-    w("|:--|:--:|:--:|:--:|:--:|--:|--:|:--|")
-    for cn, m, b, ld, ud, (n_unt, n_pend) in panel_rows:
-        if n_unt:
-            surf = f"**{n_unt}!**" + (f" +{n_pend} open" if n_pend else "")
-        elif n_pend:
-            surf = f"{n_pend} open"
-        else:
-            surf = "clean"
-        ob = f"{m['opt']}→{b['opt']}" + (" ⚠" if m["opt"] > b["opt"] else "")
-        w(f"| {cn.replace('Slots','')} | {ob} | {m['controls']}→{b['controls']} | {m['ui']}→{b['ui']} | "
-          f"{m['lines']}→{b['lines']} | {ps(ld)} | {ps(ud)} | {surf} |")
-    w("")
-    if untriaged_missing:
-        w(f"### UNTRIAGED Maya-only panels ({len(untriaged_missing)}) — add a parity_map PANELS entry")
-        w("")
-        w(", ".join(c.replace("Slots", "") for c in untriaged_missing) + ".")
-        w("")
-    w(f"### Open panel ports ({len(open_ports)}) — tracked in parity_map")
-    w("")
-    for c in open_ports:
-        w(f"- **{c.replace('Slots','')}** — {pan_ledger[c]['reason']}.")
-    w("")
-    w(f"### Not gaps ({len(na_panels) + len(counterpart)})")
-    w("")
-    for c in na_panels:
-        w(f"- **{c.replace('Slots','')}** — N/A: {pan_ledger[c]['reason']}.")
-    for c in counterpart:
-        w(f"- **{c.replace('Slots','')}** ↔ {pan_ledger[c].get('to', '')} — {pan_ledger[c]['reason']}.")
-    if bonly:
-        w("")
-        w("Blender-only panels (no mayatk counterpart): " + ", ".join(c.replace("Slots", "") for c in bonly) + ".")
+    w("| tool | hosts | chains | sites | one-host | gap sites |")
+    w("|:--|:--|--:|--:|--:|--:|")
+    for t in tools:
+        r = rows[t]
+        gaps = f"**{r['gaps']}**" if r["gaps"] else "0"
+        w(f"| {t[len('tools/'):]} | {hosts_of.get(t, 'both')} | {len(r['chains'])} | {r['sites']} | "
+          f"{r['one_host']} | {gaps} |")
     w("")
 
-    # L2
-    w("---\n\n## Layer 2 — Shared-menu slot depth")
+    # L2 / L1
+    w("---\n\n## Layers 1-2 — Categories")
     w("")
-    w("The 27 shared menus both DCCs load. *Controls* = `.add(` calls (option-box sub-controls + menu "
-      "items). *Hollow* = parity theater: a **visible** control whose handler only pops a message box. "
-      "A guard clause (`if not selection: message_box(...); return`) on a handler that then does work "
-      "is not hollow, and neither is a control correctly retired via `<name>_init → setVisible(False)` "
-      "— that is the documented treatment for a no-Blender-equivalent control.")
+    w("Each marking-menu category's one Slots class (`slots/<category>.py`) over its `ui/<category>"
+      "*.ui`. *buttons*: widgets with a handler; *hidden M / B*: of them, tagged for the other host. "
+      "*Hollow* = parity theater: a visible control whose handler only pops a message box (a guard "
+      "clause that then does work is not hollow, nor a control retired via `<name>_init → "
+      "setVisible(False)`).")
     w("")
-    w("> ⚠️ **This per-domain % is an UPPER BOUND on the gap, NOT the gap — confirm by reading the slot "
-      "pair before acting.** It is wrong in two directions, both proven by spot-checks: (1) it "
-      "**undercounts loop-built controls** — `selection` builds all 10 Select-Similar criteria in one "
-      "`for` loop (counts as 1, not 10), so its real faithfulness is ~90%, not the 53% shown; (2) it "
-      "**can't tell legitimate Blender divergence from a gap** — `pivot`'s 36% is *entirely* Blender's "
-      "single baked-origin model (no per-channel/​manip pivot), i.e. already faithful with nothing to "
-      "fix. Treat a low number as \"read this slot,\" never as \"this much is missing.\"")
-    w("")
-    w("| domain | controls M→B | depth | option boxes M→B | hollow (B) |")
-    w("|:--|:--:|--:|:--:|--:|")
-    for d, m, b, dep in slot_rows:
-        ob = f"{m['opt_boxes']}→{b['opt_boxes']}" + (" ⚠" if m["opt_boxes"] > b["opt_boxes"] else "")
-        hl = str(b["hollow"]) if b["hollow"] else ""
-        w(f"| {d} | {m['controls']}→{b['controls']} | {ps(dep)} | {ob} | {hl} |")
-    w(f"| **TOTAL** | **{tmc}→{tbc}** | **{slot_depth}%** | | **{thol}** |")
+    w("| category | buttons | hidden M / B | controls | option boxes | chains | sites | one-host | gap sites | hollow |")
+    w("|:--|--:|:--:|--:|--:|--:|--:|--:|--:|--:|")
+    for rel in categories:
+        r, (n, hid, m) = rows[rel], l1[rel]
+        gaps = f"**{r['gaps']}**" if r["gaps"] else "0"
+        w(f"| {Path(rel).stem} | {n} | {hid['maya']} / {hid['blender']} | {m['controls']} | "
+          f"{m['opt_boxes']} | {len(r['chains'])} | {r['sites']} | {r['one_host']} | {gaps} | "
+          f"{m['hollow'] or ''} |")
     w("")
 
     # methodology
     w("---\n\n## Methodology & honest limits")
     w("")
-    w("- **Option boxes** = distinct slot methods whose body references `.option_box.` (validated "
-      "against Reference Manager: mayatk 2, Blender 0).")
-    w("- **Code controls** = `.add(` calls minus `Separator`s (option-box sub-controls + menu items).")
-    w("- **`.ui` widgets** = static interactive widgets declared in the panel's `.ui` (covers panels "
-      "that put controls in the `.ui` rather than building them in code).")
-    w("- **Limits:** static `.add()`/widget counting is a proxy, not a render — it can't see whether a "
-      "control *works* or matches Maya's behavior. The only true \"feels seamless\" test is rendering "
-      "both panels side by side. Logic% compares file lines and is blunt where engine code lives "
-      "elsewhere (e.g. Blender panels delegate to `*_utils` helpers).")
-    w("- **What this audit deliberately does NOT trust:** button presence, `.ui`-skeleton similarity, "
-      "or a `*Slots` class merely existing — all are presence, not parity.")
+    w("- **Chains** = the toolkit reads a shared Slots class makes (`self.tk.<A>.<b>`, an engine "
+      "instance's members), resolved statically against both libraries' sources — see "
+      "`compare_panel_surface.py`'s docstring for what hides or guards a call.")
+    w("- **Option boxes** = distinct slot methods whose body references `.option_box.`; "
+      "**controls** = `.add(` calls minus `Separator`s.")
+    w("- **Limits:** resolution proves a name and a signature, not behavior — it cannot see whether "
+      "an operation does on Blender what it does on Maya. The only true \"feels seamless\" test is "
+      "running both.")
     w("")
     return "\n".join(L) + "\n"
 

@@ -1,6 +1,7 @@
-"""Tests for generate_parity_audit.py — the Maya<->Blender depth scoreboard.
+"""Tests for generate_parity_audit.py — the Maya<->Blender parity scoreboard.
 
-Regression coverage for the `hollow` metric. It is meant to count *parity theater* — a
+Layers 2-3 read the parity gate (``TestGateLayers``). The rest is regression coverage
+for the `hollow` metric. It is meant to count *parity theater* — a
 visible control whose handler only pops a message box and does nothing. The original
 substring heuristic ("body mentions message_box and contains no `btk.`/`bpy.ops`/`cmds.`
 call") flagged two shapes that are not defects at all:
@@ -8,8 +9,8 @@ call") flagged two shapes that are not defects at all:
   * a **guard clause** (`if not selection: message_box(...); return`) on a handler that goes
     on to do real work through plain attribute writes / helper calls (`o.modifiers.new(...)`,
     `c.data.bevel_depth = ...`) — all 13 of blendertk's flagged handlers were this;
-  * a control correctly retired via `<name>_init -> setVisible(False)`, which is the
-    documented treatment for a no-Blender-equivalent control (tentacle/docs/parity_map.py).
+  * a control correctly retired via `<name>_init -> setVisible(False)` (a control one host
+    cannot serve is hidden there, never a stub: CODE_STANDARD section 15).
 
 That reported "13 hollow handlers" in PARITY_AUDIT.md's headline scorecard where there are
 none. These tests pin both directions: the metric must still fire on a genuinely dead
@@ -112,14 +113,16 @@ class TestHollowHandlerMetric(unittest.TestCase):
         self.assertEqual(m["hollow"], 0)
 
     def test_shipped_slots_report_no_hollow_handlers(self):
-        # End-to-end: neither DCC's shipped marking-menu slots contain parity theater.
-        for dcc in ("maya", "blender"):
-            slots = gpa.rp("tentacle", "tentacle", "slots", dcc)
-            if not Path(slots).is_dir():
-                self.skipTest(f"{slots} not present")
-            for path in sorted(Path(slots).glob("*.py")):
-                with self.subTest(slot=f"{dcc}/{path.name}"):
-                    self.assertEqual(gpa.code_metrics(str(path))["hollow"], 0)
+        # End-to-end: the shipped marking-menu slots (one composed class per category,
+        # both hosts') contain no parity theater.
+        slots = Path(gpa.rp("tentacle", "tentacle", "slots"))
+        if not slots.is_dir():
+            self.skipTest(f"{slots} not present")
+        files = sorted(p for p in slots.glob("*.py") if not p.name.startswith("_"))
+        self.assertTrue(files, f"no composed slot modules in {slots}")
+        for path in files:
+            with self.subTest(slot=path.name):
+                self.assertEqual(gpa.code_metrics(str(path))["hollow"], 0)
 
     def test_other_metrics_unaffected(self):
         # The rewrite must not disturb the sibling counters it shares a pass with.
@@ -134,6 +137,41 @@ class TestHollowHandlerMetric(unittest.TestCase):
         self.assertEqual(m["opt_boxes"], 2)  # both the _init and the handler reference it
         self.assertEqual(m["handlers"], 1)  # _init is not a handler
         self.assertEqual(m["controls"], 1)  # one .add( that is not a Separator
+
+
+class TestGateLayers(unittest.TestCase):
+    """Layers 2-3 read the parity gate (``compare_panel_surface.sweep``): one Slots
+    class serves both hosts, so a tool's or a category's verdict is the gate's."""
+
+    def _result(self):
+        cps = gpa.cps
+        tool = cps.Site("tools/rigger.py", "RiggerSlots.b000", 1, ("CoreUtils", "maya_only"), None)
+        helper = cps.Site("tools/_rigger/helper.py", "run", 1, ("CoreUtils", "shared"), None)
+        shared = cps.Site("tools/_app_bridge/host.py", "run", 1, ("CoreUtils", "shared"), None)
+        category = cps.Site("edit.py", "EditSlots.b000", 1, ("CoreUtils", "shared"), None)
+        sites = [tool, helper, shared, category]
+        return cps.SweepResult(
+            files={s.rel: [s] for s in sites},
+            sites=sites,
+            gaps=[cps.Gap("CoreUtils.maya_only", "blender", "does not resolve", [tool])],
+            unverified={},
+            lint=[],
+            tools={"rigger": "both"},
+        )
+
+    def test_a_tool_gap_reaches_its_row(self):
+        rows = gpa.gate_rows(self._result())
+        self.assertEqual(rows["tools/rigger"]["gaps"], 1)
+        self.assertEqual(rows["edit.py"]["gaps"], 0)
+
+    def test_a_tools_helpers_count_toward_it(self):
+        rows = gpa.gate_rows(self._result())
+        self.assertEqual(rows["tools/rigger"]["sites"], 2)
+        self.assertEqual(rows["tools/rigger"]["chains"], {"CoreUtils.maya_only", "CoreUtils.shared"})
+
+    def test_a_helper_package_no_tool_owns_is_its_own_row(self):
+        rows = gpa.gate_rows(self._result())
+        self.assertIn("tools/_app_bridge", rows)
 
 
 class TestRegistryFreshnessGuard(unittest.TestCase):

@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (53)
+## Genuine cross-layer collisions (54)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -161,7 +161,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 ### `Parameters` — blendertk, extapps, mayatk, tentacle, uitk
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L149)
-- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L167)
+- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L61)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L266)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L532)
@@ -194,6 +194,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`ProbePlacement`](blendertk/light_utils/lightmap_baker/_probe_placement.py#L184)
 - `mayatk` — [`ProbePlacement`](mayatk/light_utils/lightmap_baker/_probe_placement.py#L178)
 - `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L283)
+
+### `QtPlatformUnavailable` — blendertk, tentacle
+
+- `blendertk` — [`QtPlatformUnavailable`](blendertk/ui_utils/qt_runtime.py#L56)
+- `tentacle` — [`QtPlatformUnavailable`](tentacle/tcl.py#L39)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
 
@@ -303,7 +308,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L42)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L64)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1259)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1298)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1123)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L289)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L314)

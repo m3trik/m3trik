@@ -92,7 +92,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`ProbePlacement`](blendertk/light_utils/lightmap_baker/_probe_placement.py#L184)
 - `mayatk` — [`ProbePlacement`](mayatk/light_utils/lightmap_baker/_probe_placement.py#L178)
-- `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L273)
+- `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L283)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
 
@@ -157,7 +157,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L42)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L64)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1295)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1298)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1123)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L289)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L314)

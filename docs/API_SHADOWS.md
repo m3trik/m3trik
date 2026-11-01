@@ -2,7 +2,7 @@
 
 _Symbols whose simple name is defined in more than one ecosystem package. Review for DRY violations: a downstream wrapper that just re-exposes upstream behavior should be deleted; if it adds value, name it differently or document why._
 
-## Genuine cross-layer collisions (25)
+## Genuine cross-layer collisions (53)
 
 _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
@@ -18,6 +18,26 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`Behaviors`](mayatk/anim_utils/shots/shot_manifest/behaviors/_behaviors.py#L157)
 - `pythontk` — [`Behaviors`](pythontk/core_utils/engines/shots/manifest/behaviors/_behaviors.py#L110)
 
+### `CompositorSlots` — extapps, tentacle
+
+- `extapps` — [`CompositorSlots`](extapps/texture_maps/compositor/slots.py#L108)
+- `tentacle` — [`CompositorSlots`](tentacle/slots/tools/compositor.py#L109)
+
+### `CompositorUI` — extapps, tentacle
+
+- `extapps` — [`CompositorUI`](extapps/texture_maps/compositor/launcher.py#L15)
+- `tentacle` — [`CompositorUI`](tentacle/tcl_standalone.py#L138)
+
+### `ConverterSlots` — extapps, tentacle
+
+- `extapps` — [`ConverterSlots`](extapps/texture_maps/converter/slots.py#L38)
+- `tentacle` — [`ConverterSlots`](tentacle/slots/tools/converter.py#L39)
+
+### `ConverterUI` — extapps, tentacle
+
+- `extapps` — [`ConverterUI`](extapps/texture_maps/converter/launcher.py#L15)
+- `tentacle` — [`ConverterUI`](tentacle/tcl_standalone.py#L142)
+
 ### `CoreUtils` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`CoreUtils`](blendertk/core_utils/_core_utils.py#L479)
@@ -26,8 +46,23 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Finding` — mayatk, pythontk
 
-- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L111)
+- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L113)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L43)
+
+### `FramesSourceMixin` — extapps, tentacle
+
+- `extapps` — [`FramesSourceMixin`](extapps/photogrammetry/_panel_slots.py#L386)
+- `tentacle` — [`FramesSourceMixin`](tentacle/slots/tools/_photogrammetry/panel_slots.py#L385)
+
+### `GaussianSplatWorkflowSlots` — extapps, tentacle
+
+- `extapps` — [`GaussianSplatWorkflowSlots`](extapps/photogrammetry/gaussian_splat_workflow/slots.py#L37)
+- `tentacle` — [`GaussianSplatWorkflowSlots`](tentacle/slots/tools/gaussian_splat_workflow.py#L36)
+
+### `GaussianSplatWorkflowUI` — extapps, tentacle
+
+- `extapps` — [`GaussianSplatWorkflowUI`](extapps/photogrammetry/gaussian_splat_workflow/launcher.py#L13)
+- `tentacle` — [`GaussianSplatWorkflowUI`](tentacle/tcl_standalone.py#L162)
 
 ### `HierarchyBaseline` — blendertk, mayatk, pythontk
 
@@ -40,6 +75,16 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`KeyStash`](blendertk/anim_utils/key_stash/_key_stash.py#L304)
 - `mayatk` — [`KeyStash`](mayatk/anim_utils/key_stash/_key_stash.py#L323)
 - `pythontk` — [`KeyStash`](pythontk/core_utils/engines/key_stash/key_stash_model.py#L309)
+
+### `LookMatchSlots` — extapps, tentacle
+
+- `extapps` — [`LookMatchSlots`](extapps/look_match/slots.py#L92)
+- `tentacle` — [`LookMatchSlots`](tentacle/slots/tools/look_match.py#L94)
+
+### `LookMatchUI` — extapps, tentacle
+
+- `extapps` — [`LookMatchUI`](extapps/look_match/launcher.py#L14)
+- `tentacle` — [`LookMatchUI`](tentacle/tcl_standalone.py#L182)
 
 ### `MainThreadMarshaller` — blendertk, mayatk, pythontk
 
@@ -55,10 +100,40 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`MarmosetEngine`](extapps/marmoset_workflow/_marmoset_engine.py#L76)
 - `mayatk` — [`MarmosetEngine`](mayatk/mat_utils/marmoset_bridge/_marmoset_engine.py#L76)
 
+### `MarmosetWorkflowSlots` — extapps, tentacle
+
+- `extapps` — [`MarmosetWorkflowSlots`](extapps/marmoset_workflow/slots.py#L48)
+- `tentacle` — [`MarmosetWorkflowSlots`](tentacle/slots/tools/marmoset_workflow.py#L49)
+
+### `MarmosetWorkflowUI` — extapps, tentacle
+
+- `extapps` — [`MarmosetWorkflowUI`](extapps/marmoset_workflow/launcher.py#L16)
+- `tentacle` — [`MarmosetWorkflowUI`](tentacle/tcl_standalone.py#L170)
+
 ### `MaterialRecord` — mayatk, pythontk
 
-- `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L83)
+- `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L85)
 - `pythontk` — [`MaterialRecord`](pythontk/core_utils/engines/scene_export/material_record.py#L120)
+
+### `MeshConvertSlots` — extapps, tentacle
+
+- `extapps` — [`MeshConvertSlots`](extapps/mesh_convert/slots.py#L16)
+- `tentacle` — [`MeshConvertSlots`](tentacle/slots/tools/mesh_convert.py#L18)
+
+### `MeshConvertUI` — extapps, tentacle
+
+- `extapps` — [`MeshConvertUI`](extapps/mesh_convert/launcher.py#L14)
+- `tentacle` — [`MeshConvertUI`](tentacle/tcl_standalone.py#L150)
+
+### `MetashapeWorkflowSlots` — extapps, tentacle
+
+- `extapps` — [`MetashapeWorkflowSlots`](extapps/photogrammetry/metashape_workflow/slots.py#L42)
+- `tentacle` — [`MetashapeWorkflowSlots`](tentacle/slots/tools/metashape_workflow.py#L40)
+
+### `MetashapeWorkflowUI` — extapps, tentacle
+
+- `extapps` — [`MetashapeWorkflowUI`](extapps/photogrammetry/metashape_workflow/launcher.py#L15)
+- `tentacle` — [`MetashapeWorkflowUI`](tentacle/tcl_standalone.py#L154)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk
 
@@ -68,10 +143,25 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`OpRegistry`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L84)
 - `pythontk` — [`OpRegistry`](pythontk/net_utils/rpc/plugin_core.py#L84)
 
-### `Parameters` — blendertk, extapps, mayatk, uitk
+### `PackerSlots` — extapps, tentacle
+
+- `extapps` — [`PackerSlots`](extapps/texture_maps/packer/slots.py#L16)
+- `tentacle` — [`PackerSlots`](tentacle/slots/tools/packer.py#L18)
+
+### `PackerUI` — extapps, tentacle
+
+- `extapps` — [`PackerUI`](extapps/texture_maps/packer/launcher.py#L13)
+- `tentacle` — [`PackerUI`](tentacle/tcl_standalone.py#L146)
+
+### `PanelLauncher` — extapps, tentacle
+
+- `extapps` — [`PanelLauncher`](extapps/_panel_launcher.py#L70)
+- `tentacle` — [`PanelLauncher`](tentacle/tcl_standalone.py#L74)
+
+### `Parameters` — blendertk, extapps, mayatk, tentacle, uitk
 
 - `blendertk` — [`Parameters`](blendertk/env_utils/maya_bridge/parameters.py#L149)
-- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L61)
+- `blendertk` — [`Parameters`](blendertk/env_utils/unity_bridge/parameters.py#L167)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `blendertk` — [`Parameters`](blendertk/mat_utils/substance_bridge/parameters.py#L266)
 - `blendertk` — [`Parameters`](blendertk/uv_utils/rizom_bridge/parameters.py#L532)
@@ -82,23 +172,44 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L157)
 - `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L360)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L508)
-- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L63)
+- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L527)
+- `tentacle` — [`Parameters`](tentacle/slots/tools/_marmoset_workflow/parameters.py#L52)
+- `tentacle` — [`Parameters`](tentacle/slots/tools/_photogrammetry/gaussian_splat_parameters.py#L119)
+- `tentacle` — [`Parameters`](tentacle/slots/tools/_photogrammetry/metashape_parameters.py#L374)
+- `tentacle` — [`Parameters`](tentacle/slots/tools/_photogrammetry/realityscan_parameters.py#L166)
+- `tentacle` — [`Parameters`](tentacle/slots/tools/_unity_workflow/parameters.py#L127)
+- `tentacle` — [`Parameters`](tentacle/slots/tools/_webxr_preview/parameters.py#L363)
 - `uitk` — [`Parameters`](uitk/bridge/parameters.py#L39)
+
+### `PhotogrammetryPanelSlots` — extapps, tentacle
+
+- `extapps` — [`PhotogrammetryPanelSlots`](extapps/photogrammetry/_panel_slots.py#L45)
+- `tentacle` — [`PhotogrammetryPanelSlots`](tentacle/slots/tools/_photogrammetry/panel_slots.py#L44)
 
 ### `ProbePlacement` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`ProbePlacement`](blendertk/light_utils/lightmap_baker/_probe_placement.py#L184)
 - `mayatk` — [`ProbePlacement`](mayatk/light_utils/lightmap_baker/_probe_placement.py#L178)
-- `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L283)
+- `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L273)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
 
 - `blendertk` — [`RangeResolver`](blendertk/anim_utils/shots/shot_manifest/range_resolver.py#L29)
 - `mayatk` — [`RangeResolver`](mayatk/anim_utils/shots/shot_manifest/range_resolver.py#L28)
 - `pythontk` — [`RangeResolver`](pythontk/core_utils/engines/shots/manifest/range_resolver.py#L19)
+
+### `RealityScanWorkflowUI` — extapps, tentacle
+
+- `extapps` — [`RealityScanWorkflowUI`](extapps/photogrammetry/realityscan_workflow/launcher.py#L13)
+- `tentacle` — [`RealityScanWorkflowUI`](tentacle/tcl_standalone.py#L158)
+
+### `RealityscanWorkflowSlots` — extapps, tentacle
+
+- `extapps` — [`RealityscanWorkflowSlots`](extapps/photogrammetry/realityscan_workflow/slots.py#L36)
+- `tentacle` — [`RealityscanWorkflowSlots`](tentacle/slots/tools/realityscan_workflow.py#L36)
 
 ### `RpcPlugin` — blendertk, mayatk, pythontk
 
@@ -107,6 +218,11 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/marmoset_bridge/marmoset_rpc/plugin_src/marmoset_rpc/_rpc_core.py#L451)
 - `mayatk` — [`RpcPlugin`](mayatk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/_rpc_core.py#L451)
 - `pythontk` — [`RpcPlugin`](pythontk/net_utils/rpc/plugin_core.py#L451)
+
+### `SharedParams` — extapps, tentacle
+
+- `extapps` — [`SharedParams`](extapps/photogrammetry/_shared_params.py#L151)
+- `tentacle` — [`SharedParams`](tentacle/slots/tools/_photogrammetry/shared_parameters.py#L153)
 
 ### `ShotApply` — mayatk, pythontk
 
@@ -123,6 +239,16 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `blendertk` — [`ShotSequencer`](blendertk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L248)
 - `mayatk` — [`ShotSequencer`](mayatk/anim_utils/shots/shot_sequencer/_shot_sequencer.py#L67)
 - `pythontk` — [`ShotSequencer`](pythontk/core_utils/engines/shots/shot_sequencer.py#L375)
+
+### `SubstanceWorkflowSlots` — extapps, tentacle
+
+- `extapps` — [`SubstanceWorkflowSlots`](extapps/substance_workflow/slots.py#L235)
+- `tentacle` — [`SubstanceWorkflowSlots`](tentacle/slots/tools/substance_workflow.py#L234)
+
+### `SubstanceWorkflowUI` — extapps, tentacle
+
+- `extapps` — [`SubstanceWorkflowUI`](extapps/substance_workflow/launcher.py#L15)
+- `tentacle` — [`SubstanceWorkflowUI`](tentacle/tcl_standalone.py#L166)
 
 ### `TemplateParams` — blendertk, extapps, mayatk
 
@@ -147,6 +273,26 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`ToolbagLog`](extapps/marmoset_workflow/toolbag_log.py#L30)
 - `mayatk` — [`ToolbagLog`](mayatk/mat_utils/marmoset_bridge/toolbag_log.py#L30)
 
+### `UnityWorkflowSlots` — extapps, tentacle
+
+- `extapps` — [`UnityWorkflowSlots`](extapps/unity_workflow/slots.py#L61)
+- `tentacle` — [`UnityWorkflowSlots`](tentacle/slots/tools/unity_workflow.py#L56)
+
+### `UnityWorkflowUI` — extapps, tentacle
+
+- `extapps` — [`UnityWorkflowUI`](extapps/unity_workflow/launcher.py#L15)
+- `tentacle` — [`UnityWorkflowUI`](tentacle/tcl_standalone.py#L174)
+
+### `WebXrPreviewSlots` — extapps, tentacle
+
+- `extapps` — [`WebXrPreviewSlots`](extapps/webxr_preview/slots.py#L116)
+- `tentacle` — [`WebXrPreviewSlots`](tentacle/slots/tools/webxr_preview.py#L117)
+
+### `WebXrPreviewUI` — extapps, tentacle
+
+- `extapps` — [`WebXrPreviewUI`](extapps/webxr_preview/launcher.py#L15)
+- `tentacle` — [`WebXrPreviewUI`](tentacle/tcl_standalone.py#L178)
+
 ### `close_plugin` — blendertk, extapps, mayatk
 
 - `blendertk` — [`close_plugin`](blendertk/mat_utils/substance_bridge/substance_rpc/plugin_src/substance_rpc/__init__.py#L81)
@@ -157,7 +303,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`main`](blendertk/env_utils/hierarchy_sync/_fbx_stage_worker.py#L42)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_bake_scene.py#L64)
-- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1298)
+- `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene.py#L1259)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_import_scene_usd.py#L1123)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/_save_scene.py#L289)
 - `blendertk` — [`main`](blendertk/env_utils/maya_bridge/templates/import.py#L314)
@@ -199,7 +345,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (181)
+## Intentional mayatk↔blendertk port parity (182)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -312,6 +458,7 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SceneDiagnostics`
 - `SceneExporter`
 - `SceneInfoSection`
+- `SceneState`
 - `ScriptConsole`
 - `ScriptJobManager`
 - `SegmentCollector`

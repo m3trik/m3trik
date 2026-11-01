@@ -425,6 +425,17 @@ class TestCommands(_Fixture):
         sel = at.Selection()
         sel.add("tentacle", "test_menu_gui", "x")
         sel.add("tentacle", "test_widgets_anywhere", "x")
+        # The mechanism, on a runner that names a host module (tentacle's no longer
+        # does: its one launcher has none).
+        import dataclasses
+        from unittest import mock
+
+        hosted = dataclasses.replace(
+            at.RUNNERS["tentacle"], host_modules=("tentacle.tcl_maya",)
+        )
+        patcher = mock.patch.dict(at.RUNNERS, {"tentacle": hosted})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         groups = {tuple(mods): argv for _, argv, mods in at.commands(sel, workspace=self.ws)}
         self.assertEqual(set(groups), {("test_widgets_anywhere",), ("test_menu_gui",)})
         self.assertIn("--in-maya", groups[("test_menu_gui",)])

@@ -1,5 +1,6 @@
 # m3trik — Changelog
 
+- **2026-10-31 - `affected_tests.py`: tentacle names no Maya host module (`scripts/affected_tests.py`, `test/test_affected_tests.py`).** `tentacle.tcl_maya` is gone (one launcher, `Tcl.build("maya")`); tentacle's Maya-only tests read the shared `_host.MAYA_AVAILABLE` probe, which `test_marking_menu_gui.py` now does. The `host_modules` mechanism stays; its test patches a runner that names one.
 - **2026-10-31 -- Decision: one launcher, host behavior injected (`docs/CODEBASE_MANIFEST.md`).** tentacle's `Tcl` builds ONE `uitk.MarkingMenu(host=...)` for every host over each host library's `MarkingMenuHost` adapter; Blender's Qt hosting is blendertk's; 3ds Max is dropped.
 - **2026-10-31 - `sync_scene_records.py` writes `MapAbsence.g.cs` into unitytk's template core (`scripts/sync_scene_records.py` `ABSENCE_CS`).** unitytk's materials record reader moved from `LightmapMetadata/` to the core, beside the import-time material writers that read it now too; the absent-map values go with it. `MaterialRecord.g.cs` follows its reader by the channel line, as before.
   - Test(s): `sync_scene_records.py --check` in sync (22 records, 8 read by Unity) after the move; `test/test_sync_scene_records.py` 23 passed.

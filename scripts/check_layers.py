@@ -29,7 +29,7 @@ Two more rules are strict from their first file and are never frozen (CODE_STAND
 section 3):
 
 3. **The product.** No other package imports a unit ``workspace.json`` marks
-   ``"role": "product"`` (tentacle): a library stays usable without it.
+   ``"role": "product"`` (tentacle, extapps): a library stays usable without it.
 4. **Roles.** A package that declares ``[tool.m3trik.roles]`` names import groups
    and, per path, the groups that path may not import::
 

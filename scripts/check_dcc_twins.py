@@ -884,7 +884,7 @@ def compare(spec: TwinSpec) -> Tuple[str, List[str]]:
 #: the four libraries. Copies that call different hosts (a tool's two halves, the
 #: mirror) are not copies; two over one host, or over none, are.
 WRITTEN_ONCE_MIN_LINES = 8
-NEW_LAYOUT = ("tentacle/tentacle/slots/tools",)
+NEW_LAYOUT = ("tentacle/tentacle/slots/tools", "extapps/extapps")
 #: Composed Slots classes: the public modules at this folder's top level. The
 #: ``_<panel>.py`` mixins and the per-host folders are unmoved code.
 COMPOSED_SLOTS = "tentacle/tentacle/slots"

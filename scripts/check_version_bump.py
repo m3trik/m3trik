@@ -22,8 +22,9 @@ This gate splits that one green outcome into the three it was hiding:
 A push that DID move ``__version__`` to what PyPI now serves is a re-run of a
 push that already published, and passes.
 
-"What ships" is ``<pkg>/**`` and ``pyproject.toml`` -- the same set each
-``publish.yml``'s ``paths`` filter triggers on. The push range is
+"What ships" is ``<pkg>/**``, ``pyproject.toml`` and the file its ``readme``
+points at (the wheel's long description, e.g. ``docs/README.md``) -- the same
+set each ``publish.yml``'s ``paths`` filter triggers on. The push range is
 ``github.event.before..HEAD``; every check reads only those two commits
 (tree diffs and ``git show``), never the history between them. With no range
 (``workflow_dispatch``) there is nothing to judge and the gate only reports; a
@@ -50,6 +51,8 @@ HOLD_MARKER = re.compile(r"no version bump", re.IGNORECASE)
 
 _VERSION_RE = re.compile(r"""__version__\s*=\s*["']([^"']+)["']""")
 _ZERO_SHA = re.compile(r"^0+$")
+#: ``readme = "README.md"`` or ``readme = {file = "docs/README.md", ...}``.
+_README_RE = re.compile(r"""^readme\s*=\s*\{?\s*(?:file\s*=\s*)?["']([^"']+)["']""", re.MULTILINE)
 
 
 @dataclass
@@ -88,9 +91,19 @@ def version_at(repo: Path, rev: str, package: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def is_artifact(path: str, package: str) -> bool:
-    """Whether a repo-relative path ships (mirrors publish.yml's ``paths``)."""
-    return path.startswith(f"{package}/") or path == "pyproject.toml"
+def readme_at(repo: Path, rev: str) -> Optional[str]:
+    """The file pyproject's ``readme`` names at ``rev``, or None."""
+    match = _README_RE.search(_git(repo, "show", f"{rev}:pyproject.toml") or "")
+    return match.group(1) if match else None
+
+
+def is_artifact(path: str, package: str, readme: Optional[str] = None) -> bool:
+    """Whether a repo-relative path ships (mirrors publish.yml's ``paths``).
+
+    *readme* is the wheel's long-description file (``readme_at``): it ships
+    even when it lives outside the package dir.
+    """
+    return path.startswith(f"{package}/") or path in ("pyproject.toml", readme)
 
 
 def changed_files(repo: Path, base: str, head: str) -> Optional[List[str]]:
@@ -160,7 +173,8 @@ def decide(
             f"cannot diff {base[:12]}..{head}: unable to prove this push ships "
             f"nothing at the published {version}",
         )
-    shipped = [f for f in files if is_artifact(f, package)]
+    readme = readme_at(repo, head)
+    shipped = [f for f in files if is_artifact(f, package, readme)]
     if not shipped:
         return Verdict(
             version,

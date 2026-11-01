@@ -37,7 +37,7 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 
 **Export is plug-and-play.** A deliverable is the authored scene written by a stock exporter, in open formats that pass their reference validators. A preview composes over the authored value; it never replaces it.
 
-**Tests come from issues.** A bug gets a failing test first, then the fix; the test stays. Each change runs the affected tests; each release runs every suite, a fresh review, a GUI pass in a fresh Maya and Blender, and a production-scene check. Tests always launch a new DCC instance and never touch a user's open session.
+**Tests come from issues.** A bug gets a failing test first, then the fix; the test stays. Each change runs the affected tests; each release runs every suite and a fresh review, and `push.ps1` refuses to release a changed package without a recorded `review` and `tests` receipt for the current tree (the tests receipt is a hard gate). The GUI pass in a fresh Maya and Blender and the production-scene check are done by hand before a release; nothing gates them. Tests always launch a new DCC instance and never touch a user's open session.
 
 **Checked, not just written.** Each rule a script can hold is a check, run in CI or by the release gate (`push.ps1`):
 
@@ -50,7 +50,7 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 | `check_docs.py` | A broken link or an unreachable doc |
 | `check_english_only.py`, `check_public_hygiene.py` | Non-English text; a private path or client name in a public repo |
 | `check_temp_artifacts.py`, `check_context_budget.py` | A temp file outside its home; instruction files past their size caps |
-| ruff | Errors in every package; in tentacle also oversized classes and functions, Qt imported past `qtpy`, PyMEL, and `print` |
+| ruff | In every package: syntax errors, undefined names and unused imports (E4/E7/E9/F); in tentacle also oversized classes and functions, Qt imported past `qtpy`, PyMEL, and `print` |
 
 The full text of every rule, with its reasoning: [`docs/CODE_STANDARD.md`](docs/CODE_STANDARD.md). The instructions coding agents follow live in each repo's `CLAUDE.md`; a rule change updates them, the standard and this summary together.
 

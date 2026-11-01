@@ -78,6 +78,24 @@ class TestCheckVersionBump(unittest.TestCase):
         self._commit("floor")
         self.assertFalse(self._decide().ok)
 
+    def test_the_wheels_readme_is_shipped(self):
+        # pyproject's readme points outside the package dir (docs/README.md):
+        # it is the PyPI long description, so editing it ships.
+        self._write(
+            "pyproject.toml",
+            "[project]\nname = 'extapps'\n"
+            'readme = {file = "docs/README.md", content-type = "text/markdown"}\n',
+        )
+        self._write("docs/README.md", "readme\n")
+        base = self._commit("readme declared")
+        self._append("docs/README.md", "more\n")
+        self._commit("readme edit")
+        v = self._decide(base=base)
+        self.assertFalse(v.ok)
+        self.assertIn("docs/README.md", v.message)
+        self.assertFalse(g.is_artifact("docs/notes.md", PKG, "docs/README.md"))
+        self.assertEqual(g.readme_at(self.repo, "HEAD"), "docs/README.md")
+
     def test_the_whole_push_range_is_judged_not_just_the_tip(self):
         # A shipped change in an EARLIER commit of the push, with a docs-only tip.
         self._append(f"{PKG}/converter.py", "y = 2\n")

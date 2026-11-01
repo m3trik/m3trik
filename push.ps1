@@ -5,6 +5,10 @@ Purpose
 - Safely push changes on dev and (optionally) promote dev -> main in a controlled release order.
 - Designed for the core package chain: pythontk -> uitk -> {mayatk, blendertk} -> tentacle
   (tentacle publishes as tentacletk on PyPI).
+- Publish order the standalone ranges impose: pythontk and uitk first, then extapps (a standalone,
+  published by its own publish.yml on main; its pythontk>=/uitk>= floors must already be on PyPI),
+  then tentacle (its extapps>=X,<Y range must resolve). push.ps1 does not release extapps: push
+  it between the uitk and tentacle releases.
 
 Release phases (Strict+Merge) — every phase is idempotent with an entry predicate, so a
 re-run after ANY abort resumes at the right place instead of re-doing or skipping work.

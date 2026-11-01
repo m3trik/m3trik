@@ -240,7 +240,7 @@ class TestProductAndRoles(unittest.TestCase):
             "tentacle/slots/__init__.py": "",
             "tentacle/slots/normals.py": "import mayatk\n",
             "tentacle/slots/tools/__init__.py": "",
-            "tentacle/slots/tools/spin.py": "import bpy\nimport tentacle.tcl_maya\n",
+            "tentacle/slots/tools/spin.py": "import bpy\nimport tentacle.tcl_blender\n",
         }
         with tempfile.TemporaryDirectory() as tmp:
             found = cl.role_violations(_package(Path(tmp), files), "tentacle", declared)
@@ -249,7 +249,7 @@ class TestProductAndRoles(unittest.TestCase):
             {
                 "slots/normals.py -> mayatk (slots)",
                 "slots/tools/spin.py -> bpy (slots)",
-                "slots/tools/spin.py -> tentacle.tcl_maya (slots)",
+                "slots/tools/spin.py -> tentacle.tcl_blender (slots)",
             },
         )
 

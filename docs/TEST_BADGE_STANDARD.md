@@ -53,7 +53,7 @@ shell alike) tests this case first.
   cosmetic: a plain tentacle run publishing its 197-of-541 count replaced a canonical
   `534 passed, 2 failed` with a green `197 passed`, erasing two real failures. Every runner
   guards itself — mayatk requires every in-scope module to have run, blendertk and unitytk
-  require a full sweep, tentacle requires the Maya suite, and pythontk and uitk gate on
+  require a full sweep, tentacle requires the Maya suite, and pythontk, uitk and extapps gate on
   `StatusBadge.gate` (below) — and all expose `--no-badge`.
 - An **environment-gated skip is still green**, and must stay green whichever idiom
   expressed it. A module skipped via `@unittest.skipUnless` and one skipped by raising
@@ -102,6 +102,7 @@ Tests: [`pythontk/test/test_status_badge.py`](../../pythontk/test/test_status_ba
 | `mayatk` | `test/run_tests.py` (chunked mayapy + GUI pass) | unittest test cases, aggregated across chunks |
 | `blendertk` | `test/run_tests.py` (fresh headless Blender per suite) | the suite's own `===RESULT: … === (ok/attempted)` sentinel, else its `OK` / `FAIL` check lines |
 | `unitytk` | `test/run_tests.py` | unittest test cases |
+| `extapps` | `test/run_tests.py` (pytest) | pytest test cases, subtests not counted |
 | `server` | `test/run-tests.ps1` → `.github/workflows/daily-tests.yml` | per-check `Items` across the five categories |
 | `comfyui` | `test/test-desktop-install.ps1` → `.github/workflows/ci.yml` | per-check `[PASS]` / `[FAIL]` markers |
 
@@ -120,6 +121,6 @@ warning instead of letting it blend into the green.
 
 ## Not badged
 
-`androidtk`, `extapps`, `m3trik` and `www` ship test files but no runner that stamps a
+`androidtk`, `m3trik` and `www` ship test files but no runner that stamps a
 badge. That is a gap, not a different convention — if one gains a badge it follows this
 page.

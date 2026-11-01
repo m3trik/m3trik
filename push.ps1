@@ -50,8 +50,8 @@ Core safety rules (Strict+Merge)
 - Refuses to release a real code delta without recorded "review" AND "tests" receipts
   for the current tree (release gate; receipts in .claude/receipts.json — see
   m3trik/CLAUDE.md "Release preflight"). The tests receipt is enforced, not advisory:
-  mayatk and blendertk ship no pull_request-triggered tests workflow, so it is the only
-  evidence their suite ever ran against the tree being published. Receipts key on a
+  the pull_request suite mayatk and blendertk run is the no-DCC subset, so it is the only
+  evidence their FULL suite ever ran against the tree being published. Receipts key on a
   content hash of the SOURCE tree (generated sidecars excluded), so a registry refresh
   never voids one; Prepare re-keys them across its own Release commit.
 - Re-checks the tree the release gate judged before each commit that sweeps the working

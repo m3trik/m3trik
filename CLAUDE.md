@@ -6,7 +6,7 @@
 
 ## Primary tool — `push.ps1`
 
-**The** release path for ecosystem packages. Never `git push` these packages manually.
+**The** release path for the cascade packages: never `git push` them manually. extapps and unitytk publish from their own `publish.yml` on `main`; release extapps after uitk and **before** tentacle (Prepare ratchets tentacle's `extapps` range and refuses a floor PyPI lacks).
 
 ```powershell
 .\m3trik\push.ps1 -Packages pythontk,uitk -Strict -Merge -UsePR
@@ -16,13 +16,13 @@
 
 `-UsePR` is the default release form — without it the dev→main merge bypasses branch protection. The PR must be *actually* gated before auto-merge is armed, and while waiting the check rollup is re-read every poll: **a settled red check fails in one poll, by name**, never waited out. Recovery: fix → push dev (auto-merge stays armed) → re-run push.ps1.
 
-**Push THIS repo first when `scripts/` changed.** Each package's PR runs `generate_api_registry.py <pkg> --check` against **m3trik@main**; `publish.yml` dispatches [`refresh-api-registry.yml`](.github/workflows/refresh-api-registry.yml), which regenerates only `docs/API_SHADOWS.md` here (never a package repo: Prepare owns the registries). Enforced: the Strict+Merge pre-pass fails when `m3trik/scripts` differs from `origin/main` (bypass: `-SkipReview`). Expected cost: this repo's CI (siblings' `dev`) reads red until the sibling lands, then clears on a re-run (rationale: push.ps1's guard).
+**Push THIS repo first when `scripts/` changed.** Each package's PR runs `generate_api_registry.py <pkg> --check` against **m3trik@main**; `publish.yml` dispatches [`refresh-api-registry.yml`](.github/workflows/refresh-api-registry.yml), which regenerates only `docs/API_SHADOWS.md` here (never a package repo: Prepare owns the registries). Enforced: the Strict+Merge pre-pass fails when `m3trik/scripts` differs from `origin/main` (bypass: `-SkipReview`). This repo's CI (siblings' `dev`) reads red until the sibling lands, then clears on a re-run.
 
 ## Release preflight — release gate
 
 `-Strict -Merge` refuses to release a package whose **artifact** delta (dirty tree, unpushed dev, or `origin/main..dev` touching anything that ships) lacks **both** a `review` and a `tests` receipt for the **current** tree. Receipts live in `.claude/receipts.json`, keyed `pkg@treehash` where the hash is a git tree object of the **source** tree — generated sidecars (`API_*`, `docs/PARITY_*`) are excluded, so a registry refresh never voids one, while any source edit self-invalidates; max age 7 days; push.ps1 is the sole writer and re-keys receipts across its own `Release` commit. Must-reach-main / rides-along deltas and untouched packages are exempt.
 
-`tests` is a **hard** gate: the `pull_request` suite `mayatk`/`blendertk` now run is the no-DCC subset (mocks / Qt-only) and gates no publish, so the local receipt is still the only evidence the FULL suite ran against the published tree.
+`tests` is a **hard** gate: the `pull_request` suite `mayatk`/`blendertk` run is the no-DCC subset (mocks / Qt-only) and gates no publish, so the local receipt is the only evidence the FULL suite ran against the published tree.
 
 **On gate failure, do the preflight unprompted:**
 1. Review the release diff (`git diff origin/main...dev` + working tree): correctness → DRY → simplification → efficiency. Implement fixes; out-of-scope findings → `.claude/BACKLOG.md`.
@@ -34,7 +34,7 @@ Two pre-passes run **before any mutation**, so a failure costs nothing:
 - **Behind `origin/dev`** (any `-Merge`; deliberately *not* waivable by `-SkipReview`, which waives only the review receipt). Releasing behind rewrites every tree and *then* fails at push. Pull first, **then** record receipts: a pull that brings in *source* changes the tree and voids anything recorded before it (a sidecar-only pull does not).
 - **Concurrent writer.** A receipt-gate failure also lists changed files whose mtime is under 15 min (generated `API_*` sidecars excluded). Fresh mtimes mean another session is editing that tree: **wait for it to settle**. Re-recording pins a receipt to a moving tree, and `-Merge` does `git add -A` — it would publish their in-progress work to PyPI, unrecallably.
 
-**Checkpoint to `dev` as work lands.** Don't let `push.ps1`'s `git add .` be the first commit a change ever sees: between releases the only copy is a cloud-synced drive, and a multi-day pile-up is what turns a release into one undifferentiated sweep.
+**Checkpoint to `dev` as work lands**: never let `push.ps1`'s `git add .` be a change's first commit (between releases the only copy is a cloud-synced drive).
 
 Bypasses: `-SkipTestsReceipt` waives the `tests` half alone, printing a loud banner naming what is given up; `-SkipReview` waives the whole pre-pass (emergency, and required to DryRun past it).
 

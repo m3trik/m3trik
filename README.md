@@ -58,7 +58,7 @@ The full text of every rule, with its reasoning: [`docs/CODE_STANDARD.md`](docs/
 
 PowerShell DevOps for the ecosystem: release automation, repo-maintenance scripts and the cross-package standards.
 
-- **[`push.ps1`](push.ps1)**: the release path for the ecosystem packages (`pythontk`, `uitk`, `mayatk`, `blendertk`, `tentacle`). It makes one idempotent `Release X.Y.Z` commit per package (version stepped from what PyPI has, internal floors, fresh API registry), merges through a PR that fails fast on a red check, guards PyPI, tags versions, and writes GitHub Releases with the changelog notes since the previous tag. Re-running it completes any release an earlier run left merged but unfinished.
+- **[`push.ps1`](push.ps1)**: the release path for the ecosystem packages (`pythontk`, `uitk`, `mayatk`, `blendertk`, `tentacle`). It makes one idempotent `Release X.Y.Z` commit per package (version stepped from what PyPI has, internal floors, fresh API registry), merges through a PR that fails fast on a red check, guards PyPI, tags versions, and writes GitHub Releases with the changelog notes since the previous tag. Re-running it completes any release an earlier run left merged but unfinished. `extapps` and `unitytk` are not its: each publishes itself from `main` through its own `publish.yml`.
 - **[`scripts/`](scripts/)**: the checks above, API-registry generation, Maya and Blender parity sweeps, and workspace inventory.
 - **[`docs/`](docs/)**: the cross-package standards for [code](docs/CODE_STANDARD.md), [docs](docs/DOCS_STANDARD.md), the [context budget](docs/CONTEXT_BUDGET.md) and [test badges](docs/TEST_BADGE_STANDARD.md), plus the API shadow report.
 

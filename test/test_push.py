@@ -2011,9 +2011,9 @@ else:
     def test_tests_receipt_is_a_hard_release_gate(self):
         """A "review" receipt alone must NOT release: "tests" is enforced too.
 
-        mayatk and blendertk ship no pull_request-triggered tests workflow, so
+        The pull_request suite mayatk and blendertk run is the no-DCC subset, so
         the local "tests" receipt is the only evidence that anything ever ran
-        their suite against the tree being published. Recording it must clear
+        their FULL suite against the tree being published. Recording it must clear
         the gate, or the receipt is decorative.
         """
         with tempfile.TemporaryDirectory() as td:

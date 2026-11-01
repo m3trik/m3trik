@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-27T19:54:02.018553+00:00",
+  "generated_at": "2026-11-01T03:21:34.734131+00:00",
   "workspace_root": "O:/Cloud/Code/_scripts",
   "repo_count": 12,
   "repos": [
@@ -58,8 +58,8 @@
     {
       "name": "blendertk",
       "path": "blendertk",
-      "domain": "Blender 4.x+ utils (mirrors mayatk's public API)",
-      "summary": "A toolkit for Blender mirroring the mayatk public API, backing the tentacle Blender slots.",
+      "domain": "Blender 4.x+ host library, mirrors mayatk; each tool's Blender API half",
+      "summary": "Python toolkit for Blender mirroring mayatk's API: modeling, UV, materials, animation, rigging and export utilities.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -81,33 +81,34 @@
             "mat_utils",
             "node_utils",
             "nurbs_utils",
+            "render_utils",
             "rig_utils",
             "ui_utils",
             "uv_utils",
             "xform_utils"
           ],
           "immediate_modules": [],
-          "recursive_module_count": 212
+          "recursive_module_count": 187
         }
       ],
       "code_roots": [
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 124,
+          "code_file_count": 140,
           "dominant_suffixes": [
-            ".py (122)",
-            ".ps1 (1)",
-            ".json (1)"
+            ".py (132)",
+            ".json (7)",
+            ".ps1 (1)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 451,
-      "tracked_total_lines": 248379,
-      "tracked_nonempty_lines": 227533
+      "tracked_code_files": 398,
+      "tracked_total_lines": 254707,
+      "tracked_nonempty_lines": 232899
     },
     {
       "name": "comfyui",
@@ -199,8 +200,8 @@
     {
       "name": "extapps",
       "path": "extapps",
-      "domain": "Standalone Switchboard panels (uitk external tools)",
-      "summary": "Standalone Switchboard panels for content-pipeline workflows (map compositing, photogrammetry, Substance Painter automation, texture conversion, mesh conversion).",
+      "domain": "Standalone apps: each host-free app's engine, panel and Slots class",
+      "summary": "Standalone Qt tools for content pipelines: texture map compositing and conversion, photogrammetry, Substance Painter and Marmoset Toolbag automation, Unity and WebXR hand-off, and mesh conversion.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -211,6 +212,7 @@
           "name": "extapps",
           "path": "extapps",
           "immediate_subpackages": [
+            "look_match",
             "marmoset_workflow",
             "mesh_convert",
             "photogrammetry",
@@ -220,33 +222,34 @@
             "webxr_preview"
           ],
           "immediate_modules": [
+            "__main__",
             "_panel_launcher"
           ],
-          "recursive_module_count": 74
+          "recursive_module_count": 77
         }
       ],
       "code_roots": [
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 47,
+          "code_file_count": 49,
           "dominant_suffixes": [
-            ".py (47)"
+            ".py (49)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 162,
-      "tracked_total_lines": 45782,
-      "tracked_nonempty_lines": 40715
+      "tracked_code_files": 177,
+      "tracked_total_lines": 53360,
+      "tracked_nonempty_lines": 47566
     },
     {
       "name": "m3trik",
       "path": "m3trik",
       "domain": "PowerShell DevOps, release automation",
-      "summary": "Tech-art tooling for game-art and DCC pipelines \u2014 one ecosystem, built in layers:",
+      "summary": "Tech-art tooling for game-art and DCC pipelines: one product of tools that behaves the same in Maya and Blender, built on general libraries that are each useful on their own.",
       "repo_kind": "Operations / scripts",
       "manifests": [],
       "root_scripts": [
@@ -268,33 +271,34 @@
         {
           "name": "scripts",
           "path": "scripts",
-          "code_file_count": 23,
+          "code_file_count": 33,
           "dominant_suffixes": [
-            ".py (20)",
-            ".ps1 (3)"
+            ".py (27)",
+            ".ps1 (3)",
+            ".json (3)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 17,
+          "code_file_count": 26,
           "dominant_suffixes": [
-            ".py (17)"
+            ".py (26)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 45,
-      "tracked_total_lines": 23792,
-      "tracked_nonempty_lines": 21113
+      "tracked_code_files": 65,
+      "tracked_total_lines": 39308,
+      "tracked_nonempty_lines": 35251
     },
     {
       "name": "mayatk",
       "path": "mayatk",
-      "domain": "Maya 2025+ utils",
-      "summary": "A comprehensive toolkit for Autodesk Maya providing utilities for modeling, animation, rigging, and UI management.",
+      "domain": "Maya 2025+ host library; each tool's Maya API half",
+      "summary": "Python toolkit for Autodesk Maya: modeling, UV, materials, animation, rigging, lighting and scene-export utilities.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -323,7 +327,7 @@
             "xform_utils"
           ],
           "immediate_modules": [],
-          "recursive_module_count": 268
+          "recursive_module_count": 234
         },
         {
           "name": "test",
@@ -332,6 +336,7 @@
           "immediate_modules": [
             "_run_hm_tests",
             "_suite_driver",
+            "articulated_rig_live_check",
             "base_test",
             "check_cmds_naming",
             "check_cmds_syntax",
@@ -343,9 +348,9 @@
             "scene_import_live_e2e",
             "scene_roundtrip_live_e2e",
             "shadow_preview_device_check",
-            "shell_xform_ui_check",
             "test_anim_utils",
             "test_arnold_bridge",
+            "test_articulated_rig",
             "test_audio_clips",
             "test_audio_clips_export",
             "test_audio_internals",
@@ -373,7 +378,6 @@
             "test_core_utils",
             "test_create_locator_naming",
             "test_curtain",
-            "test_curtain_drape",
             "test_curve_to_tube",
             "test_data_nodes",
             "test_devtools",
@@ -388,8 +392,8 @@
             "test_edit_tools_misc",
             "test_edit_utils",
             "test_emissive_groups",
-            "test_emissive_groups_panel",
             "test_env_utils",
+            "test_export_baselines",
             "test_fbx_export_preparers",
             "test_fbx_utils",
             "test_freeze_restore_locator_rig",
@@ -403,7 +407,8 @@
             "test_image_tracer",
             "test_instancing_extras",
             "test_key_stash",
-            "test_key_stash_panel",
+            "test_light_layer_baker",
+            "test_light_rig",
             "test_light_utils",
             "test_lightmap_baker",
             "test_macros",
@@ -416,10 +421,12 @@
             "test_mat_utils",
             "test_mat_utils_extended",
             "test_mat_utils_resolve_path",
+            "test_material_records",
             "test_material_updater",
             "test_material_updater_diagnostics",
             "test_material_updater_workflow",
             "test_maya_connection",
+            "test_maya_marking_menu_host",
             "test_maya_menu_handler",
             "test_maya_ui_handler",
             "test_mayapy_package_manager",
@@ -434,6 +441,7 @@
             "test_pivot_transfer_scenarios",
             "test_pivot_watcher",
             "test_playblast_exporter",
+            "test_plugins",
             "test_preview",
             "test_rack_builder",
             "test_reference_manager",
@@ -449,10 +457,11 @@
             "test_scene_audit",
             "test_scene_data_sidecar",
             "test_scene_exporter",
+            "test_scene_exporter_dependencies",
             "test_scene_import",
-            "test_scene_state",
             "test_script_output",
             "test_segment_keys",
+            "test_selection",
             "test_separate_objects",
             "test_sequencer",
             "test_sequencer_audio_shift",
@@ -462,20 +471,15 @@
             "test_shader_templates",
             "test_shadow_preview",
             "test_shadow_rig",
-            "test_shadow_rig_panel",
-            "test_shell_xform",
             "test_shot_export_view",
             "test_shot_manifest",
             "test_shot_manifest_audio_integration",
             "test_shot_manifest_behaviors",
-            "test_shot_manifest_csv_load",
             "test_shot_plan",
+            "test_shot_sequencer_hooks",
             "test_shot_transfer",
-            "test_shots_boundary_guard",
-            "test_shots_panel",
             "test_skinning",
             "test_smart_bake",
-            "test_smart_bake_slots",
             "test_snap",
             "test_stagger_keys",
             "test_static_analysis",
@@ -485,12 +489,13 @@
             "test_substance_connection",
             "test_substance_rpc_plugin",
             "test_suite_driver",
-            "test_tentacle_editors",
             "test_texture_baker",
+            "test_texture_combine",
             "test_texture_path_editor",
             "test_tube_rig",
             "test_ui_utils",
             "test_undo_recorder",
+            "test_units",
             "test_unity_bridge",
             "test_usd",
             "test_uv_budget",
@@ -503,27 +508,27 @@
             "test_wheel_rig",
             "test_workspace",
             "test_workspace_mel",
+            "test_world_fit_bake",
             "test_xform_matrices",
             "test_xform_utils",
-            "tube_rig_export_live_check",
-            "unity_bridge_ui_check"
+            "tube_rig_export_live_check"
           ],
-          "recursive_module_count": 202
+          "recursive_module_count": 199
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 597,
-      "tracked_total_lines": 455406,
-      "tracked_nonempty_lines": 401577
+      "tracked_code_files": 526,
+      "tracked_total_lines": 441885,
+      "tracked_nonempty_lines": 389451
     },
     {
       "name": "pythontk",
       "path": "pythontk",
       "domain": "Core utils \u2014 DCC-agnostic, zero-dep",
-      "summary": "Foundation layer of a DCC-tooling ecosystem: composable primitives for files, strings, iteration, math, geometry, images, video, audio and networking, the host-agnostic engines built on them (PBR texture conversion, shot timeline, instancing), plus shared class mixins and package infrastructure.",
+      "summary": "Python toolkit for DCC pipelines: files, math, geometry, images, video and audio, plus PBR texture, glTF/USD export and shot-timeline engines.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -548,7 +553,7 @@
           "immediate_modules": [
             "__main__"
           ],
-          "recursive_module_count": 197
+          "recursive_module_count": 250
         },
         {
           "name": "test",
@@ -559,26 +564,40 @@
             "run_tests",
             "test_affix_hardening",
             "test_all_packages_namespace_aliases",
+            "test_animation_record_shape",
             "test_app_installer",
             "test_app_launcher",
+            "test_articulated_rig_web",
+            "test_articulation",
+            "test_articulation_plan",
             "test_assembly_sorter",
             "test_atomic_write",
+            "test_audio_record_shape",
             "test_audio_utils",
+            "test_bake_baseline",
+            "test_bake_cache",
             "test_bridge",
             "test_cancel_scope",
             "test_class_property",
             "test_cli",
             "test_color",
+            "test_conformance",
             "test_core",
             "test_core_utils",
+            "test_curtain_drape",
             "test_cylinder_seams",
             "test_deprecation",
             "test_doc_audit",
+            "test_effect_recipe",
+            "test_emissive_groups",
             "test_execution_monitor",
             "test_export_profile",
+            "test_export_snapshot",
             "test_export_verify",
             "test_fbx_media",
+            "test_fbx_writer",
             "test_file",
+            "test_file_collect",
             "test_file_dependencies",
             "test_file_naming",
             "test_file_transfer",
@@ -586,9 +605,12 @@
             "test_fuzzy_matcher",
             "test_glb_key_reduction",
             "test_glb_pipeline",
+            "test_glb_skin_weights",
             "test_glb_tangents",
+            "test_gltf2fbx",
             "test_handlers",
             "test_handoff_manifest",
+            "test_handoff_record",
             "test_handoff_scope",
             "test_help_mixin",
             "test_hierarchy_baseline",
@@ -603,10 +625,28 @@
             "test_instance_grouping",
             "test_instancing_strategy",
             "test_iter",
+            "test_job_queue",
+            "test_key_curve",
             "test_key_stash_core",
             "test_ktx2_encoder",
+            "test_light_layers",
+            "test_light_predictor",
+            "test_light_rig_payload",
+            "test_lightmap_record",
+            "test_lightmap_record_shape",
             "test_logging_mixin",
+            "test_look_capture",
+            "test_look_fit",
+            "test_look_loop",
+            "test_look_match",
+            "test_look_measures",
+            "test_look_session",
+            "test_look_sheet",
+            "test_look_target",
             "test_main_cli",
+            "test_manifest_edits",
+            "test_manifest_export",
+            "test_manifest_tags",
             "test_map_compositor",
             "test_map_factory",
             "test_map_factory_grouping",
@@ -619,6 +659,7 @@
             "test_map_registry_short_alias_boundary",
             "test_mask_generator",
             "test_mat_report",
+            "test_material_record",
             "test_math",
             "test_mesh_convert",
             "test_mesh_ops",
@@ -632,7 +673,9 @@
             "test_noise",
             "test_output_template",
             "test_package_manager",
+            "test_package_requirement",
             "test_packaging_metadata",
+            "test_pending_files",
             "test_plate_emitter",
             "test_plugin_core",
             "test_pointcloud",
@@ -643,20 +686,27 @@
             "test_preview_playblast",
             "test_preview_server",
             "test_preview_viewer_live",
+            "test_probe_placement",
             "test_process_exit",
             "test_process_stream",
             "test_progression",
             "test_py39_compat",
+            "test_quaternion",
             "test_rail_surface",
             "test_ramp_keys",
+            "test_rect_packer",
             "test_region_masks",
             "test_remote_file",
+            "test_render_effects_record",
             "test_report_doc",
             "test_rig_graph",
             "test_rpc",
             "test_run_tests",
             "test_scene_data_sidecar",
             "test_scene_exporter",
+            "test_scene_listing",
+            "test_scene_notes",
+            "test_scene_record_rows",
             "test_scene_records",
             "test_schema_spec",
             "test_script_run",
@@ -664,6 +714,7 @@
             "test_shadow_atlas",
             "test_shadow_horizon",
             "test_shadow_projection",
+            "test_shadow_record_shape",
             "test_shadow_web",
             "test_share_tunnel",
             "test_shot_report",
@@ -692,15 +743,17 @@
             "test_usd",
             "test_user_config",
             "test_uv_budget",
+            "test_uv_combine",
             "test_uv_pack",
             "test_uv_transfer",
             "test_uv_unwrap",
             "test_vid",
             "test_weights",
             "test_workspace",
+            "test_workspace_map",
             "test_x11"
           ],
-          "recursive_module_count": 145
+          "recursive_module_count": 193
         }
       ],
       "code_roots": [
@@ -711,14 +764,22 @@
           "dominant_suffixes": [
             ".py (2)"
           ]
+        },
+        {
+          "name": "typings",
+          "path": "typings",
+          "code_file_count": 1,
+          "dominant_suffixes": [
+            ".ts (1)"
+          ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": true,
-      "tracked_code_files": 394,
-      "tracked_total_lines": 249161,
-      "tracked_nonempty_lines": 220297
+      "tracked_code_files": 540,
+      "tracked_total_lines": 369986,
+      "tracked_nonempty_lines": 329910
     },
     {
       "name": "server",
@@ -737,6 +798,18 @@
       "package_roots": [],
       "code_roots": [
         {
+          "name": "plugins",
+          "path": "plugins",
+          "code_file_count": 12,
+          "dominant_suffixes": [
+            ".sh (5)",
+            ".py (3)",
+            ".json (2)",
+            ".html (1)",
+            ".js (1)"
+          ]
+        },
+        {
           "name": "scripts",
           "path": "scripts",
           "code_file_count": 2,
@@ -748,22 +821,22 @@
         {
           "name": "server",
           "path": "server",
-          "code_file_count": 68,
+          "code_file_count": 69,
           "dominant_suffixes": [
-            ".sh (30)",
+            ".sh (29)",
             ".py (13)",
-            ".yml (11)",
-            ".conf (8)",
+            ".yml (12)",
+            ".conf (9)",
             ".ps1 (2)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 25,
+          "code_file_count": 26,
           "dominant_suffixes": [
             ".ps1 (14)",
-            ".sh (6)",
+            ".sh (7)",
             ".py (5)"
           ]
         }
@@ -771,15 +844,15 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 101,
-      "tracked_total_lines": 15627,
-      "tracked_nonempty_lines": 13873
+      "tracked_code_files": 115,
+      "tracked_total_lines": 18377,
+      "tracked_nonempty_lines": 16441
     },
     {
       "name": "tentacle",
       "path": "tentacle",
-      "domain": "Desktop app (Slots architecture)",
-      "summary": "A multi-application marking menu and UI framework for Maya, 3ds Max, and Blender.",
+      "domain": "The product: the launcher, every tool's panel and Slots class",
+      "summary": "Marking menus (pie menus) and tool panels for Maya and Blender: one hotkey-driven Qt interface for modeling, UV, animation and export.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -796,11 +869,9 @@
           "immediate_modules": [
             "tcl",
             "tcl_blender",
-            "tcl_max",
-            "tcl_maya",
             "tentacle_installer"
           ],
-          "recursive_module_count": 115
+          "recursive_module_count": 125
         }
       ],
       "code_roots": [
@@ -816,9 +887,9 @@
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 116,
+          "code_file_count": 171,
           "dominant_suffixes": [
-            ".py (111)",
+            ".py (166)",
             ".json (5)"
           ]
         }
@@ -826,15 +897,15 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 358,
-      "tracked_total_lines": 120392,
-      "tracked_nonempty_lines": 109784
+      "tracked_code_files": 483,
+      "tracked_total_lines": 232173,
+      "tracked_nonempty_lines": 212666
     },
     {
       "name": "uitk",
       "path": "uitk",
       "domain": "Generic Qt UI library; no DCC/app logic",
-      "summary": "A comprehensive UI toolkit extending Qt Designer workflows with dynamic loading, custom widgets, and automatic signal-slot management.",
+      "summary": "Convention-driven Qt UI toolkit for Python (PySide6 via qtpy): Designer .ui files or code-built UIs, signal-slot wiring by widget name, state persistence, custom widgets and presets.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -855,6 +926,7 @@
             "test_attribute_spec",
             "test_attribute_window",
             "test_attributes",
+            "test_background_task",
             "test_bootstrap",
             "test_bridge_slots",
             "test_bridge_slots_header",
@@ -867,7 +939,9 @@
             "test_color_editor",
             "test_color_mapping_editor",
             "test_color_swatch",
+            "test_column_config",
             "test_combobox",
+            "test_compare_view",
             "test_compile",
             "test_compiled_loader",
             "test_conftest_qsettings_sandbox",
@@ -884,14 +958,19 @@
             "test_events",
             "test_expandable_list",
             "test_external_app_handler",
+            "test_external_app_hub",
             "test_field_visibility",
             "test_filter_option",
             "test_first_paint_stability",
             "test_footer",
             "test_form_panel",
+            "test_form_rows",
             "test_header",
+            "test_host_exit_guard",
             "test_icon_states",
             "test_icons",
+            "test_image_view",
+            "test_layout_items",
             "test_lazy_subpackage_exports",
             "test_line_edit_validator",
             "test_list_input_dialog",
@@ -902,6 +981,7 @@
             "test_marking_menu_anchor_pairing",
             "test_marking_menu_chord_release",
             "test_marking_menu_double_click",
+            "test_marking_menu_host",
             "test_marking_menu_instance_retirement",
             "test_marking_menu_integration",
             "test_marking_menu_leaf_click",
@@ -921,11 +1001,13 @@
             "test_overflow_indicator",
             "test_overlay_clone_positioning",
             "test_package_exports",
+            "test_panel_renames",
             "test_persistence_full_chain",
             "test_persistence_hardening",
             "test_popup_kit",
             "test_preset_editor",
             "test_preset_manager",
+            "test_preview_controller",
             "test_progress_adapter",
             "test_progress_bar",
             "test_qt_wait",
@@ -935,6 +1017,7 @@
             "test_reset_gesture",
             "test_rich_text",
             "test_rich_text_formatter",
+            "test_row_tags",
             "test_run_tests",
             "test_runtime_loader",
             "test_script_output",
@@ -964,11 +1047,14 @@
             "test_switchboard_toggle",
             "test_table_actions",
             "test_table_formatting",
+            "test_table_widget",
             "test_table_widget_add",
             "test_table_widget_autofit",
             "test_table_widget_click_forward",
+            "test_table_widget_edit_as",
             "test_table_widget_truncation",
             "test_table_widget_wheel",
+            "test_testing",
             "test_text_edit_log_handler",
             "test_text_view_box",
             "test_tooltip_mixin",
@@ -977,16 +1063,19 @@
             "test_tree_header_actions",
             "test_tree_selection",
             "test_ui_handler",
+            "test_value_bar",
             "test_value_manager",
             "test_value_option",
             "test_visibility_policy",
             "test_widget_combobox",
             "test_widgets",
             "test_window_auto_hide",
+            "test_window_blur",
             "test_window_height",
-            "test_window_panel"
+            "test_window_panel",
+            "test_window_shadow"
           ],
-          "recursive_module_count": 142
+          "recursive_module_count": 161
         },
         {
           "name": "uitk",
@@ -1004,20 +1093,23 @@
           ],
           "immediate_modules": [
             "_bootstrap",
+            "_facade",
+            "_window_blur",
+            "_window_shadow",
             "compile",
             "events",
             "testing"
           ],
-          "recursive_module_count": 185
+          "recursive_module_count": 214
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 357,
-      "tracked_total_lines": 206427,
-      "tracked_nonempty_lines": 177942
+      "tracked_code_files": 407,
+      "tracked_total_lines": 240768,
+      "tracked_nonempty_lines": 208016
     },
     {
       "name": "unitytk",
@@ -1036,20 +1128,28 @@
           "immediate_subpackages": [],
           "immediate_modules": [
             "base_test",
+            "conftest",
             "run_tests",
+            "test_articulated_rig_runtime",
             "test_asset_delivery",
             "test_audio_events_integration",
             "test_base_test",
+            "test_blender_render_effects_e2e",
+            "test_blender_shadow_plane_integration",
+            "test_blender_shot_metadata_integration",
             "test_bool_to_fade_curve",
             "test_clip_name_contract_integration",
             "test_controller_runtime_integration",
             "test_deploy_templates",
+            "test_embedded_dependencies_integration",
             "test_emissive_groups_integration",
             "test_fade_window_preservation",
             "test_keyed_visibility",
             "test_launcher",
             "test_lightmap_metadata_integration",
+            "test_maya_surface_materials_integration",
             "test_multi_section_audio_integration",
+            "test_package",
             "test_render_effects_e2e",
             "test_render_opacity_controller",
             "test_render_opacity_e2e",
@@ -1064,7 +1164,7 @@
             "test_standalone_enduser",
             "test_temp_projects"
           ],
-          "recursive_module_count": 28
+          "recursive_module_count": 36
         },
         {
           "name": "unitytk",
@@ -1085,9 +1185,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 37,
-      "tracked_total_lines": 17572,
-      "tracked_nonempty_lines": 15157
+      "tracked_code_files": 45,
+      "tracked_total_lines": 32131,
+      "tracked_nonempty_lines": 28383
     },
     {
       "name": "www",

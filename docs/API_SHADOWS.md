@@ -193,7 +193,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 - `blendertk` — [`ProbePlacement`](blendertk/light_utils/lightmap_baker/_probe_placement.py#L184)
 - `mayatk` — [`ProbePlacement`](mayatk/light_utils/lightmap_baker/_probe_placement.py#L178)
-- `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L273)
+- `pythontk` — [`ProbePlacement`](pythontk/geo_utils/probe_placement.py#L283)
 
 ### `RangeResolver` — blendertk, mayatk, pythontk
 

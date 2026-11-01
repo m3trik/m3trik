@@ -879,7 +879,10 @@ def render_policy_cs(policy=None) -> str:
     return "\n".join(lines) + "\n"
 
 
-ABSENCE_CS = POLICY_CS.with_name("MapAbsence.g.cs")
+#: In the templates' core, beside the materials record's reader: every
+#: component that shades from the record reads it (the import-time writers,
+#: Apply's Deliverable Lit), and a component compiles against the core alone.
+ABSENCE_CS = POLICY_CS.parent.parent / "MapAbsence.g.cs"
 
 #: The record's scalar maps, by the C# name and the map type whose absent
 #: value a reader takes for one it cannot find.

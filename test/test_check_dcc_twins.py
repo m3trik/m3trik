@@ -164,6 +164,20 @@ class SymbolCompareTest(_TwinTreeCase):
         self.assertEqual(status, "missing")
         self.assertIn("blendertk", detail[0])
 
+    def test_a_twin_at_its_own_path_on_each_side_compares(self):
+        """A module promoted to a subpackage on one side only
+        (``reference_manager.py`` -> ``reference_manager/_reference_manager.py``)
+        is still one twin: ``b_rel`` names the right side's path."""
+        moved = os.path.join(self.root, "blendertk", "blendertk", "pkg", "moved.py")
+        os.replace(os.path.join(self.root, "blendertk", "blendertk", "pkg", "mod.py"), moved)
+        spec = self.spec(symbols=["C.shared"], b_rel="pkg/moved.py")
+        self.assertEqual(gate.compare(spec)[0], "ok")
+        self.assertIn("pkg/moved.py", spec.label)
+        self.assertEqual(
+            gate.compare(self.spec(symbols=["C.diverged"], b_rel="pkg/moved.py"))[0],
+            "drift",
+        )
+
     APPENDED = """
 
 def %s():
@@ -267,6 +281,88 @@ class LedgerTest(unittest.TestCase):
             with self.subTest(twin=spec.rel):
                 status, detail = gate.compare(spec)
                 self.assertIn(status, ("ok", "absent"), "\n".join(detail[:10]))
+
+
+class MayaBridgeTemplateTablesTest(unittest.TestCase):
+    """blendertk's Maya-bridge import template runs in a bare mayapy
+    (dependency-free by contract), so it spells out the mayatk
+    ``ShaderAttributeMap`` rows it reads: the modern surfaces' emission weights
+    and opacity attributes. Held to the SSoT here, where every sibling is
+    checked out (read as source: nothing Blender runs imports mayatk)."""
+
+    TEMPLATE = "blendertk/blendertk/env_utils/maya_bridge/templates/_import_scene.py"
+    SSOT = "mayatk/mayatk/mat_utils/shader_attribute_map.py"
+
+    @classmethod
+    def setUpClass(cls):
+        paths = [os.path.join(gate.REPO, *p.split("/")) for p in (cls.TEMPLATE, cls.SSOT)]
+        if not all(os.path.isfile(p) for p in paths):
+            raise unittest.SkipTest("DCC siblings not checked out")
+        import ast
+
+        cls.ast = ast
+        with open(paths[0], encoding="utf-8") as fh:
+            cls.template = ast.parse(fh.read())
+        with open(paths[1], encoding="utf-8") as fh:
+            ssot = ast.parse(fh.read())
+        cls.ssot = next(
+            n for n in ssot.body
+            if isinstance(n, ast.ClassDef) and n.name == "ShaderAttributeMap"
+        )
+
+    def value(self, body, name):
+        for node in body:
+            targets = node.targets if isinstance(node, self.ast.Assign) else [
+                getattr(node, "target", None)
+            ]
+            if any(getattr(t, "id", None) == name for t in targets):
+                return node.value
+        self.fail(f"{name} not found")
+
+    def literal(self, body, name):
+        return self.ast.literal_eval(self.value(body, name))
+
+    def ssot_opacity(self):
+        """``{shader type: its opacity attribute}`` off ``SHADER_ATTRS``."""
+        out = {}
+        for key, call in zip(*(lambda d: (d.keys, d.values))(self.value(self.ssot.body, "SHADER_ATTRS"))):
+            for kw in call.keywords:
+                if kw.arg == "opacity" and isinstance(kw.value, self.ast.Tuple):
+                    out[self.ast.literal_eval(key)] = self.ast.literal_eval(kw.value.elts[0])
+        return out
+
+    def test_the_modern_surfaces_rows_match_the_ssot(self):
+        modern = self.literal(self.template.body, "MODERN_SHADER_TYPES")
+        ssot_types = self.literal(self.ssot.body, "SHADER_TYPES")
+        ssot_emission = self.literal(self.ssot.body, "EMISSION_WEIGHT_ATTRS")
+        self.assertTrue(set(modern) <= set(ssot_types), modern)
+        self.assertEqual(
+            self.literal(self.template.body, "EMISSION_WEIGHT_ATTRS"),
+            {t: ssot_emission[t] for t in modern if t in ssot_emission},
+        )
+        opacity = self.ssot_opacity()
+        self.assertEqual(
+            self.literal(self.template.body, "OPACITY_ATTRS"),
+            {t: opacity[t] for t in modern if opacity.get(t, "opacity") != "opacity"},
+        )
+
+    def test_stingray_reads_its_ssot_weight_in_its_own_path(self):
+        """The one row the table leaves out, on purpose: StingrayPBS goes
+        through ``_translate_stingray``, which gates its emissive map on the
+        SSoT's weight attribute itself (an unreadable one lets the map ride,
+        where a modern surface's unreadable weight is 0)."""
+        attr, _mode = self.literal(self.ssot.body, "EMISSION_WEIGHT_ATTRS")["StingrayPBS"]
+        self.assertNotIn("StingrayPBS", self.literal(self.template.body, "EMISSION_WEIGHT_ATTRS"))
+        self.assertIn("StingrayPBS", self.literal(self.template.body, "STINGRAY_SHADER_TYPES"))
+        stingray = next(
+            n for n in self.template.body
+            if isinstance(n, self.ast.FunctionDef) and n.name == "_translate_stingray"
+        )
+        read = {
+            c.value for c in self.ast.walk(stingray)
+            if isinstance(c, self.ast.Constant) and isinstance(c.value, str)
+        }
+        self.assertIn(attr, read)
 
 
 class WrittenOnceTest(unittest.TestCase):
@@ -468,6 +564,19 @@ class HostCopiesTest(unittest.TestCase):
         root = self.tree(self.both("core/plan.py", self.PLANNER))
         gate.LEDGER = [gate.TwinSpec(rel="core/plan.py", reason="fixture " * 8, symbols=("Planner.plan_sizes",))]
         self.assertEqual(gate.host_copy_findings(root)[0], [self.KEY])
+
+    def test_a_ledgered_twin_at_two_different_paths_is_guarded(self):
+        files = self.both("env/manager/_manager.py", "def is_current(count):\n" + self.LOGIC, "env/manager.py")
+        root = self.tree(files)
+        gate.LEDGER = [
+            gate.TwinSpec(
+                rel="env/manager/_manager.py",
+                b_rel="env/manager.py",
+                reason="fixture " * 8,
+                symbols=("is_current",),
+            )
+        ]
+        self.assertEqual(gate.host_copy_findings(root), ([], [], []))
 
     def test_a_whole_file_twin_is_guarded(self):
         root = self.tree(self.both("core/plan.py", self.PLANNER))

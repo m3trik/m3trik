@@ -129,17 +129,25 @@ class TwinSpec:
 
     Parameters:
         rel: Path relative to each package's inner source dir, identical on
-            both sides (``anim_utils/shots/.../graph_sync.py``).
+            both sides (``anim_utils/shots/.../graph_sync.py``) unless
+            *b_rel* is given.
         symbols: Qualified ``Class.method`` names that must match. ``None``
             means the WHOLE FILE must match.
         reason: Why this pair is duplicated at all -- the §6 justification.
         note: Optional caveat recorded against the entry.
         a: Left package (default mayatk, the reference).
         b: Right package (default blendertk, the mirror).
+        b_rel: The right package's path, where a module was promoted to a
+            subpackage on one side only (``env_utils/reference_manager.py``
+            beside mayatk's ``env_utils/reference_manager/_reference_manager.py``);
+            *rel* by default.
     """
 
-    def __init__(self, rel, reason, symbols=None, note="", a="mayatk", b="blendertk"):
+    def __init__(
+        self, rel, reason, symbols=None, note="", a="mayatk", b="blendertk", b_rel=None
+    ):
         self.rel = rel
+        self.b_rel = b_rel or rel
         self.reason = reason
         # ``symbols=None`` means WHOLE FILE; an empty sequence means "check
         # nothing", which is never what an entry wants. Coercing one into the
@@ -160,7 +168,8 @@ class TwinSpec:
         kind = (
             "whole-file" if self.symbols is None else f"{len(self.symbols)} symbol(s)"
         )
-        return f"{self.rel}  [{self.a}<->{self.b}, {kind}]"
+        where = self.rel if self.b_rel == self.rel else f"{self.rel} = {self.b_rel}"
+        return f"{where}  [{self.a}<->{self.b}, {kind}]"
 
 
 # Seeded 2026-09-16 from a measured pass, NOT from a guess: every symbol below
@@ -547,6 +556,53 @@ LEDGER: List[TwinSpec] = [
             "the round trip read each host's scene."
         ),
     ),
+    TwinSpec(
+        rel="mat_utils/texture_path_editor.py",
+        reason=(
+            "The Texture Path Editor's lightmap half: delegations to each host's "
+            "LightmapRecords (normalize, revert, repoint) and the row bookkeeping "
+            "around them, on the per-host editor class whose texture half walks "
+            "the host's file nodes. pythontk has no Texture Path Editor base to "
+            "hold them without that class shell."
+        ),
+        symbols=(
+            "TexturePathEditor._find_copy_answers",
+            "TexturePathEditor._lightmap_entries",
+            "TexturePathEditor._lightmap_maps",
+            "TexturePathEditor._lightmap_objects",
+            "TexturePathEditor._progress",
+            "TexturePathEditor._repoint_lightmaps",
+            "TexturePathEditor.normalize_lightmaps",
+            "TexturePathEditor.revert_lightmaps",
+        ),
+        note=(
+            "8 of 62 shared methods (measured 2026-11-01, normalize_lightmaps "
+            "out of the written-once baseline); the scans and relinks read "
+            "each host's nodes."
+        ),
+    ),
+    TwinSpec(
+        rel="env_utils/reference_manager/_reference_manager.py",
+        b_rel="env_utils/reference_manager.py",
+        reason=(
+            "The Reference Manager's foreign-row rules (is the row foreign, its "
+            "scratch twin, which scene is open, stale scratch cleanup), on the "
+            "per-host engine tentacle's shared panel calls. The open-scene read "
+            "and the bake are each host's; the engines share no pythontk base "
+            "yet (BACKLOG 2026-10-28: the root-and-scan state machine)."
+        ),
+        symbols=(
+            "ReferenceManager.discard_stale_scratches",
+            "ReferenceManager.foreign_scratch_path",
+            "ReferenceManager.is_current",
+            "ReferenceManager.is_foreign",
+        ),
+        note=(
+            "4 of 54 shared methods (measured 2026-11-01, is_current out of the "
+            "written-once baseline). mayatk's module was promoted to a "
+            "subpackage; blendertk's is still one module."
+        ),
+    ),
 ]
 
 
@@ -823,14 +879,14 @@ def compare(spec: TwinSpec) -> Tuple[str, List[str]]:
     for pkg in (spec.a, spec.b):
         if not os.path.isdir(os.path.join(REPO, pkg, pkg)):
             return "absent", [f"{pkg} not checked out"]
-    a_path, b_path = _source(spec.a, spec.rel), _source(spec.b, spec.rel)
+    a_path, b_path = _source(spec.a, spec.rel), _source(spec.b, spec.b_rel)
     if a_path is None or b_path is None:
-        which = spec.a if a_path is None else spec.b
-        return "missing", [f"{spec.rel}: not found in {which}"]
+        which, rel = (spec.a, spec.rel) if a_path is None else (spec.b, spec.b_rel)
+        return "missing", [f"{rel}: not found in {which}"]
 
     if spec.symbols is None:
         a = twin_normalized(_read(a_path), spec.rel)
-        b = twin_normalized(_read(b_path), spec.rel)
+        b = twin_normalized(_read(b_path), spec.b_rel)
         if a == b:
             return "ok", []
         diff = [
@@ -842,7 +898,7 @@ def compare(spec: TwinSpec) -> Tuple[str, List[str]]:
 
     a_syms, b_syms = (
         extract_symbols(a_path, spec.rel),
-        extract_symbols(b_path, spec.rel),
+        extract_symbols(b_path, spec.b_rel),
     )
     detail, drifted, missing = [], [], []
     names = [
@@ -1066,17 +1122,18 @@ HOST_COPY_BASELINE = "m3trik/scripts/check_dcc_twins_baseline.json"
 def _guarded_twin(a: Tuple[str, str], b: Tuple[str, str]) -> bool:
     """Whether a mayatk place and a blendertk place, each ``(rel, name)``, are
     one guarded twin: the same file on both sides, which another guard
-    compares (:data:`GUARDED_ELSEWHERE`) or the ledger does -- whole, or as a
-    symbol both are (:func:`_covers`). Two guards never excuse a copy between
-    the files they hold."""
+    compares (:data:`GUARDED_ELSEWHERE`), or the pair of files a ledger entry
+    compares (its ``rel`` and ``b_rel``) -- whole, or as a symbol both are
+    (:func:`_covers`). Two guards never excuse a copy between the files they
+    hold."""
     (rel, name), (b_rel, b_name) = a, b
-    if rel != b_rel:
-        return False
-    for path in GUARDED_ELSEWHERE:
+    for path in GUARDED_ELSEWHERE if rel == b_rel else ():
         if rel == path or (path.endswith("/") and rel.startswith(path)):
             return True
     for spec in LEDGER:
-        if spec.rel != rel or {spec.a, spec.b} != set(HOST_PACKAGES):
+        if (spec.rel, spec.b_rel) != (rel, b_rel) or {spec.a, spec.b} != set(
+            HOST_PACKAGES
+        ):
             continue
         if spec.symbols is None or (
             name == b_name and any(_covers(s, name) for s in spec.symbols)

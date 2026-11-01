@@ -417,6 +417,30 @@ class WrittenOnceTest(unittest.TestCase):
         os.remove(os.path.join(root, "tentacle", ".gitignore"))
         self.assertEqual(len(gate.written_once_violations(root)), 1)
 
+    def test_a_vendored_copy_a_guard_compares_is_not_a_copy(self):
+        """CODE_STANDARD section 6's one sanctioned duplicate: extapps' vendored
+        Marmoset engine is byte-equal to mayatk's and blendertk's, held so by
+        extapps' vendor-sync test, so its three places are no copy. The same
+        body anywhere the guard does not compare still is."""
+        guard = (
+            "import os\n"
+            'MARMOSET_PANEL_DIR = "marmoset_workflow"\n'
+            'MARMOSET_PANEL_VENDORED = ("toolbag_log.py", os.path.join("templates", "a.py"))\n'
+        )
+        body = "def tail(count):\n" + self.LOGIC
+        vendored = {
+            "extapps/test/test_vendor_sync.py": guard,
+            "extapps/extapps/marmoset_workflow/toolbag_log.py": body,
+            "mayatk/mayatk/mat_utils/marmoset_bridge/toolbag_log.py": body,
+            "blendertk/blendertk/mat_utils/marmoset_bridge/toolbag_log.py": body,
+        }
+        self.assertEqual(gate.written_once_violations(self.tree(vendored)), [])
+        stray = dict(vendored, **{"extapps/extapps/look_match/slots.py": body})
+        self.assertEqual(len(gate.written_once_violations(self.tree(stray))), 1)
+        unlisted = dict(vendored)
+        unlisted["extapps/test/test_vendor_sync.py"] = guard.replace('"toolbag_log.py", ', "")
+        self.assertEqual(len(gate.written_once_violations(self.tree(unlisted))), 1)
+
     def test_a_run_judges_only_copies_its_packages_write(self):
         """A copy between tentacle's layout and mayatk stops a release of
         either, never one of blendertk, which wrote no part of it."""

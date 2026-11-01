@@ -1054,6 +1054,62 @@ def function_bodies(path: str) -> List[Tuple[int, str, str, Optional[str]]]:
     return found
 
 
+def _guard_literal(node: ast.AST) -> Any:
+    """A guard's constant: a literal, a tuple of them, or an ``os.path.join`` of
+    string literals (as ``/``-joined text); ``None`` for anything else."""
+    if isinstance(node, ast.Tuple):
+        return tuple(_guard_literal(item) for item in node.elts)
+    if (
+        isinstance(node, ast.Call)
+        and ast.unparse(node.func) == "os.path.join"
+        and all(isinstance(a, ast.Constant) and isinstance(a.value, str) for a in node.args)
+    ):
+        return "/".join(a.value for a in node.args)
+    try:
+        return ast.literal_eval(node)
+    except ValueError:
+        return None
+
+
+def _vendored_layout_files(workspace: str) -> Set[str]:
+    """The workspace paths of the files extapps' vendor-sync guard holds
+    byte-equal to mayatk's (its ``MARMOSET_PANEL_DIR`` folder and
+    ``MARMOSET_PANEL_VENDORED`` files), read from the guard itself as
+    :func:`compared_elsewhere` reads the host side; none without the guard."""
+    sync = os.path.join(workspace, *_VENDOR_SYNC.split("/"))
+    if not os.path.isfile(sync):
+        return set()
+    with open(sync, encoding="utf-8") as fh:
+        tree = ast.parse(fh.read())
+    consts: Dict[str, Any] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                consts[target.id] = _guard_literal(node.value)
+    folder, files = consts.get("MARMOSET_PANEL_DIR"), consts.get("MARMOSET_PANEL_VENDORED")
+    if not isinstance(folder, str) or not isinstance(files, tuple):
+        return set()
+    return {f"extapps/extapps/{folder}/{rel}" for rel in files if isinstance(rel, str)}
+
+
+def _guarded_place(rel: str, vendored: Set[str]) -> bool:
+    """Whether the workspace file *rel* is a vendored copy a drift guard
+    compares: one of *vendored*, or a host file :data:`GUARDED_ELSEWHERE`
+    leaves to its guard."""
+    if rel in vendored:
+        return True
+    for package in HOST_PACKAGES:
+        prefix = f"{package}/{package}/"
+        if rel.startswith(prefix):
+            sub = rel[len(prefix):]
+            return any(
+                sub == path or (path.endswith("/") and sub.startswith(path))
+                for path in GUARDED_ELSEWHERE
+            )
+    return False
+
+
 def written_once_violations(
     workspace: Optional[str] = None, packages: Optional[Sequence[str]] = None
 ) -> List[str]:
@@ -1078,12 +1134,15 @@ def written_once_violations(
     for path in _library_files(workspace):
         record(path, keep_new=False)
 
+    vendored = _vendored_layout_files(workspace)
     found = []
     for text, places in groups.items():
         by_host: Dict[Optional[str], List[str]] = {}
         for where, host in places:
             by_host.setdefault(host, []).append(where)
         for host, wheres in by_host.items():
+            if all(_guarded_place(w.split(":", 1)[0], vendored) for w in wheres):
+                continue  # one vendored copy, held byte-equal by its guard (section 6)
             if len(wheres) > 1 and (
                 run is None or {w.split("/", 1)[0] for w in wheres} & run
             ):

@@ -46,7 +46,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Finding` — mayatk, pythontk
 
-- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L113)
+- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L111)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L43)
 
 ### `FramesSourceMixin` — extapps, tentacle
@@ -112,7 +112,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MaterialRecord` — mayatk, pythontk
 
-- `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L85)
+- `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L83)
 - `pythontk` — [`MaterialRecord`](pythontk/core_utils/engines/scene_export/material_record.py#L120)
 
 ### `MeshConvertSlots` — extapps, tentacle
@@ -172,7 +172,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 - `extapps` — [`Parameters`](extapps/unity_workflow/parameters.py#L157)
 - `extapps` — [`Parameters`](extapps/webxr_preview/parameters.py#L360)
 - `mayatk` — [`Parameters`](mayatk/env_utils/blender_bridge/parameters.py#L508)
-- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L167)
+- `mayatk` — [`Parameters`](mayatk/env_utils/unity_bridge/parameters.py#L63)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/marmoset_bridge/parameters.py#L418)
 - `mayatk` — [`Parameters`](mayatk/mat_utils/substance_bridge/parameters.py#L266)
 - `mayatk` — [`Parameters`](mayatk/uv_utils/rizom_bridge/parameters.py#L527)
@@ -345,7 +345,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ---
 
-## Intentional mayatk↔blendertk port parity (182)
+## Intentional mayatk↔blendertk port parity (181)
 
 _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slots). Expected — not DRY violations. Names only:_
 
@@ -458,7 +458,6 @@ _blendertk deliberately mirrors mayatk's public names (branch-free tentacle slot
 - `SceneDiagnostics`
 - `SceneExporter`
 - `SceneInfoSection`
-- `SceneState`
 - `ScriptConsole`
 - `ScriptJobManager`
 - `SegmentCollector`

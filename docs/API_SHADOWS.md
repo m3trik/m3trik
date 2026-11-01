@@ -26,7 +26,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `Finding` — mayatk, pythontk
 
-- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L113)
+- `mayatk` — [`Finding`](mayatk/core_utils/diagnostics/audit_records.py#L111)
 - `pythontk` — [`Finding`](pythontk/file_utils/mesh_convert/export_verify.py#L43)
 
 ### `HierarchyBaseline` — blendertk, mayatk, pythontk
@@ -57,7 +57,7 @@ _Touch `pythontk` or span 3+ packages — the real DRY review surface._
 
 ### `MaterialRecord` — mayatk, pythontk
 
-- `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L85)
+- `mayatk` — [`MaterialRecord`](mayatk/core_utils/diagnostics/audit_records.py#L83)
 - `pythontk` — [`MaterialRecord`](pythontk/core_utils/engines/scene_export/material_record.py#L120)
 
 ### `OpRegistry` — blendertk, mayatk, pythontk

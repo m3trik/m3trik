@@ -1,7 +1,7 @@
 """Tests for verify_runtime_surface.py — the runtime-vs-static API drift gate.
 
 Pure-logic tests for the diff, plus an in-process integration check that
-pythontk's live HelpMixin surface matches its committed static registry (the
+pythontk's live HelpMixin surface matches the static read of its source (the
 canonical zero-drift case)."""
 
 import sys
@@ -118,7 +118,7 @@ class TestPrivateBaseRecords(unittest.TestCase):
 class TestPythontkIntegration(unittest.TestCase):
     def test_pythontk_runtime_matches_static(self):
         """The canonical zero-drift case: pythontk has no metaclass magic, so its
-        live surface must equal its committed registry."""
+        live surface must equal the static read of its source."""
         self.assertEqual(v.main(["verify", "pythontk"]), 0)
 
     def test_runtime_surface_nonempty(self):

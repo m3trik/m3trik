@@ -360,12 +360,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "packages",
         nargs="*",
-        help="the run's packages: checked when one is in the registry set "
+        help="the run's packages: checked when one is in the ecosystem set "
         "(the scan always reads every package -- a move lands in two)",
     )
     args = parser.parse_args(argv)
     if args.packages and not set(args.packages) & set(_registry_set()):
-        print("Saved names: none of these packages is in the registry set.")
+        print("Saved names: none of these packages is in the ecosystem set.")
         return 0
 
     current = scan(args.workspace)

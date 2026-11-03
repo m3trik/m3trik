@@ -204,6 +204,7 @@ def _stray_allowed(rel: str) -> bool:
 WORKSPACE_DIRS_ALLOWED = {
     ".git",
     ".claude",  # agent ledgers, hooks, settings
+    ".agents",  # the root's vendored agent packs (AgentInstructions.sync)
     ".github",  # workspace-level agent/skill config (not a repo's CI)
     ".vscode",
     ".archive",  # DOCS_STANDARD.md: completed one-shot reports are parked here
@@ -213,7 +214,8 @@ WORKSPACE_DIRS_ALLOWED = {
 }
 
 WORKSPACE_FILES_ALLOWED: Dict[str, str] = {
-    "CLAUDE.md": "monorepo instruction file; root of the dispatch table",
+    "AGENTS.md": "monorepo instruction file; root of the dispatch table",
+    "CLAUDE.md": "Claude Code's stub: imports AGENTS.md and the root's packs",
     "_residue_archive_2026-09-16.zip": (
         "one-time recoverable holding the 34 files removed by the 2026-09-16 "
         "residue sweep. DELETE it once the contents are confirmed unwanted, "

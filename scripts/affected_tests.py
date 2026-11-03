@@ -29,6 +29,10 @@ What a changed file selects, in its own package:
   panel ``.ui``): also that package's structural suites, which read the files
   themselves so no import reaches them -- plus a note naming the host-only manual
   checks (tentacle ``test/blender``) that import the change's stem family;
+- a module that defines a declared operation's function (the class or function
+  a committed ``operations.json`` target names), or a package's ``operations.py``:
+  also the suite that rebuilds every catalog (``CATALOG_SUITE``), since an
+  entry is its function's signature and docstring, which no import reaches;
 - the test harness (``conftest.py``, ``base_test.py``, ``run_tests.py``,
   ``_suite_driver.py``, ``_host.py``): the runner's own tests;
 - docs, changelogs and generated sidecars: nothing (``check_docs.py`` is their gate).
@@ -50,6 +54,9 @@ tentacle's Maya-hosted suites: those reading ``_host.MAYA_AVAILABLE`` or importi
 the Maya host, ``Runner.host_modules``) -- never stamps a badge, and keeps each
 runner's full output in ``<repo>/test/temp_tests/affected_<time>.log``. A run
 whose tally shows no test executed (every one skipped) reads RAN NOTHING, not PASS.
+On Windows each runner runs on pythontk's private desktop, so no window a test
+opens (a tkinter probe, a console, a GUI Maya) takes the user's focus or input;
+to watch one, run its runner directly (``--show`` for its GUI Maya).
 
 Usage:
     python affected_tests.py <changed files...>          # print the plan
@@ -67,6 +74,7 @@ import argparse
 import ast
 import datetime
 import fnmatch
+import json
 import os
 import re
 import subprocess
@@ -108,8 +116,8 @@ GENERIC_SPREAD = 3
 MAX_DEPTH = 3
 #: A module with at most this many importers also selects the importers' tests.
 IMPORTER_FANOUT = 5
-#: Generated sidecars and changelogs: never a test input, never "dirty work".
-GENERATED = re.compile(r"(^|/)(API_[A-Z_]+\.(md|json)|PARITY_[A-Z_]+\.md|CHANGELOG\.md)$")
+#: Generated parity docs and changelogs: never a test input, never "dirty work".
+GENERATED = re.compile(r"(^|/)(PARITY_[A-Z_]+\.md|CHANGELOG\.md)$")
 
 
 # ---------------------------------------------------------------- packages
@@ -192,6 +200,11 @@ GATES: Tuple[Gate, ...] = (
     # the root reaches it as a dependency, so a root change selects it outright.
     Gate("pythontk", ("pythontk/__init__.py",), ("test_surface_snapshot",)),
 )
+
+
+#: The suite that rebuilds every committed operation catalog from its
+#: declarations and holds it to the rules (``OperationProvider.check``).
+CATALOG_SUITE = ("m3trik", "test_sync_workspace")
 
 
 @lru_cache(maxsize=None)
@@ -321,11 +334,16 @@ _INDEX: Dict[str, Tuple[int, int, FileInfo]] = {}
 _INDEX_DIRTY = False
 
 
+def _workspace_pythontk() -> None:
+    """Put this workspace's pythontk first on ``sys.path``."""
+    if str(WORKSPACE / "pythontk") not in sys.path:
+        sys.path.insert(0, str(WORKSPACE / "pythontk"))
+
+
 def _index_path() -> Optional[Path]:
     """The persistent index (``ptk.UserConfig.cache_dir``), or None without pythontk."""
     try:
-        if str(WORKSPACE / "pythontk") not in sys.path:
-            sys.path.insert(0, str(WORKSPACE / "pythontk"))
+        _workspace_pythontk()
         from pythontk.core_utils.user_config import UserConfig
 
         return UserConfig.cache_dir("affected_tests", create=True) / f"index_v{INDEX_VERSION}.pickle"
@@ -588,6 +606,7 @@ def select(paths: Sequence[Path], workspace: Path = WORKSPACE, downstream: bool 
             sel.notes.append(f"outside every tested unit: {raw}")
             continue
         _select_gates(sel, pkg, path, workspace)
+        _select_operations(sel, pkg, path, workspace)
         if not path.exists():  # deleted: its repo knew it at HEAD
             if path.suffix == ".py" and pkg.test_dir.resolve() not in path.parents:
                 _select_source(sel, pkg, path, workspace, downstream, info=_vanished(pkg, path))
@@ -632,6 +651,44 @@ def _select_gates(sel: Selection, pkg: Package, path: Path, workspace: Path) -> 
             ):
                 key = (gate.host, check.relative_to(workspace.resolve()).as_posix())
                 sel.host_only.setdefault(key, set()).add(path.name)
+
+
+@lru_cache(maxsize=None)
+def operation_targets(workspace: Path = WORKSPACE) -> Tuple[Tuple[str, str, str], ...]:
+    """``(package, module, top-level name)`` for each function a committed
+    operation catalog declares, read from ``<package>/operations.json``."""
+    found = []
+    for pkg in packages(workspace).values():
+        catalog = pkg.source / "operations.json" if pkg.source else None
+        if catalog is None or not catalog.is_file():
+            continue
+        try:
+            entries = json.loads(catalog.read_text(encoding="utf-8")).get("operations", [])
+        except ValueError:
+            continue
+        for entry in entries:
+            module, _, qualname = str(entry.get("target") or "").partition(":")
+            if qualname:
+                found.append((pkg.name, module, qualname.split(".")[0]))
+    return tuple(found)
+
+
+def _select_operations(sel: Selection, pkg: Package, path: Path, workspace: Path) -> None:
+    """The catalog suite, for a change to a package's declarations or to a
+    module that defines a function they declare: by its module (``pkg.mod:f``),
+    or by the class or function a root-name target names (``pkg:Class.f``)."""
+    if path.suffix != ".py" or pkg.source is None or not path.exists():
+        return
+    if path.resolve() == (pkg.source / "operations.py").resolve():
+        sel.add(*CATALOG_SUITE, "the package's operation declarations")
+        return
+    info = _parse(path, pkg.import_root)
+    if info is None:
+        return
+    for package, module, head in operation_targets(workspace):
+        if package == pkg.name and (info.module == module or (module == package and head in info.defines)):
+            sel.add(*CATALOG_SUITE, f"defines {head}, a declared operation's function")
+            return
 
 
 def _select_one(sel: Selection, pkg: Package, path: Path, workspace: Path, downstream: bool) -> None:
@@ -1081,11 +1138,7 @@ def run(cmds, workspace: Path = WORKSPACE) -> int:
         log = log_dir / f"affected_{stamp}_{index}_{name}.log"
         print(f"\n=== {name}: {len(modules)} module(s) ===\n$ {_display(argv)}", flush=True)
         start = time.monotonic()
-        with open(log, "w", encoding="utf-8", errors="replace") as handle:
-            code = subprocess.run(
-                argv, cwd=str(workspace), env=env, stdout=handle, stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-            ).returncode
+        code = _run_one(argv, workspace, env, log)
         elapsed = time.monotonic() - start
         text = log.read_text(encoding="utf-8", errors="replace")
         tail = digest(text, failed=bool(code))
@@ -1107,6 +1160,30 @@ def run(cmds, workspace: Path = WORKSPACE) -> int:
         outcome.append("RAN NOTHING in " + ", ".join(idle))
     print(f"\n=== affected tests: {'; '.join(outcome) or 'all passed'} ===")
     return 1 if outcome else 0
+
+
+def _run_one(argv: Sequence[str], workspace: Path, env: dict, log: Path) -> int:
+    """Run one runner, its output into *log*, and return its exit code.
+
+    On pythontk's private desktop where it can hide one (Windows): no window a
+    test opens -- a tkinter probe, a console, a GUI Maya -- takes the user's
+    focus or input, and nothing the runner started outlives it. Elsewhere, or
+    without pythontk, a plain child."""
+    try:
+        _workspace_pythontk()
+        from pythontk.core_utils.app_launcher import AppLauncher
+    except Exception:
+        AppLauncher = None
+    if AppLauncher is not None and AppLauncher.can_hide():
+        return AppLauncher.run(
+            argv[0], list(argv[1:]), cwd=str(workspace), env=env,
+            output_file=str(log), hidden=True,
+        ).returncode
+    with open(log, "w", encoding="utf-8", errors="replace") as handle:
+        return subprocess.run(
+            argv, cwd=str(workspace), env=env, stdout=handle, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+        ).returncode
 
 
 def _tolerant_output() -> None:

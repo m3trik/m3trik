@@ -13,7 +13,7 @@ that was false.
 
 Scope -- what this is NOT
 -------------------------
-The mayatk<->blendertk name collisions in ``docs/API_SHADOWS.md`` are the
+The mayatk<->blendertk name collisions (``check_api_surface.py --shadows``) are the
 deliberate public-API mirror that keeps tentacle's slots branch-free. Those are
 not twins in this sense and are none of this script's business. What IS in scope
 is the **controller tier**: helper mixins that carry the same algorithm in both

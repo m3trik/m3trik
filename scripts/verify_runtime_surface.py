@@ -4,12 +4,12 @@
 Two independent introspection producers must agree on a package's public *class
 surface*:
 
-  * the STATIC registry - ``generate_api_registry.py`` walks source with ``ast``
-    and owns the committed ``API_REGISTRY.json``. It cannot see members that only
-    exist at runtime (metaclass/mixin injection) nor detect a public method a
-    decorator shadows.
-  * the DYNAMIC surface - ``pythontk.HelpMixin`` introspects the *live* classes
-    (``_collect_records``), so it sees exactly those.
+  * the STATIC surface - ``pythontk.ApiSurface.read`` walks source with
+    ``ast`` (what ``api.search`` answers from). It cannot see members that
+    only exist at runtime (metaclass/mixin injection) nor detect a public
+    method a decorator shadows.
+  * the DYNAMIC surface - ``pythontk.ApiSurface.members`` introspects the
+    *live* classes, so it sees exactly those.
 
 This gate compares the two by member NAME per class (with kind as a secondary
 signal, see below) - deliberately NOT by signature string, which the
@@ -21,8 +21,8 @@ genuine metaclass injection (into the class ``__dict__``) is caught.
 Drift is classified by member NAME so a kind change is not mistaken for a
 missing method:
 
-    * ``missing`` - the registry promises a public member the live class does
-      NOT have (a real contract break / stale registry) -> FAIL.
+    * ``missing`` - the source promises a public member the live class does
+      NOT have (a real contract break) -> FAIL.
     * ``added`` - live-only members the static walker cannot see (metaclass /
       mixin injection, nested classes, dynamically-composed methods) ->
       advisory, exit 0 unless ``--strict``.
@@ -54,7 +54,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # The static walker only emits def'd class members, so a live member is LIVE-ONLY
-# drift only in these kinds - a plain class attribute is no registry member. Every
+# drift only in these kinds - a plain class attribute is no static member. Every
 # live name still counts as PRESENT: a descriptor such as ClassProperty is a def to
 # the walker and an attribute at runtime.
 METHOD_KINDS = {"method", "staticmethod", "classmethod", "property"}
@@ -64,19 +64,19 @@ METHOD_KINDS = {"method", "staticmethod", "classmethod", "property"}
 
 
 def load_static_surface(pkg_dir: Path) -> dict[str, dict[str, str]]:
-    """``{class_name: {member_name: kind}}`` from a package's committed
-    ``API_REGISTRY.json``. Same-named classes across modules are merged."""
-    path = pkg_dir / "API_REGISTRY.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
+    """``{class_name: {member_name: kind}}`` read from the package's source
+    (``ApiSurface.read`` of ``<pkg_dir>/<name>/``). Same-named classes across
+    modules are merged."""
+    src = str(REPO_ROOT / "pythontk")  # the sibling's reader, never an older install
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from pythontk import ApiSurface  # noqa: WPS433 (import after path setup)
+
     surface: dict[str, dict[str, str]] = {}
-    for mod in data.get("modules", []):
-        for cls in mod.get("classes", []):
-            members = {
-                m["name"]: m["kind"]
-                for m in cls.get("members", [])
-                if m["kind"] in METHOD_KINDS
-            }
-            surface.setdefault(cls["name"], {}).update(members)
+    for mod in ApiSurface.read(pkg_dir / pkg_dir.name).modules:
+        for cls in mod.classes:
+            members = {m.name: m.kind for m in cls.members if m.kind in METHOD_KINDS}
+            surface.setdefault(cls.name, {}).update(members)
     return surface
 
 
@@ -89,14 +89,14 @@ def _own_and_private_base_records(obj: type) -> list:
     (``Facade(_JobMixin, ...)``, each mixin in its own ``_<job>.py``),
     followed through private bases only.
 
-    Mirrors ``generate_api_registry.py``'s static rule exactly, so the two
-    producers stay comparable.  ``_collect_records(inherited=False)`` is
-    ``cls.__dict__`` only, which drops the capability mixins this repo builds
-    its classes from (``Matrices(_MatrixMath, …)``,
-    ``PackageManager(_PackageManagerHelperMixin, …)``) — real public surface
-    (``ptk.PackageManager.install`` resolves through the MRO) that neither
-    side used to see.  ``inherited=True`` would over-report instead, pulling
-    in ``HelpMixin`` and every cross-module public base.
+    Mirrors the static read's rule exactly, so the two producers stay
+    comparable.  ``ApiSurface.members(inherited=False)`` is ``cls.__dict__``
+    only, which drops the capability mixins this repo builds its classes from
+    (``Matrices(_MatrixMath, …)``, ``PackageManager(_PackageManagerHelperMixin,
+    …)``) — real public surface (``ptk.PackageManager.install`` resolves
+    through the MRO) that neither side used to see.  ``inherited=True`` would
+    over-report instead, pulling in ``HelpMixin`` and every cross-module
+    public base.
     """
     package = obj.__module__.split(".")[0]
     owners, stack = [], [obj]
@@ -111,8 +111,10 @@ def _own_and_private_base_records(obj: type) -> list:
             if base.__name__.startswith("_")
             and getattr(base, "__module__", "").split(".")[0] == package
         )
+    from pythontk import ApiSurface  # noqa: WPS433 (import after path setup)
+
     allowed = {name for klass in owners for name in vars(klass)}
-    records = obj._collect_records(inherited=True, private=False)
+    records = ApiSurface.members(obj, inherited=True, private=False)
     out, seen_names = [], set()
     for rec in records:
         if rec.name in allowed and rec.name not in seen_names:
@@ -202,8 +204,8 @@ def compute_drift(
     """Per-class drift over the classes present on BOTH sides, classified by
     member NAME so a kind change is not mistaken for a missing method:
 
-      * ``missing``      - in the registry, absent at runtime (real contract
-                           break / stale registry) -> FAIL.
+      * ``missing``      - in the source, absent at runtime (a real contract
+                           break) -> FAIL.
       * ``added``        - live-only METHOD_KINDS member (metaclass/mixin-
                            injected, nested class) -> advisory; the static
                            walker cannot see these.
@@ -233,11 +235,11 @@ def compute_drift(
 
 def _print_report(pkg_name: str, report: dict[str, dict[str, list]]) -> None:
     if not report:
-        print(f"{pkg_name}: runtime surface matches the static registry.")
+        print(f"{pkg_name}: runtime surface matches the static read.")
         return
     for cls, d in report.items():
         for name in d["missing"]:
-            print(f"  FAIL {cls}.{name} - in registry, MISSING at runtime")
+            print(f"  FAIL {cls}.{name} - in source, MISSING at runtime")
         for name in d["added"]:
             print(f"  note {cls}.{name} - live only (static walker can't see it)")
         for name, static_kind, runtime_kind in d["kind_changed"]:

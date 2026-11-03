@@ -5,6 +5,7 @@ Tests push.ps1 functionality and package structure
 without actually publishing to PyPI.
 """
 
+import json
 import os
 import re
 import shutil
@@ -55,9 +56,11 @@ class TestSemverGate(unittest.TestCase):
     caught by hand and bumped to 0.9.0.
 
     The gate's decision table is exercised directly, with the verdict stubbed:
-    `Get-RequiredBump` shells out to the generator, which is tested on its own
-    (`test_generate_api_registry.TestSemverVerdict`). What matters here is that
-    push.ps1 acts on the answer -- and keeps releasing when it cannot get one.
+    `Get-RequiredBump` shells out to `check_api_surface.py --semver`, which is
+    tested on its own (`test_check_api_surface.TestSemverVerdict`), and is run
+    for real against a stub script in `TestRequiredBumpAsksTheScript`. What
+    matters here is that push.ps1 acts on the answer -- and refuses when it
+    cannot get one.
     """
 
     # `Write-Err` is taken from common.ps1, NOT stubbed: it is `Write-Host`, so
@@ -93,6 +96,11 @@ $global:verdict = @{{ bump = 'patch'; reasons = @() }}
 "RESULT:clean_as_patch=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
 $global:verdict = $null
 "RESULT:unknown_verdict=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
+$global:verdict = @{{ failed = 'no baseline: none (v0.17.0 names no commit)'; detail = @('no verdict for p') }}
+"RESULT:failed_verdict=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
+$AllowBreakingPatch = $true
+"RESULT:failed_verdict_override=$([bool](Test-SemverGate 'p' '0.17.0' '0.17.1'))"
+$AllowBreakingPatch = $false
 $global:verdict = @{{ bump = 'minor'; reasons = @('x') }}
 "RESULT:unparseable_published=$([bool](Test-SemverGate 'p' 'not-a-version' '0.17.1'))"
 $global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unaccounted = @('mod.py::Widget.spin') }}
@@ -163,14 +171,123 @@ $global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unacco
     def test_a_delta_that_removes_nothing_is_unconstrained(self):
         self._assert("clean_as_patch", True)
 
-    def test_an_unanswerable_verdict_does_not_block_the_release(self):
-        """No generator, or unparseable output: proceed. A gate that invented
-        a verdict would refuse releases it cannot justify, which is how gates
-        get bypassed on reflex."""
+    def test_no_script_to_ask_does_not_block_the_release(self):
+        """A hermetic -Root run has no m3trik scripts: there is nothing to ask."""
         self._assert("unknown_verdict", True)
+
+    def test_a_verdict_the_script_could_not_give_is_refused(self):
+        """A crash, unparseable output or a missing baseline read as a clean
+        patch (review: a tag missing from the checkout shipped a removal as
+        a patch). Refused, with -AllowBreakingPatch as the deliberate way past."""
+        self._assert("failed_verdict", False)
+        self._assert("failed_verdict_override", True)
 
     def test_an_unparseable_published_version_does_not_block(self):
         self._assert("unparseable_published", True)
+
+
+class TestRequiredBumpAsksTheScript(unittest.TestCase):
+    """The real `Get-RequiredBump` against a stub `check_api_surface.py` that
+    records its argv: the published version's tag reaches the script, and a
+    script that fails, prints no verdict or has no baseline is a FAILED
+    verdict carrying its stderr -- measured by review: a crash, or a tag
+    missing from the checkout, read as a clean patch."""
+
+    STUB = (
+        "import json, pathlib, sys\n"
+        "here = pathlib.Path(__file__).parent\n"
+        "mode = (here / 'mode.txt').read_text().strip()\n"
+        "(here / f'argv_{mode}.json').write_text(json.dumps(sys.argv[1:]))\n"
+        "row = {'package': sys.argv[1], 'reasons': [], 'unaccounted': []}\n"
+        "if mode == 'ok':\n"
+        "    print(json.dumps([dict(row, bump='minor', reasons=['m.py::X'], baseline='the last release (v0.17.0)')]))\n"
+        "elif mode == 'crash':\n"
+        "    print('Traceback: boom', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+        "elif mode == 'none':\n"
+        "    print(json.dumps([dict(row, bump=None, baseline='none (v0.17.0 names no commit in pkg: fetch its tags)')]))\n"
+        "    print('no verdict for pkg', file=sys.stderr)\n"
+        "    sys.exit(2)\n"
+        "else:\n"
+        "    print('not json')\n"
+    )
+
+    HARNESS = r"""
+$ErrorActionPreference = 'Continue'
+$errs = $null; $toks = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile('{script}', [ref]$toks, [ref]$errs)
+$f = $ast.FindAll({{ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $x.Name -eq 'Get-RequiredBump' }}, $true)[0]
+Invoke-Expression $f.Extent.Text
+$PYTHON = '{python}'
+$M3TRIK_SCRIPTS = '{scripts}'
+foreach ($mode in 'ok', 'crash', 'none', 'garbage') {{
+    Set-Content -Path (Join-Path $M3TRIK_SCRIPTS 'mode.txt') -Value $mode
+    $r = Get-RequiredBump 'pkg' '0.17.0'
+    "RESULT:$mode=bump:$($r.bump)|failed:$($r.failed)|detail:$((@($r.detail)) -join ' / ')"
+}}
+$M3TRIK_SCRIPTS = '{empty}'
+$r = Get-RequiredBump 'pkg' '0.17.0'
+"RESULT:absent=$($null -eq $r)"
+"""
+
+    @classmethod
+    def setUpClass(cls):
+        td = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(td.cleanup)
+        cls.scripts = Path(td.name) / "scripts"
+        cls.scripts.mkdir()
+        (cls.scripts / "check_api_surface.py").write_text(cls.STUB, encoding="utf-8")
+        empty = Path(td.name) / "empty"
+        empty.mkdir()
+        result = subprocess.run(
+            [
+                POWERSHELL,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                cls.HARNESS.format(
+                    script=(M3TRIK_DIR / "push.ps1").as_posix(),
+                    python=sys.executable,
+                    scripts=cls.scripts.as_posix(),
+                    empty=empty.as_posix(),
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise unittest.SkipTest(f"harness failed: {result.stdout}\n{result.stderr}")
+        cls.answers = dict(
+            line[len("RESULT:") :].split("=", 1)
+            for line in result.stdout.splitlines()
+            if line.startswith("RESULT:")
+        )
+
+    def test_the_published_versions_tag_reaches_the_script(self):
+        argv = json.loads((self.scripts / "argv_ok.json").read_text(encoding="utf-8"))
+        self.assertEqual(argv, ["pkg", "--semver", "--since", "v0.17.0"])
+        self.assertTrue(self.answers["ok"].startswith("bump:minor|failed:|"), self.answers)
+
+    def test_a_script_that_fails_is_a_failed_verdict_with_its_stderr(self):
+        self.assertIn("failed:check_api_surface.py exited 1", self.answers["crash"])
+        self.assertIn("Traceback: boom", self.answers["crash"])
+
+    def test_no_baseline_is_a_failed_verdict_naming_why(self):
+        self.assertIn(
+            "failed:no baseline: none (v0.17.0 names no commit in pkg: fetch its tags)",
+            self.answers["none"],
+        )
+        self.assertIn("no verdict for pkg", self.answers["none"])
+
+    def test_output_that_does_not_parse_is_a_failed_verdict(self):
+        self.assertIn("failed:check_api_surface.py printed no verdict", self.answers["garbage"])
+        self.assertIn("not json", self.answers["garbage"])
+
+    def test_no_script_here_asks_nothing(self):
+        """A hermetic -Root run has no m3trik scripts: the gate is skipped."""
+        self.assertEqual(self.answers["absent"].strip(), "True")
 
 
 @unittest.skipUnless(os.name == "nt", "the stub interpreter is a .cmd")
@@ -570,8 +687,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("v0.2.0", tags, out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_merges_local_changes_when_origin_dev_is_sidecars_only(self):
-        """Real local work must release even when origin/dev is ahead by sidecars.
+    def test_merges_local_changes_when_origin_dev_is_changelog_only(self):
+        """Real local work must release even when origin/dev is ahead by a
+        CHANGELOG-only commit.
 
         A run absorbs uncommitted local work as a LOCAL commit first (the push
         happens later), so the delta classifier must read local dev, not
@@ -582,10 +700,10 @@ class TestPushScriptRegressions(unittest.TestCase):
             root = Path(td)
             repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
 
-            # A registry refresh on origin/dev (rides-along class).
-            (repo / "API_INDEX.md").write_text("# generated\n", encoding="utf-8")
+            # A CHANGELOG-only commit on origin/dev (rides-along class).
+            (repo / "CHANGELOG.md").write_text("# notes\n", encoding="utf-8")
             self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "chore: refresh API registry")
+            self._git(repo, "commit", "-m", "docs: changelog")
             self._git(repo, "push", "origin", "dev")
 
             # Real, not-yet-committed local work.
@@ -605,26 +723,19 @@ class TestPushScriptRegressions(unittest.TestCase):
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_rides_along_delta_skips_merge(self):
-        """Sidecars + CHANGELOG ahead of main: nothing to release, nothing to merge.
+        """CHANGELOG ahead of main: nothing to release, nothing to merge.
 
-        None of those files ship in the wheel, and a registry/CHANGELOG-only
-        PR would cost a full CI cycle to land content the next release carries
-        anyway. No version is consumed and main is untouched.
+        It does not ship in the wheel, and a CHANGELOG-only PR would cost a
+        full CI cycle to land content the next release carries anyway. No
+        version is consumed and main is untouched.
         """
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
 
-            for name in (
-                "API_INDEX.md",
-                "API_REGISTRY.md",
-                "API_REGISTRY.json",
-                "API_CHANGES.md",
-                "CHANGELOG.md",
-            ):
-                (repo / name).write_text("# generated\n", encoding="utf-8")
+            (repo / "CHANGELOG.md").write_text("# notes\n", encoding="utf-8")
             self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "chore: refresh API registry")
+            self._git(repo, "commit", "-m", "docs: changelog")
             self._git(repo, "push", "origin", "dev")
 
             result = self._run(
@@ -635,7 +746,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             self.assertIn("Delta: rides-along", out)
             self.assertIn("rides along with the next release", out)
             tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
-            self.assertNotIn("API_INDEX.md", tree, out)
+            self.assertNotIn("CHANGELOG.md", tree, out)
             self.assertNotIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
@@ -652,17 +763,6 @@ class TestPushScriptRegressions(unittest.TestCase):
             repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
             self._git(repo, "checkout", "dev")
             (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
-            # A stub API-registry generator at the path Prepare invokes, so the
-            # regen-inside-the-Release-commit path is exercised, not just the
-            # version/pin half. It records its argv into the sidecar.
-            gen = root / "m3trik" / "scripts" / "generate_api_registry.py"
-            gen.parent.mkdir(parents=True)
-            gen.write_text(
-                "import sys, pathlib\n"
-                "root = pathlib.Path(__file__).resolve().parents[2]  # as the real one\n"
-                "(root / sys.argv[1] / 'API_INDEX.md').write_text('argv: ' + ' '.join(sys.argv[1:]) + '\\n')\n",
-                encoding="utf-8",
-            )
 
             result = self._run(
                 self._release_cmd(root, "pythontk"), cwd=root, timeout=180
@@ -676,10 +776,9 @@ class TestPushScriptRegressions(unittest.TestCase):
             ).stdout.splitlines()
             releases = [s for s in subjects if s.startswith("Release ")]
             self.assertEqual(releases, ["Release 0.1.1"], out)
-            # The registry was regenerated for THIS package only, without the
-            # cross-package shadow report, and rode in the Release commit.
-            index = self._git(origin, "show", "main:API_INDEX.md").stdout
-            self.assertIn("argv: pythontk --no-shadows", index, out)
+            # No generated API file rides in it: the surface is read live.
+            tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
+            self.assertNotIn("API_", tree, out)
             self.assertFalse(
                 [s for s in subjects if "Bump version" in s or "bump version" in s],
                 f"a legacy bump commit slipped in:\n{subjects}",
@@ -1286,7 +1385,7 @@ class TestPushScriptRegressions(unittest.TestCase):
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_parity_artifacts_ride_in_the_release_commit(self):
-        """A release regenerates the parity pair, as it does the API registry.
+        """A release regenerates the parity pair inside its Release commit.
 
         tentacle's `parity` job is not a REQUIRED check, so a stale artifact
         merges -- and then skips the publish, because publish.yml gates on the
@@ -1376,8 +1475,8 @@ class TestPushScriptRegressions(unittest.TestCase):
         the pythontk / uitk bases their classes inherit from).
 
         Regenerating over another session's uncommitted engine work would bake
-        it into what this release publishes -- the same trap that makes a
-        registry refresh during a concurrent edit unsafe. Refuse, and name the
+        it into what this release publishes -- the same trap that makes any
+        regeneration during a concurrent edit unsafe. Refuse, and name the
         tree, rather than produce a plausible-looking artifact.
         """
         self._assert_a_dirty_tree_refuses_the_parity_regen("mayatk")
@@ -1451,12 +1550,11 @@ class TestPushScriptRegressions(unittest.TestCase):
 
     def test_m3trik_first_guard_blocks_release_on_scripts_drift(self):
         """A Strict+Merge release must refuse to run while m3trik/scripts
-        differs from origin/main. Each package's release PR checks its
-        registry with m3trik@main's generator (``generate_api_registry.py
-        <pkg> --check``), so a registry built by newer local tooling fails
-        that check until m3trik lands first (before 2026-08-23 the refresh bot
-        also force-pushed OLD-generator registries over the release's own:
-        mayatk -495 / blendertk -234 lines, a full re-release cycle)."""
+        differs from origin/main. Each package's release PR runs its checks
+        with m3trik@main's scripts (``check_api_surface.py <pkg> --check``),
+        so a release judged by newer local tooling is gated by the old one
+        until m3trik lands first (2026-08-01: registries reverted, mayatk
+        -495 / blendertk -234 lines, a full re-release cycle)."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
@@ -1471,7 +1569,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             # An m3trik repo whose scripts/ is pushed to origin/main...
             m3trik = root / "m3trik"
             (m3trik / "scripts").mkdir(parents=True)
-            gen = m3trik / "scripts" / "generate_api_registry.py"
+            gen = m3trik / "scripts" / "check_api_surface.py"
             gen.write_text("VERSION = 1\n", encoding="utf-8")
             self._git(m3trik, "init")
             self._git(m3trik, "config", "user.email", "ci@example.com")
@@ -1486,7 +1584,7 @@ class TestPushScriptRegressions(unittest.TestCase):
             self._git(m3trik, "remote", "add", "origin", str(origin))
             self._git(m3trik, "push", "-u", "origin", "main")
 
-            # ...then drifts locally (a generator edit the bot would not have).
+            # ...then drifts locally (a script edit main does not have).
             gen.write_text("VERSION = 2\n", encoding="utf-8")
 
             release = [
@@ -1968,7 +2066,7 @@ else:
     #: Lifts push.ps1's script-level constants into a _run_push_functions body,
     #: so a function-level test reads them instead of re-declaring them.
     _PUSH_CONSTANTS = (
-        "$constants = 'API_SIDECARS', 'GENERATED_PATHS', 'GENERATED_PATHSPEC',"
+        "$constants = 'GENERATED_PATHS', 'GENERATED_PATHSPEC',"
         " 'MUST_REACH_MAIN_PATHS', 'ARTIFACT_EXCEPTIONS', 'RIDES_ALONG_PATHS',"
         " 'GATED_TREES', 'TREE_REFUSED'\n"
         "foreach ($st in $pushAst.EndBlock.Statements) {\n"
@@ -2425,7 +2523,7 @@ else:
                 root,
                 '{"mergeStateStatus":"BLOCKED",'
                 '"statusCheckRollup":[{"name":"test","status":"IN_PROGRESS","conclusion":null},'
-                '{"name":"api-registry","conclusion":"SUCCESS"}]}',
+                '{"name":"api-retirements","conclusion":"SUCCESS"}]}',
             )
             b = root / "_bin"
             (b / "pr_merged.json").write_text(
@@ -2436,7 +2534,7 @@ else:
             (b / "pr_gates.2.json").write_text(
                 '{"mergeStateStatus":"BLOCKED",'
                 '"statusCheckRollup":[{"name":"test","conclusion":"FAILURE"},'
-                '{"name":"api-registry","conclusion":"SUCCESS"}]}',
+                '{"name":"api-retirements","conclusion":"SUCCESS"}]}',
                 encoding="ascii",
             )
             (b / "pr_gates.3.json").write_bytes((b / "pr_gates.2.json").read_bytes())
@@ -2808,6 +2906,35 @@ else:
             self.assertEqual(
                 notes.read_text(encoding="utf-8").splitlines(), expected, out
             )
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_agent_instructions_reach_main_without_a_version(self):
+        """A shared-pack edit, which ``sync_workspace.py`` writes into every
+        cascade repo (``AGENTS.md``, ``CLAUDE.md``, ``.agents/``, ``.claude/``),
+        ships nothing in a wheel: read as an artifact it forced a version, a
+        Release commit and a byte-identical PyPI upload of each package. A
+        delta that also touches the package still releases."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            for rel in (
+                "AGENTS.md",
+                "CLAUDE.md",
+                ".agents/packs/python.md",
+                ".agents/session_hook.py",
+                ".claude/settings.json",
+            ):
+                (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+                (repo / rel).write_text("x\n", encoding="utf-8")
+            call = self._PUSH_CONSTANTS + (
+                f"Write-Output \"RESULT=$(Test-ReleaseDelta 'pythontk' '{repo}' $null)\"\n"
+            )
+            packs = self._run_push_functions(root, call)
+            self.assertIn("RESULT=must-reach-main", packs.stdout, packs.stdout + packs.stderr)
+
+            (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            code = self._run_push_functions(root, call)
+            self.assertIn("RESULT=artifact", code.stdout, code.stdout + code.stderr)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_the_public_hygiene_gate_stops_a_leak_and_passes_a_clean_tree(self):
@@ -3371,10 +3498,10 @@ else:
             self.assertTrue((bin_dir / "uploads" / "installer.py").exists(), out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_receipt_survives_a_sidecar_only_commit(self):
-        """The receipt hash covers the SOURCE tree: generated sidecars are
-        excluded, so a registry refresh (the bot's, or Prepare's) cannot void a
-        receipt for code that has not moved -- while a source edit still does."""
+    def test_receipt_survives_a_generated_doc_only_commit(self):
+        """The receipt hash covers the SOURCE tree: generated parity docs are
+        excluded, so a refresh (Prepare's) cannot void a receipt for code that
+        has not moved -- while a source edit still does."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
@@ -3392,12 +3519,13 @@ else:
 
             self.assertIn("review=VALID", shown())
 
-            (repo / "API_INDEX.md").write_text("# regenerated\n", encoding="utf-8")
-            (repo / "API_CHANGES.md").write_text("# regenerated\n", encoding="utf-8")
+            (repo / "docs").mkdir(exist_ok=True)
+            (repo / "docs" / "PARITY_AUDIT.md").write_text("# regenerated\n", encoding="utf-8")
+            (repo / "docs" / "PARITY_SURFACE.md").write_text("# regenerated\n", encoding="utf-8")
             self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-m", "chore: refresh API registry")
+            self._git(repo, "commit", "-m", "chore: refresh parity docs")
             self.assertIn(
-                "review=VALID", shown(), "a sidecar-only commit voided the receipt"
+                "review=VALID", shown(), "a generated-doc-only commit voided the receipt"
             )
 
             (repo / "pythontk" / "feature.py").write_text("x = 1\n", encoding="utf-8")
@@ -3643,20 +3771,19 @@ else:
             self.assertIn("uitk - Changed after the release gate passed it", out)
 
     def _release_with_a_generator_edit(self, root: Path, edit: str):
-        """Release a receipted pythontk whose registry generator also runs
-        *edit* (Python, ``pkg`` = the package source dir) -- another session
-        landing a change while Prepare's generators run."""
+        """Release a receipted pythontk whose semver script also runs *edit*
+        (Python, ``pkg`` = the package source dir) -- another session landing
+        a change while Prepare's scripts run."""
         repo, origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
         self._commit_receipted_feature(root, repo, "pythontk")
         scripts = root / "m3trik" / "scripts"
         scripts.mkdir(parents=True)
-        (scripts / "generate_api_registry.py").write_text(
-            "import pathlib, sys\n"
-            "if '--semver' in sys.argv:\n"
-            "    sys.exit(0)\n"
+        (scripts / "check_api_surface.py").write_text(
+            "import json, pathlib, sys\n"
             "repo = pathlib.Path(__file__).resolve().parents[2] / sys.argv[1]\n"
-            "(repo / 'API_INDEX.md').write_text('# index\\n')\n"
-            "pkg = repo / sys.argv[1]\n" + edit + "\n",
+            "pkg = repo / sys.argv[1]\n" + edit + "\n"
+            "print(json.dumps([{'package': sys.argv[1], 'bump': 'patch', 'reasons': [], "
+            "'unaccounted': [], 'baseline': 'the last release (v0.1.0)'}]))\n",
             encoding="utf-8",
         )
         result = self._run(
@@ -3676,10 +3803,10 @@ else:
         return repo, origin, result
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
-    def test_an_edit_during_the_registry_regen_stays_out_of_the_release(self):
-        """Prepare's own generators run between the absorb and the Release
+    def test_an_edit_during_prepare_stays_out_of_the_release(self):
+        """Prepare's own scripts run between the absorb and the Release
         commit, and that commit is `git add -A` too: only push.ps1's own edits
-        (the version line, the floors, the sidecars) may ride in it."""
+        (the version line, the floors, the parity docs) may ride in it."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, origin, result = self._release_with_a_generator_edit(
@@ -3695,7 +3822,7 @@ else:
     def test_an_edit_to_a_file_push_ps1_also_writes_is_still_judged(self):
         """push.ps1's own edits (the version line, the floors) must not bless
         whatever else lands in the same file: an exemption by PATH let a foreign
-        line written into __init__.py during the generators ride the Release
+        line written into __init__.py while its scripts ran ride the Release
         commit to main."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -4134,7 +4261,7 @@ else:
 class TestPushDevBranchWithoutADevBranch(unittest.TestCase):
     """``Push-DevBranch`` must push a package that has no ``dev`` branch.
 
-    Not every registry-set package uses the dev->main flow: extapps ships
+    Not every ecosystem-set package uses the dev->main flow: extapps ships
     straight off ``main``. ``Sync-DevWithRemote`` already no-ops for those, but
     ``Push-DevBranch`` checked out ``dev`` unconditionally and reported a bare
     "Checkout dev failed" for a branch that does not exist -- leaving the repo
@@ -4175,14 +4302,14 @@ class TestPushDevBranchWithoutADevBranch(unittest.TestCase):
             self._git(repo, "init", "--initial-branch=main")
             self._git(repo, "config", "user.email", "ci@example.com")
             self._git(repo, "config", "user.name", "CI")
-            (repo / "API_CHANGES.md").write_text("base\n", encoding="utf-8")
+            (repo / "CHANGELOG.md").write_text("base\n", encoding="utf-8")
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-m", "base")
             self._git(repo, "remote", "add", "origin", str(origin))
             self._git(repo, "push", "-u", "origin", "main")
 
-            # The uncommitted sidecar refresh a registry regen leaves behind.
-            (repo / "API_CHANGES.md").write_text("refreshed\n", encoding="utf-8")
+            # An uncommitted edit left behind.
+            (repo / "CHANGELOG.md").write_text("refreshed\n", encoding="utf-8")
 
             common = M3TRIK_DIR / "common.ps1"
             script = (
@@ -4198,9 +4325,9 @@ class TestPushDevBranchWithoutADevBranch(unittest.TestCase):
             out = r.stdout + r.stderr
             self.assertIn("PUSH-OK", out, out)
 
-            # The refresh actually reached the remote, on the branch the repo uses.
+            # The edit actually reached the remote, on the branch the repo uses.
             landed = subprocess.run(
-                ["git", "show", "main:API_CHANGES.md"],
+                ["git", "show", "main:CHANGELOG.md"],
                 cwd=str(origin),
                 capture_output=True,
                 text=True,

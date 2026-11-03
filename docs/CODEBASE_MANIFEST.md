@@ -1,8 +1,8 @@
 # Codebase Manifest
 
-**Nav**: [← m3trik](../CLAUDE.md) · [README: goals and rules in brief](../README.md) · [Code standard](CODE_STANDARD.md) · [Docs standard](DOCS_STANDARD.md)
+**Nav**: [← m3trik](../AGENTS.md) · [README: goals and rules in brief](../README.md) · [Code standard](CODE_STANDARD.md) · [Docs standard](DOCS_STANDARD.md)
 
-The architecture of record for the m3trik ecosystem: what each package is for, where each kind of code goes, how a tool is put together, which check holds each part of the shape, and the decisions behind it. The rules themselves live in [CODE_STANDARD.md](CODE_STANDARD.md) (in brief in the [README](../README.md)); the public surface of each package lives in its `API_INDEX.md` / `API_REGISTRY.md`. This file replaces the 2026-10 restructure plan: what the plan decided is recorded here, what it scheduled is done.
+The architecture of record for the m3trik ecosystem: what each package is for, where each kind of code goes, how a tool is put together, which check holds each part of the shape, and the decisions behind it. The rules themselves live in [CODE_STANDARD.md](CODE_STANDARD.md) (in brief in the [README](../README.md)); the public surface of each package is read from its source (`api.search`). This file replaces the 2026-10 restructure plan: what the plan decided is recorded here, what it scheduled is done.
 
 ## What we are building
 
@@ -68,7 +68,7 @@ Each part of the shape has a check, so the rule it holds is stated once, in the 
 | Written once; bindings never override | `check_dcc_twins.py` (+ `extapps/test/test_vendor_sync.py` for the one sanctioned vendored copy) |
 | Every `self.tk` call a shared panel makes exists in both libraries | `compare_panel_surface.py` |
 | A user's saved widget and record names survive every move | `check_saved_names.py` |
-| A removed public name names its new home | `generate_api_registry.py --semver` and each package's `MOVED_NAMES` |
+| A removed public name names its new home | `check_api_surface.py --semver` and each package's `MOVED_NAMES` |
 | Small objects and functions in tentacle's Slots | ruff, configured by path |
 
 ## Decisions
@@ -97,4 +97,3 @@ The calls that set the shape, with the reason each one was made. A later decisio
 
 - [CODE_STANDARD.md](CODE_STANDARD.md): every rule with its reasoning.
 - [CONTEXT_BUDGET.md](CONTEXT_BUDGET.md): the size caps the instruction files keep.
-- [API_SHADOWS.md](API_SHADOWS.md): name collisions across packages.

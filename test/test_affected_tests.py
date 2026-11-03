@@ -13,6 +13,7 @@ against the code it exists for.
 import contextlib
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -29,7 +30,7 @@ import affected_tests as at  # noqa: E402
 
 def _clear_caches():
     for fn in (at.packages, at.test_files, at.source_files, at.name_spread, at._parse,
-               at.gui_required, at.last_seconds):
+               at.gui_required, at.last_seconds, at.operation_targets):
         fn.cache_clear()
     at._INDEX.clear()
 
@@ -107,6 +108,37 @@ class _Fixture(unittest.TestCase):
     def picks(self, *rels, downstream=False):
         sel = at.select([self.ws / r for r in rels], workspace=self.ws, downstream=downstream)
         return sel, {pkg: set(mods) for pkg, mods in sel.picks.items()}
+
+
+class TestOperationCatalogs(_Fixture):
+    """A declared operation's catalog entry is built from its function's
+    signature and docstring, which no import reaches: a change to the file
+    that defines it selects the suite that rebuilds every catalog."""
+
+    FILES = dict(
+        _Fixture.FILES,
+        **{
+            "pythontk/pythontk/operations.py": "OPERATIONS = ()\n",
+            "pythontk/pythontk/operations.json": (
+                '{"format": 1, "provider": "pythontk", "operations": ['
+                '{"id": "badge.update", "target": "pythontk:StatusBadge.update"}, '
+                '{"id": "feature.go", "target": "pythontk.core_utils.feature:FeatureThing.go"}]}'
+            ),
+            "m3trik/scripts/sync_workspace.py": "",
+            "m3trik/test/test_sync_workspace.py": "def test_s():\n    pass\n",
+        },
+    )
+
+    def test_a_change_to_a_declared_function_selects_the_catalog_suite(self):
+        for rel in (
+            "pythontk/pythontk/core_utils/badge.py",  # defines the class a root-name target names
+            "pythontk/pythontk/core_utils/feature.py",  # the module a module target names
+            "pythontk/pythontk/operations.py",  # the declarations themselves
+        ):
+            _, picks = self.picks(rel)
+            self.assertIn("test_sync_workspace", picks.get("m3trik", set()), rel)
+        _, picks = self.picks("pythontk/pythontk/core_utils/lonely.py")
+        self.assertNotIn("m3trik", picks)  # declares nothing
 
 
 class TestSelection(_Fixture):
@@ -216,10 +248,10 @@ class TestSelection(_Fixture):
         self.assertEqual(picks, {"pythontk": {"test_uses_helper"}})
 
     def test_docs_select_nothing_and_report_as_one_note(self):
-        _write(self.ws, {"pythontk/docs/README.md": "# x\n", "pythontk/API_INDEX.md": "x\n"})
-        sel, picks = self.picks("pythontk/docs/README.md", "pythontk/API_INDEX.md")
+        _write(self.ws, {"pythontk/docs/README.md": "# x\n", "pythontk/CHANGELOG.md": "x\n"})
+        sel, picks = self.picks("pythontk/docs/README.md", "pythontk/CHANGELOG.md")
         self.assertEqual(picks, {})
-        self.assertEqual(sel.docs, ["pythontk/docs/README.md", "pythontk/API_INDEX.md"])
+        self.assertEqual(sel.docs, ["pythontk/docs/README.md", "pythontk/CHANGELOG.md"])
         report = at.report(sel, [], explain=False, workspace=self.ws)
         self.assertEqual(report.count("docs/generated"), 1)
 
@@ -464,6 +496,30 @@ class TestCommands(_Fixture):
             code = at.run([fake("Ran 12 tests in 0.000s\n\nOK (skipped=11)\n")], workspace=self.ws)
         self.assertEqual(code, 0, out.getvalue())
         self.assertIn("m3trik: PASS", out.getvalue())
+
+    @unittest.skipUnless(sys.platform == "win32", "a private desktop is Windows")
+    def test_a_runner_runs_on_the_private_desktop(self):
+        """No window a test opens -- a tkinter probe, a console, a GUI Maya -- may
+        take the user's focus or input: each runner runs on pythontk's private
+        desktop, and everything it starts with it."""
+        _write(self.ws, {"m3trik/test/test_tool.py": "def test_z():\n    pass\n"})
+        _clear_caches()
+        report = (
+            "import ctypes; u = ctypes.windll.user32; "
+            "d = u.GetThreadDesktop(ctypes.windll.kernel32.GetCurrentThreadId()); "
+            "b = ctypes.create_unicode_buffer(256); "
+            "u.GetUserObjectInformationW(d, 2, b, 512, None); "
+            "print('desktop=' + b.value); print('Ran 1 test in 0.0s'); print(); print('OK')"
+        )
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = at.run(
+                [("m3trik", [sys.executable, "-c", report], ["test_tool"])],
+                workspace=self.ws,
+            )
+        self.assertEqual(code, 0, out.getvalue())
+        log = re.search(r"full log: (.+)", out.getvalue()).group(1).strip()
+        self.assertIn("desktop=pythontk-hidden", Path(log).read_text(encoding="utf-8"))
 
     def test_every_runner_tally_counts_its_executed_tests(self):
         """The tallies the runners print, as logged (unittest, the PASSED/Total

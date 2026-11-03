@@ -18,8 +18,8 @@ visible control, and must stay silent on the two false-positive shapes."""
 
 import contextlib
 import io
-import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -174,81 +174,58 @@ class TestGateLayers(unittest.TestCase):
         self.assertIn("tools/_app_bridge", rows)
 
 
-class TestRegistryFreshnessGuard(unittest.TestCase):
-    """The L4 layer reads API_REGISTRY.json, so the guard refuses a registry older than the
-    package source. But its glob saw `*_ui.py` too -- uitk's compiler rewrites those every
-    time a panel's `.ui` changes (i.e. every time a tool is opened in a DCC), while the
-    registry deliberately skips them. So `--check` failed with STALE INPUT after any panel
-    had been opened, pointing the caller at a generator with nothing to regenerate."""
+class TestHelperSurfaceReadsTheLastRelease(unittest.TestCase):
+    """L4 reads each library at its last release tag: the audit is regenerated
+    in tentacle's Release commit, after the libraries' releases, so a name the
+    libraries add on dev between releases must not turn the parity CI red
+    (review 2026-11-03: live dev source read 1498/2379 against the committed
+    1494/2376). Never a committed registry: the 2026-06-19 audit shipped
+    "nurbs_utils ABSENT" from a stale one."""
 
-    #: Arbitrary fixed epoch — the guard compares mtimes, so only the delta matters,
-    #: and a literal keeps the fixture independent of wall-clock resolution.
-    REGISTRY_MTIME = 1_700_000_000
+    LOFT = '"""N."""\n\n\nclass NurbsUtils:\n    """N."""\n\n    def loft(self):\n        """L."""\n'
 
-    def _pkg(self, sources, sources_newer_by=0):
-        """Build ROOT/<pkg>/{API_REGISTRY.json, <pkg>/...} and point `gpa.ROOT` at it.
+    @staticmethod
+    def _git(repo, *args):
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            check=True,
+            capture_output=True,
+        )
 
-        Every source file is stamped `sources_newer_by` seconds AFTER the registry, so
-        the `newest > reg_m` comparison is exact rather than racing the filesystem's
-        timestamp resolution (0 = same instant, i.e. not stale).
-        """
-        root = Path(tempfile.mkdtemp(prefix="gpa_fresh_"))
+    def _probe(self, tag):
+        root = Path(tempfile.mkdtemp(prefix="gpa_l4_"))
         self.addCleanup(shutil.rmtree, root, True)
-        pkg_dir = root / "probetk" / "probetk"
-        pkg_dir.mkdir(parents=True)
+        pkg = root / "probetk"
+        mod = pkg / "probetk" / "nurbs_utils" / "_nurbs_utils.py"
+        mod.parent.mkdir(parents=True)
+        mod.write_text(self.LOFT, encoding="utf-8")
+        self._git(pkg, "init")
+        self._git(pkg, "add", "-A")
+        self._git(pkg, "commit", "-m", "release")
+        if tag:
+            self._git(pkg, "tag", tag)
+        return root, mod
 
-        reg = root / "probetk" / "API_REGISTRY.json"
-        reg.write_text("{}", encoding="utf-8")
-        os.utime(reg, (self.REGISTRY_MTIME, self.REGISTRY_MTIME))
+    def test_a_name_added_on_dev_waits_for_the_next_release(self):
+        root, mod = self._probe("v0.1.0")
+        with mod.open("a", encoding="utf-8") as fh:
+            fh.write('\n    def revolve(self):\n        """R."""\n')
+        with mock.patch.object(gpa, "ROOT", str(root)):
+            per, names = gpa.flat_names("probetk")
+        self.assertEqual((per, names), ({"nurbs_utils": {"loft"}}, {"loft"}))
 
-        stamp = self.REGISTRY_MTIME + sources_newer_by
-        for name in sources:
-            f = pkg_dir / name
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text("x = 1\n", encoding="utf-8")
-            os.utime(f, (stamp, stamp))
-
-        patcher = mock.patch.object(gpa, "ROOT", str(root))
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        return root
-
-    def test_newer_ui_py_does_not_gate_freshness(self):
-        # The regression: a compiler-regenerated `*_ui.py` is not registry input.
-        self._pkg(["panel_ui.py"], sources_newer_by=500)
-        gpa.check_registry_freshness("probetk")  # must not SystemExit
-
-    def test_newer_nested_ui_py_does_not_gate_freshness(self):
-        # The glob is recursive; the exclusion must hold at any depth.
-        self._pkg(["rig_utils/telescope_rig_ui.py"], sources_newer_by=500)
-        gpa.check_registry_freshness("probetk")
-
-    def test_newer_real_source_still_gates_freshness(self):
-        # The guard's whole point: a real source edit must still refuse the run.
-        self._pkg(["telescope_rig.py"], sources_newer_by=500)
-        with self.assertRaises(SystemExit) as cm:
-            gpa.check_registry_freshness("probetk")
-        self.assertIn("STALE INPUT", str(cm.exception))
-
-    def test_ui_py_exclusion_does_not_mask_a_sibling_edit(self):
-        # A `_ui.py` sitting next to a genuinely stale module must not hide it.
-        self._pkg(["panel_ui.py", "panel.py"], sources_newer_by=500)
-        with self.assertRaises(SystemExit):
-            gpa.check_registry_freshness("probetk")
-
-    def test_missing_registry_is_reported(self):
-        root = self._pkg(["panel.py"])
-        (root / "probetk" / "API_REGISTRY.json").unlink()
-        with self.assertRaises(SystemExit) as cm:
-            gpa.check_registry_freshness("probetk")
-        self.assertIn("missing", str(cm.exception))
-
+    def test_a_checkout_without_the_tag_refuses_naming_the_fetch(self):
+        root, _ = self._probe(None)
+        with mock.patch.object(gpa, "ROOT", str(root)):
+            with self.assertRaises(SystemExit) as caught:
+                gpa.flat_names("probetk")
+        self.assertIn("fetch --tags", str(caught.exception))
 
 class TestCli(unittest.TestCase):
     """`--help` once fell through the hand-parsed argv and regenerated the doc."""
 
     def _run(self, *args, out_text=None):
-        """Run ``main`` on *args* against a temp doc; return (doc path, freshness mock, exit code)."""
+        """Run ``main`` on *args* against a temp doc; return (doc path, exit code)."""
         d = Path(tempfile.mkdtemp(prefix="gpa_cli_"))
         self.addCleanup(shutil.rmtree, d, True)
         out = d / "PARITY_AUDIT.md"
@@ -257,27 +234,26 @@ class TestCli(unittest.TestCase):
         code = None
         with mock.patch.object(gpa, "OUT", str(out)), mock.patch.object(
             gpa, "build", return_value="report\n"
-        ), mock.patch.object(gpa, "check_registry_freshness") as fresh, mock.patch.object(
+        ), mock.patch.object(
             sys, "argv", ["generate_parity_audit.py", *args]
         ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             try:
                 gpa.main()
             except SystemExit as e:
                 code = e.code
-        return out, fresh, code
+        return out, code
 
     def test_help_exits_zero_and_writes_nothing(self):
-        out, _, code = self._run("--help")
+        out, code = self._run("--help")
         self.assertEqual(code, 0)
         self.assertFalse(out.exists())
 
-    def test_check_and_allow_stale_still_parse(self):
-        _, fresh, code = self._run("--check", "--allow-stale", out_text="report\n")
+    def test_check_of_a_current_doc_passes(self):
+        _, code = self._run("--check", out_text="report\n")
         self.assertIsNone(code)
-        fresh.assert_not_called()
 
     def test_unknown_flag_is_a_usage_error(self):
-        out, _, code = self._run("--chek")
+        out, code = self._run("--chek")
         self.assertEqual(code, 2)
         self.assertFalse(out.exists())
 

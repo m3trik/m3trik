@@ -148,8 +148,8 @@ class TestClaudeAdvisoryCap(unittest.TestCase):
     def test_root_gets_the_larger_advisory_cap(self):
         """Root carries the ecosystem-wide one-line rules; a sub-repo file keeps
         the lean cap. Both stay under the hard cap."""
-        self.assertEqual(guard._claude_advisory_cap(guard.REPO_ROOT / "CLAUDE.md"), guard.CLAUDE_WARN_ROOT)
-        self.assertEqual(guard._claude_advisory_cap(guard.REPO_ROOT / "mayatk" / "CLAUDE.md"), guard.CLAUDE_WARN)
+        self.assertEqual(guard._claude_advisory_cap(guard.REPO_ROOT / "AGENTS.md"), guard.CLAUDE_WARN_ROOT)
+        self.assertEqual(guard._claude_advisory_cap(guard.REPO_ROOT / "mayatk" / "AGENTS.md"), guard.CLAUDE_WARN)
         self.assertGreater(guard.CLAUDE_WARN_ROOT, guard.CLAUDE_WARN)
         self.assertLess(guard.CLAUDE_WARN_ROOT, guard.CLAUDE_FAIL)
 
@@ -222,7 +222,7 @@ class TestNavDeps(unittest.TestCase):
 
 class TestLiveNavDeps(unittest.TestCase):
     def test_live_nav_deps_cover_declared_ecosystem_deps(self):
-        """Every checked-out registry-set package's Nav Deps line must cover its
+        """Every checked-out ecosystem-set package's Nav Deps line must cover its
         pyproject's ecosystem dependencies."""
         rep = guard.Report()
         guard.check_nav_deps(rep)
@@ -403,40 +403,24 @@ class TestPowerShellMemoryDirParity(unittest.TestCase):
         self.assertEqual(ps_slug, self._python_slug())
 
 
-class TestRefreshWorkflowStepOrder(unittest.TestCase):
-    """The context-budget gate must run AFTER refresh-api-registry.yml's push.
+class TestRepoSideGuardInCi(unittest.TestCase):
+    """The repo-side guard runs in m3trik's own CI over the seven siblings, and
+    no workflow writes an API file: the surface is read live, so a bot pushing
+    a refreshed registry into the packages' ``dev`` branches (the only source
+    of commits no human made, which raced the release cascade) has no job."""
 
-    That job clones all seven ecosystem repos as siblings, so the guard judges
-    hand-written docs (CLAUDE.md sizes, `**Deps**:` lines) in repos the
-    job neither owns nor can fix — and `m3trik/scripts` reaches `main` before the
-    packages land their half of any change, so a newly added cross-repo check is
-    red by construction for the length of a cascade. In front of the push step
-    that red blocks the shadow-report refresh this job exists to perform.
+    WORKFLOWS = M3TRIK_DIR / ".github" / "workflows"
 
-    Since 2026-08-23 the job pushes ONE file (the shadow report): per-package
-    registries are written by push.ps1's Prepare phase inside each release
-    commit, so the per-package push loop -- the only source of bot commits on
-    the packages' dev branches -- is gone and must stay gone.
-    """
+    def test_m3trik_ci_runs_the_repo_side_guard(self):
+        text = (self.WORKFLOWS / "tests.yml").read_text(encoding="utf-8")
+        self.assertIn("python m3trik/scripts/check_context_budget.py --no-memory --no-runtime", text)
 
-    WORKFLOW = M3TRIK_DIR / ".github" / "workflows" / "refresh-api-registry.yml"
-    PUSH_STEPS = ("Commit and push m3trik shadow report",)
-
-    def test_bot_no_longer_writes_into_package_repos(self):
-        text = self.WORKFLOW.read_text(encoding="utf-8")
-        self.assertNotIn("Commit and push per-package registries", text)
-        self.assertNotIn("chore: refresh API registry", text)
-
-    def test_budget_gate_runs_after_every_push_step(self):
-        text = self.WORKFLOW.read_text(encoding="utf-8")
-        gate = text.index("run: python m3trik/scripts/check_context_budget.py")
-        for step in self.PUSH_STEPS:
-            self.assertLess(
-                text.index(step),
-                gate,
-                f"the context-budget gate runs before '{step}' — a doc breach in any "
-                "sibling repo would block the registry push this job exists to do",
-            )
+    def test_no_workflow_writes_an_api_file(self):
+        for workflow in self.WORKFLOWS.glob("*.yml"):
+            text = workflow.read_text(encoding="utf-8")
+            with self.subTest(workflow=workflow.name):
+                self.assertNotIn("generate_api_registry", text)
+                self.assertNotIn("API_SHADOWS.md", text)
 
 
 if __name__ == "__main__":

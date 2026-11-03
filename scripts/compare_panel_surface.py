@@ -52,8 +52,8 @@ resolver builds it from ``DEFAULT_INCLUDE`` (wildcard modules, flat class method
 aliases, ``MOVED_NAMES``; a ``DEFAULT_INCLUDE`` that is not a literal exits 2), each
 class's MRO across the workspace packages (pythontk, uitk, ...), class and instance
 attributes, class tables, metaclasses. Nothing is imported but the standard library.
-``API_REGISTRY.json`` is not read: it lists public members only (no class or instance
-attributes, no private mixins) and lags the working tree until regenerated.
+The public surface (``ApiSurface.read``) is not used: it lists public members only (no
+class or instance attributes, no private mixins).
 
 Listed, never failed (the static model cannot prove absence there): *unverified* reads
 -- past a value the model cannot see into (a property's or an unannotated call's value,

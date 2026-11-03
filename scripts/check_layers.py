@@ -409,7 +409,7 @@ def scan(
     workspace: Path = WORKSPACE, packages: Optional[Sequence[str]] = None
 ) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[str]]]:
     """({package: sorted violations}, [declaration problems], {package: sorted
-    strict violations}) over the registry set, or the *packages* named from it.
+    strict violations}) over the ecosystem set, or the *packages* named from it.
     Strict ones are never frozen."""
     sync = _sync_workspace()
     ecosystem = sync.ecosystem_packages()
@@ -484,7 +484,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--workspace", type=Path, default=WORKSPACE, help="the monorepo root"
     )
     parser.add_argument(
-        "packages", nargs="*", help="check only these (default: the registry set)"
+        "packages", nargs="*", help="check only these (default: the ecosystem set)"
     )
     args = parser.parse_args(argv)
     if args.update and args.packages:

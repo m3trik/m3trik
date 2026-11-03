@@ -315,7 +315,7 @@ function Push-DevBranch {
     
     Push-Location $RepoPath
     try {
-        # Not every registry-set package uses the dev->main flow -- extapps ships
+        # Not every ecosystem-set package uses the dev->main flow -- extapps ships
         # straight off main. Sync-DevWithRemote already no-ops for those, so
         # checking out `dev` unconditionally here refused the push over a branch
         # that does not exist, leaving the repo committed-but-unpushed behind a

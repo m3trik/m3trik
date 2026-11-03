@@ -4,7 +4,7 @@ Every repo in `_scripts/` stamps a shields.io **Tests** badge into its README. T
 contract for what that number counts, so a reader can compare `pythontk`'s badge with
 `server`'s and get a true picture.
 
-**Nav**: [← m3trik](../CLAUDE.md) · [Docs standard](DOCS_STANDARD.md) · [Context budget](CONTEXT_BUDGET.md)
+**Nav**: [← m3trik](../AGENTS.md) · [Docs standard](DOCS_STANDARD.md) · [Context budget](CONTEXT_BUDGET.md)
 
 ## The rule
 

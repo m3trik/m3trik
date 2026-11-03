@@ -136,7 +136,7 @@ def main(argv=None) -> int:
     ap.add_argument(
         "packages",
         nargs="*",
-        help="limit to these packages (default: the registry set)",
+        help="limit to these packages (default: the ecosystem set)",
     )
     args = ap.parse_args(argv)
     if shutil.which("gh") is None:

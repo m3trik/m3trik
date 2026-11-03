@@ -12,17 +12,16 @@ Checks
             1-link-per-topic-file coverage (no orphans, no broken links).
             An indexed HUB topic covers the sibling files its body links, so
             a cap-managed family costs the index one entry (one level deep).
-  CLAUDE    each CLAUDE.md size (advisory + hard caps; the root file gets a
+  AGENTS    each instruction file's size (AGENTS.md; advisory + hard caps; the root gets a
             larger advisory cap - it carries the ecosystem-wide rules).
   TOPIC     memory topic-file soft size cap (flag oversized files to split).
-  DISPATCH  root CLAUDE.md dispatch table matches m3trik/workspace.json
+  DISPATCH  root AGENTS.md dispatch table matches m3trik/workspace.json
             (the package-set SSoT; catches the blendertk-style drift).
-  LINKS     every relative markdown link in a CLAUDE.md resolves (no broken nav).
-  NAVDEPS   every registry-set package's CLAUDE.md `**Deps**:` line names each
+  LINKS     every relative markdown link in an instruction file resolves (no broken nav).
+  NAVDEPS   every ecosystem-set package's AGENTS.md `**Deps**:` line names each
             ecosystem package its pyproject.toml declares (hand-written nav
             must not lag the declared dependency graph).
-  REGISTRY  generate_api_registry.py --check (registries fresh vs source).
-  LINES     the registry set's source lines against workspace.json's
+  LINES     the ecosystem set's source lines against workspace.json's
             line_budget: non-blank lines of the .py files outside test/.
             Reported here (WARN past it) over every working tree; the release
             gate is ``--line-budget <pkg ...>``, which push.ps1 runs per
@@ -36,7 +35,6 @@ FAIL exits non-zero (CI gate). WARN is advisory and never fails the build.
 Usage
 -----
   python check_context_budget.py                  # all checks
-  python check_context_budget.py --no-registry    # skip the (slower) registry walk
   python check_context_budget.py --no-memory      # repo-only (e.g. on a CI box)
   python check_context_budget.py --memory-dir PATH
   python check_context_budget.py --line-budget [pkg ...]   # the release gate
@@ -48,7 +46,6 @@ import os
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Iterable
 
@@ -63,9 +60,9 @@ REPO_ROOT = SCRIPT_DIR.parents[1]  # m3trik/scripts -> repo root
 # --- budgets -----------------------------------------------------------------
 MEMORY_BYTE_CAP = 24_400  # hard harness load cap for MEMORY.md (conservative decimal-KB read)
 MEMORY_ENTRY_CHAR_CAP = 280  # per index bullet (slug + link + ~200-char hook)
-CLAUDE_WARN = 6_144  # advisory: keep a sub-repo CLAUDE.md lean
+CLAUDE_WARN = 6_144  # advisory: keep a sub-repo AGENTS.md lean
 CLAUDE_WARN_ROOT = 8_192  # advisory for the ROOT file: one-line rules for every sub-repo, no runbooks
-CLAUDE_FAIL = 10_240  # hard: a CLAUDE.md this big is paid on every adjacent query
+CLAUDE_FAIL = 10_240  # hard: an AGENTS.md this big is paid on every adjacent query
 TOPIC_WARN = 20_480  # advisory: split / compress oversized topic files
 
 def _default_memory_dir() -> Path:
@@ -221,21 +218,32 @@ def _claude_files() -> list[Path]:
         if any(seg in dirpath for seg in skip):
             dirnames[:] = []  # prune the subtree
             continue
-        if "CLAUDE.md" in filenames:
-            p = Path(dirpath) / "CLAUDE.md"
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            if name not in filenames:
+                continue
+            p = Path(dirpath) / name
             try:
-                p.stat()
-            except OSError:
+                text = p.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
                 continue  # unreadable (e.g. dehydrated/broken cloud placeholder)
+            if name == "CLAUDE.md" and all(w.startswith("@") for w in text.split()):
+                continue  # a stub importing AGENTS.md: the rules are measured there
             out.append(p)
     return sorted(out)
 
 
+def _instruction_file(folder: Path) -> Path:
+    """*folder*'s instruction file: its ``AGENTS.md``, else a ``CLAUDE.md``
+    that still holds the rules."""
+    agents = folder / "AGENTS.md"
+    return agents if agents.exists() else folder / "CLAUDE.md"
+
+
 def _claude_advisory_cap(path: Path) -> int:
-    """The root CLAUDE.md carries the ecosystem-wide one-line rules for every
-    sub-repo and no runbook content, so it gets the larger advisory cap; every
-    sub-repo file loaded beside it keeps the lean one."""
-    return CLAUDE_WARN_ROOT if path.resolve() == (REPO_ROOT / "CLAUDE.md").resolve() else CLAUDE_WARN
+    """The root instruction file carries the ecosystem-wide one-line rules for
+    every sub-repo and no runbook content, so it gets the larger advisory cap;
+    every sub-repo file loaded beside it keeps the lean one."""
+    return CLAUDE_WARN_ROOT if path.resolve().parent == REPO_ROOT.resolve() else CLAUDE_WARN
 
 
 def _blob_size(path: Path) -> int:
@@ -255,11 +263,11 @@ def check_claude_sizes(report: Report) -> None:
         rel = p.relative_to(REPO_ROOT).as_posix()
         warn_cap = _claude_advisory_cap(p)
         if sz > CLAUDE_FAIL:
-            report.fail(f"CLAUDE {rel} is {sz:,} B > {CLAUDE_FAIL:,} B hard cap — move runbook content into <subdir>/docs/")
+            report.fail(f"AGENTS {rel} is {sz:,} B > {CLAUDE_FAIL:,} B hard cap — move runbook content into <subdir>/docs/")
         elif sz > warn_cap:
-            report.warn(f"CLAUDE {rel} is {sz:,} B > {warn_cap:,} B advisory cap")
+            report.warn(f"AGENTS {rel} is {sz:,} B > {warn_cap:,} B advisory cap")
     report.ok(
-        f"Scanned {len(files)} CLAUDE.md files (advisory>{CLAUDE_WARN:,} B, root>{CLAUDE_WARN_ROOT:,} B, fail>{CLAUDE_FAIL:,} B)"
+        f"Scanned {len(files)} instruction files (AGENTS.md; advisory>{CLAUDE_WARN:,} B, root>{CLAUDE_WARN_ROOT:,} B, fail>{CLAUDE_FAIL:,} B)"
     )
 
 
@@ -268,7 +276,7 @@ def check_claude_sizes(report: Report) -> None:
 _DEP_NAME_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)")
 # The `**Deps**:` segment of a Nav line runs until the next `· **Label**:` marker.
 _NAV_DEPS_RE = re.compile(r"\*\*Deps\*\*:\s*(.*?)(?=\s·\s\*\*[A-Za-z][^*]*\*\*:|$)")
-_NAV_LINK_RE = re.compile(r"\]\(\.\./([^/)]+)/CLAUDE\.md\)")  # the path names the package, the text is free
+_NAV_LINK_RE = re.compile(r"\]\(\.\./([^/)]+)/(?:AGENTS|CLAUDE)\.md\)")  # the path names the package, the text is free
 
 
 def _pyproject_ecosystem_deps(pyproject: Path, ecosystem: tuple[str, ...]) -> list[str]:
@@ -301,17 +309,17 @@ def _nav_deps(claude_md: Path) -> list[str] | None:
 
 
 def _nav_deps_missing(pkg_dir: Path, ecosystem: tuple[str, ...]) -> list[str]:
-    """Ecosystem deps declared in pkg_dir/pyproject.toml that its CLAUDE.md Nav
+    """Ecosystem deps declared in pkg_dir/pyproject.toml that its AGENTS.md Nav
     `**Deps**:` segment fails to name."""
     declared = _pyproject_ecosystem_deps(pkg_dir / "pyproject.toml", ecosystem)
     if not declared:
         return []
-    named = _nav_deps(pkg_dir / "CLAUDE.md") or []
+    named = _nav_deps(_instruction_file(pkg_dir)) or []
     return [d for d in declared if d not in named]
 
 
 def check_nav_deps(report: Report) -> None:
-    """A CLAUDE.md `**Deps**:` line is hand-maintained and used for routing; it
+    """An AGENTS.md `**Deps**:` line is hand-maintained and used for routing; it
     must name every ecosystem package the pyproject declares (extra entries,
     e.g. host-provided engines, are fine)."""
     if tomllib is None:
@@ -325,19 +333,19 @@ def check_nav_deps(report: Report) -> None:
     checked = 0
     for pkg in ECOSYSTEM_PACKAGES:
         pkg_dir = REPO_ROOT / pkg
-        if not (pkg_dir / "pyproject.toml").exists() or not (pkg_dir / "CLAUDE.md").exists():
+        if not (pkg_dir / "pyproject.toml").exists() or not _instruction_file(pkg_dir).exists():
             continue  # partial checkout (CI) - nothing to compare
         checked += 1
         missing = _nav_deps_missing(pkg_dir, ECOSYSTEM_PACKAGES)
         if missing:
             report.fail(
-                f"NAVDEPS: {pkg}/CLAUDE.md Nav `**Deps**:` omits declared ecosystem dep(s) {missing} "
+                f"NAVDEPS: {pkg}/AGENTS.md Nav `**Deps**:` omits declared ecosystem dep(s) {missing} "
                 f"(pyproject.toml is the SSoT - add the link)"
             )
     if checked:
-        report.ok(f"NAVDEPS: {checked} package CLAUDE.md Nav Deps lines cover their declared ecosystem deps")
+        report.ok(f"NAVDEPS: {checked} package AGENTS.md Nav Deps lines cover their declared ecosystem deps")
     else:
-        report.warn("NAVDEPS: no package pyproject/CLAUDE.md pairs found - skipped (partial checkout?)")
+        report.warn("NAVDEPS: no package pyproject/AGENTS.md pairs found - skipped (partial checkout?)")
 
 
 def _sync_workspace():
@@ -350,7 +358,7 @@ def _sync_workspace():
 
 
 def _ecosystem_packages() -> tuple[str, ...]:
-    """The registry set, as ``m3trik/workspace.json`` declares it."""
+    """The ecosystem set, as ``m3trik/workspace.json`` declares it."""
     return _sync_workspace().ecosystem_packages()
 
 
@@ -422,7 +430,7 @@ def _committed_lines(repo: Path) -> int:
 def source_lines(
     workspace: Path = REPO_ROOT, released: Iterable[str] | None = None
 ) -> dict[str, int]:
-    """Non-blank lines of each registry-set package's ``.py`` files outside its
+    """Non-blank lines of each ecosystem-set package's ``.py`` files outside its
     ``test/``: a package in *released* (default: every one) as the release
     would commit it, any other as committed."""
     released = None if released is None else set(released)
@@ -462,9 +470,9 @@ def check_line_budget(
 
 
 def check_dispatch(report: Report) -> None:
-    root = REPO_ROOT / "CLAUDE.md"
+    root = REPO_ROOT / "AGENTS.md"
     if not root.exists():
-        report.warn("DISPATCH: root CLAUDE.md not found at repo root — skipping (expected when only sub-repos are checked out, e.g. CI)")
+        report.warn("DISPATCH: root AGENTS.md not found at repo root — skipping (expected when only sub-repos are checked out, e.g. CI)")
         return
     try:
         drift = _sync_workspace().dispatch_drift(root)
@@ -478,11 +486,11 @@ def check_dispatch(report: Report) -> None:
 
 
 def check_claude_links(report: Report) -> None:
-    """Every relative markdown link in a CLAUDE.md must resolve — broken nav
+    """Every relative markdown link in an instruction file must resolve — broken nav
     silently misroutes agents. Gated to the full local monorepo (cross-package
     and `← root` links can't be checked from a partial CI checkout)."""
-    if not (REPO_ROOT / "CLAUDE.md").exists():
-        report.warn("CLAUDE links: skipped (monorepo root not present — e.g. CI partial checkout)")
+    if not (REPO_ROOT / "AGENTS.md").exists():
+        report.warn("AGENTS links: skipped (monorepo root not present — e.g. CI partial checkout)")
         return
 
     files = _claude_files()
@@ -492,50 +500,21 @@ def check_claude_links(report: Report) -> None:
             broken.append(f"{p.relative_to(REPO_ROOT).as_posix()} → {target}")
     if broken:
         for b in broken:
-            report.fail(f"CLAUDE link broken: {b}")
+            report.fail(f"AGENTS link broken: {b}")
     else:
-        report.ok(f"CLAUDE links: all relative links resolve across {len(files)} files")
-
-
-def check_registry_fresh(report: Report) -> None:
-    gen = SCRIPT_DIR / "generate_api_registry.py"
-    proc = None
-    # Retry once: on a cloud-synced drive (O: Nextcloud VFS) reading a just-written
-    # sidecar can transiently differ from disk and false-positive a single file. A
-    # real staleness reproduces on the retry; a sync race settles.
-    for attempt in (1, 2):
-        try:
-            proc = subprocess.run(
-                [sys.executable, str(gen), "--check"],
-                capture_output=True,
-                text=True,
-                cwd=str(REPO_ROOT),
-                timeout=300,
-            )
-        except Exception as exc:  # noqa: BLE001
-            report.warn(f"REGISTRY: could not run generate_api_registry.py --check: {exc}")
-            return
-        if proc.returncode == 0:
-            report.ok("REGISTRY: all registries fresh (generate_api_registry.py --check)")
-            return
-        if attempt == 1:
-            time.sleep(2)
-
-    detail = (proc.stderr.strip() or proc.stdout.strip()).splitlines() if proc else []
-    head = "\n        ".join(detail[:12])
-    report.fail("REGISTRY: stale — run `python m3trik/scripts/generate_api_registry.py`:\n        " + head)
+        report.ok(f"AGENTS links: all relative links resolve across {len(files)} files")
 
 
 def check_runtime_surface(report: Report) -> None:
     """Opt-in pythontk runtime-vs-static drift spot-check.
 
     ``verify_runtime_surface.py verify pythontk`` compares pythontk's live
-    ``HelpMixin`` surface against its committed registry. It runs only when the
+    ``HelpMixin`` surface against a static read of its source. It runs only when the
     guard is invoked WITHOUT ``--no-runtime`` in an env where pythontk is
     importable (its numpy/Pillow deps present) - a convenience for a manual local
     run. The automated runtime-drift gate across ALL packages (including the DCC
     ones CI cannot import) is ``Check-RuntimeSurface.ps1``, run weekly locally;
-    cloud CI stays import-free. A registry that over-promises a member the live
+    cloud CI stays import-free. Source that promises a member the live
     class lacks (a ``missing`` member) FAILs; ``added`` / ``kind_changed`` are
     advisory and never reach here as a failure."""
     tool = SCRIPT_DIR / "verify_runtime_surface.py"
@@ -552,10 +531,10 @@ def check_runtime_surface(report: Report) -> None:
         return
 
     if proc.returncode == 0:
-        report.ok("RUNTIME: pythontk live surface matches the static registry")
+        report.ok("RUNTIME: pythontk live surface matches its static read")
     elif proc.returncode == 2:
         # Import failed (e.g. numpy/Pillow absent on a minimal CI box) — advisory,
-        # like the memory-dir skip; the registry --check still gates statically.
+        # like the memory-dir skip.
         tail = proc.stderr.strip().splitlines()
         report.warn(
             "RUNTIME: pythontk not importable in-process — skipped "
@@ -565,15 +544,13 @@ def check_runtime_surface(report: Report) -> None:
         detail = (proc.stdout.strip() or proc.stderr.strip()).splitlines()
         head = "\n        ".join(detail[:12])
         report.fail(
-            "RUNTIME: pythontk registry over-promises members the live class "
+            "RUNTIME: pythontk source promises members the live class "
             "lacks — run `python m3trik/scripts/verify_runtime_surface.py verify "
             "pythontk`:\n        " + head
         )
 
 
-def run_checks(
-    memory_dir: Path, do_memory: bool, do_registry: bool, do_runtime: bool
-) -> Report:
+def run_checks(memory_dir: Path, do_memory: bool, do_runtime: bool) -> Report:
     report = Report()
     if do_memory:
         check_memory(memory_dir, report)
@@ -585,8 +562,6 @@ def run_checks(
         check_line_budget(report)
     except UnreadableRepo as error:  # advisory here; the release gate fails on it
         report.warn(f"LINES: {error}")
-    if do_registry:
-        check_registry_fresh(report)
     if do_runtime:
         check_runtime_surface(report)
     return report
@@ -597,7 +572,6 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--memory-dir", type=Path, default=DEFAULT_MEMORY_DIR)
-    ap.add_argument("--no-registry", action="store_true", help="skip the (slower) registry --check walk")
     ap.add_argument("--no-runtime", action="store_true", help="skip the runtime-vs-static drift check (imports pythontk)")
     ap.add_argument("--no-memory", action="store_true", help="skip memory-dir checks (repo-only)")
     ap.add_argument(
@@ -607,13 +581,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--workspace", type=Path, default=REPO_ROOT, help="with --line-budget: the monorepo root")
     ap.add_argument(
         "packages", nargs="*",
-        help="with --line-budget: check only when one is in the registry set",
+        help="with --line-budget: check only when one is in the ecosystem set",
     )
     args = ap.parse_args(argv)
 
     if args.line_budget:
         if args.packages and not set(args.packages) & set(_ecosystem_packages()):
-            print("Line budget: none of these packages is in the registry set.")
+            print("Line budget: none of these packages is in the ecosystem set.")
             return 0
         report = Report()
         try:
@@ -628,7 +602,6 @@ def main(argv: list[str] | None = None) -> int:
     report = run_checks(
         args.memory_dir,
         do_memory=not args.no_memory,
-        do_registry=not args.no_registry,
         do_runtime=not args.no_runtime,
     )
 

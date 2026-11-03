@@ -161,8 +161,8 @@ class TestScan(_RepoCase):
             self.scan(), [gate.Finding(self.REPO, f"docs/{CJK}.md", None, CJK)]
         )
 
-    def test_a_generated_registry_is_exempt(self):
-        for name in ("API_REGISTRY.md", "API_REGISTRY.json", "docs/PARITY_SURFACE.md"):
+    def test_a_generated_parity_doc_is_exempt(self):
+        for name in ("docs/PARITY_SURFACE.md", "docs/PARITY_AUDIT.md"):
             self.write(name, f"{CYRILLIC}\n")
         self.assertEqual(self.scan(), [])
 

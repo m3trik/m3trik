@@ -9,14 +9,11 @@
   'ClaudeContextBudget' Scheduled Task. The log is the durable record; the toast
   is best-effort (skipped silently in a non-interactive session).
 
-  The guard runs with --no-registry --no-runtime here. --no-registry: this repo
-  lives on a Nextcloud cloud-synced drive (O:) where reading a just-written .json
-  sidecar can transiently return an incoherent byte view and false-flag staleness
-  (gated authoritatively in CI, clean checkout). --no-runtime: the runtime-vs-static
+  The guard runs with --no-runtime here: the runtime-vs-static
   drift check runs separately below via Check-RuntimeSurface.ps1 across ALL packages
   (not just pythontk), so running it in the guard too would double-verify pythontk.
   The unattended local guard thus focuses on the memory budget + CLAUDE.md sizes +
-  dispatch. Run the full guard manually (no flag) when the drive is settled.
+  dispatch.
 
 .NOTES
   Exit code mirrors the guard: 0 = within budget, 1 = a hard budget was breached.
@@ -34,7 +31,7 @@ if (-not (Test-Path $py)) { $py = 'python' }
 $guard = Join-Path $RepoRoot 'm3trik\scripts\check_context_budget.py'
 
 $stamp  = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-$output = & $py $guard --no-registry --no-runtime 2>&1 | Out-String
+$output = & $py $guard --no-runtime 2>&1 | Out-String
 $code   = $LASTEXITCODE
 
 Add-Content -Path $LogPath -Value "===== $stamp (exit $code) =====`n$output" -Encoding UTF8

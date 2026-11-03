@@ -1,0 +1,44 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": ["run", "--no-project", "python", "-I", "${CLAUDE_PLUGIN_ROOT}/hooks/hooks.py", "session-start"],
+            "timeout": 15,
+            "statusMessage": "Checking deferred-issue backlog"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": ["run", "--no-project", "python", "-I", "${CLAUDE_PLUGIN_ROOT}/hooks/hooks.py", "edit"],
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": ["run", "--no-project", "python", "-I", "${CLAUDE_PLUGIN_ROOT}/hooks/hooks.py", "stop"],
+            "timeout": 15,
+            "statusMessage": "Checking recent changes for auto-critique"
+          }
+        ]
+      }
+    ]
+  }
+}

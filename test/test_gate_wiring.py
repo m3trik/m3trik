@@ -2,7 +2,7 @@
 # coding=utf-8
 """Tests that every gate script in ``scripts/`` is actually WIRED to run.
 
-``scripts/CLAUDE.md`` already states the rule -- "New gate => wire it into the
+``scripts/AGENTS.md`` already states the rule -- "New gate => wire it into the
 workflow or weekly task that owns it" -- and nothing enforced it.  Measured
 2026-09-16, nine of seventeen scripts were invoked by no workflow, no
 ``push.ps1`` step and no scheduled task: they ran only when a human remembered.

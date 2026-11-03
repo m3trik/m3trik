@@ -8,9 +8,9 @@ name: Tests
 # condition on the ONLY sanctioned duplication in the codebase.
 #
 # `push: main` + `workflow_dispatch`, deliberately NOT `pull_request`: work
-# lands in this repo by direct push (no PR merges in 297 commits), and
-# refresh-api-registry.yml's ordering rule requires m3trik/scripts to reach
-# main BEFORE the packages land their side of a cross-repo change.
+# lands in this repo by direct push (no PR merges in 297 commits), and the
+# m3trik-first rule (push.ps1) requires m3trik/scripts to reach main BEFORE
+# the packages land their side of a cross-repo change.
 #
 # EXPECT A RED WINDOW, and do not "fix" it by reverting. That ordering rule
 # means a change split across this repo and a package is HALF LANDED while
@@ -29,9 +29,9 @@ name: Tests
 #
 # The suite is NOT self-contained -- it needs the monorepo layout. Measured
 # 2026-09-16 against an isolated `git archive` checkout: with no siblings,
-# test_generate_api_registry ERRORS AT COLLECTION (the generator loads
-# pythontk's SymbolRecord from source at module import, so the whole run
-# aborts); with pythontk stubbed to that one file, 7 cases still fail across
+# test_check_api_surface ERRORS AT COLLECTION
+# (the script loads pythontk's reader from source at module import, so the
+# whole run aborts); with pythontk stubbed to that one file, 7 cases still fail across
 # test_sync_shared_bat, test_build_stingray_ao_presets and
 # test_verify_runtime_surface, which read the mayatk / blendertk / pythontk
 # working trees. Hence the full seven-sibling clone below.
@@ -62,7 +62,7 @@ jobs:
       - name: Clone ecosystem siblings
         env:
           # Needed to read the private sibling (unitytk); the public ones would
-          # clone without it. Same secret refresh-api-registry.yml uses.
+          # clone without it.
           TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
         run: |
           for repo in pythontk uitk mayatk blendertk tentacle unitytk extapps; do
@@ -72,9 +72,8 @@ jobs:
               echo "::error::Failed to clone ${repo}"
             fi
           done
-          # HARD count check, unlike refresh-api-registry.yml's loop, which
-          # warns and continues. Best-effort is right for a report that degrades
-          # gracefully; it is wrong for a gate. An expired token there would
+          # HARD count check: best-effort is right for a report that degrades
+          # gracefully; it is wrong for a gate. An expired token here would
           # leave this job with nothing to check and report GREEN -- which is
           # precisely the "a job that ran nothing is not green" failure the
           # sibling workflows already guard against on test counts.
@@ -258,10 +257,18 @@ jobs:
       - name: Scene records derived surfaces in sync
         run: python m3trik/scripts/sync_scene_records.py --check
 
+      # The operation contract: pythontk's payloads (OpRequest, Outcome,
+      # Change, Issue, OpCall, the catalog document) restated as unitytk's
+      # generated C# types in templates/Kernel/Core. Needs pythontk and
+      # unitytk side by side, as the step above does.
+      - name: Operation contract C# types in sync
+        run: python m3trik/scripts/sync_operation_contract.py --check
+
       # The workspace manifest: ONE declaration (m3trik/workspace.json) of the
-      # cascade, the registry set and every unit's domain line, read directly by
+      # cascade, the ecosystem set and every unit's domain line, read directly by
       # push.ps1 and the generators. This checks what cannot read it: the sibling
-      # loops in these workflows, and every declared unit's CLAUDE.md. The root
+      # loops in these workflows, every declared unit's AGENTS.md and instruction
+      # tree, and each package's committed operations.json. The root
       # Dispatch table is checked too where a workspace root exists (SKIP here).
       - name: Workspace manifest and its restatements in sync
         run: python m3trik/scripts/sync_workspace.py --check
@@ -309,7 +316,7 @@ jobs:
           TSC: npx --yes -p typescript@5 tsc
         run: python m3trik/scripts/check_js_types.py
 
-      # The workspace-wide gates. Each of these is a rule the root CLAUDE.md
+      # The workspace-wide gates. Each of these is a rule the root AGENTS.md
       # states as a requirement -- check_docs is named there verbatim ("must
       # exit 0") -- and each ran in no workflow, no push.ps1 step and no
       # scheduled task: they fired only when a human remembered. They scan the
@@ -325,8 +332,8 @@ jobs:
       # check_docs runs with --skip-unversioned, and only with it. Its first
       # attempt here (2026-09-16, plain `--workspace .`) measured 20 [FAIL]
       # links, every one a package pointing at the MONOREPO ROOT --
-      # `../CLAUDE.md` from each package, `../../.claude/FUTURE.md` from
-      # CODE_STANDARD.md, `../server/CLAUDE.md`, `../../.archive/...`. Those
+      # `../AGENTS.md` from each package, `../../.claude/FUTURE.md` from
+      # CODE_STANDARD.md, `../server/AGENTS.md`, `../../.archive/...`. Those
       # targets live in the workspace root, which is not a git repository, so
       # no runner can clone them: they resolve INSIDE the runner workspace and
       # find nothing.
@@ -340,7 +347,7 @@ jobs:
       # siblings @dev): without the flag 22 FAIL, all root links; with it exit
       # 0 and 22 SKIP, all root links; the same run against a stale m3trik
       # branch FAILED 5 real in-repo breaks, so the step is not vacuous. The
-      # developer workspace keeps running it WITHOUT the flag (root CLAUDE.md:
+      # developer workspace keeps running it WITHOUT the flag (root AGENTS.md:
       # "`check_docs.py --workspace .` must exit 0"), which is where the root's
       # own links are checked.
       - name: Docs links and orphans (repos only)
@@ -349,7 +356,12 @@ jobs:
       - name: No unmanaged temp allocations or stray artifacts
         run: python m3trik/scripts/check_temp_artifacts.py
 
-      # The root CLAUDE.md's "English only" rule: no letter of a non-Latin
+      # Every package's retirements on time, across the whole ecosystem (each
+      # package's own CI checks itself the same way).
+      - name: API retirements on time
+        run: python m3trik/scripts/check_api_surface.py --check
+
+      # The root AGENTS.md's "English only" rule: no letter of a non-Latin
       # script (and no Greek word) in any checked-out repo's text or paths.
       # The private repos this job never clones are swept weekly instead, by
       # scripts/Invoke-ContextBudgetCheck.ps1 on the developer workspace.
@@ -363,6 +375,16 @@ jobs:
 
       - name: No oversized fixed vertical spacers
         run: python m3trik/scripts/check_ui_spacers.py
+
+      # The agent-facing context surface across the seven siblings at their
+      # `dev` tips: AGENTS.md sizes, `**Deps**:` lines. LAST on purpose: it
+      # judges docs in repos this job cannot fix, and a breach there must not
+      # hide the gates above. Memory checks skip (the auto-memory dir is local)
+      # and the dispatch and links checks self-skip without the workspace
+      # root; --no-runtime keeps the job import-free (Check-RuntimeSurface.ps1
+      # runs the drift check locally).
+      - name: Check context budget (repo-side)
+        run: python m3trik/scripts/check_context_budget.py --no-memory --no-runtime
 
   release-tooling:
     # push.ps1's own suite, split out because it needs Windows: test_push.py

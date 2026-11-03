@@ -13,7 +13,7 @@ Usage:
 
     python check_doc_line_refs.py --root <repo>                # scan all .md
     python check_doc_line_refs.py --root <repo> a.md b.md      # scan specific files
-    python check_doc_line_refs.py --root <repo> --exclude 'API_REGISTRY.md'
+    python check_doc_line_refs.py --root <repo> --exclude 'docs/internal.md'
 
 This is the deterministic subset of the prior LLM-based drift check; it covers
 the highest-priority class of drift (line numbers) without requiring an LLM
@@ -37,16 +37,13 @@ REF_PATTERN = re.compile(
 
 DEFAULT_DOC_GLOBS = ("*.md", "docs/**/*.md")
 
-# Auto-generated docs that the API registry generator emits with paths assuming
-# the cross-package sibling layout (e.g. uitk/uitk/file.py). Those refs look
-# "broken" when the script runs from inside a single repo but are correct under
-# the layout the generator targets. Excluding by default keeps the deterministic
-# check focused on hand-written docs.
-DEFAULT_EXCLUDES = ("API_REGISTRY.md", "API_CHANGES.md", "API_SHADOWS.md")
+# Docs skipped when no --exclude is passed: a generated doc whose refs assume a
+# layout other than the repo's own would go here. None does today.
+DEFAULT_EXCLUDES: Tuple[str, ...] = ()
 
 
 def _exclude_matches(rel_path: Path, pat: str) -> bool:
-    # Match against both the basename (so 'API_REGISTRY.md' catches the file
+    # Match against both the basename (so 'README.md' catches the file
     # anywhere under root) and the full relative path (so 'docs/internal.md'
     # targets a specific location). Python 3.11's fnmatch has no recursive
     # '**' semantics, so we cover both shapes explicitly.
@@ -158,7 +155,7 @@ def main(argv: List[str] | None = None) -> int:
         default=None,
         help=(
             "Glob to skip. Matched against both the basename and the path "
-            "relative to --root, so 'API_REGISTRY.md' catches the file under "
+            "relative to --root, so 'README.md' catches the file under "
             "any directory while 'docs/internal.md' targets one location. "
             f"Repeatable. Defaults to {list(DEFAULT_EXCLUDES)} when no "
             "--exclude is passed; pass '--exclude=' (empty) to disable defaults."

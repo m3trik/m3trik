@@ -4,24 +4,28 @@
 
 ``m3trik/workspace.json`` is the one declaration of the workspace (CODE_STANDARD
 section 0): the cascade (``push.ps1``'s release order) and, per unit -- every front
-door that carries a ``CLAUDE.md`` -- its release mode and its domain line. It
+door that carries an ``AGENTS.md`` -- its release mode and its domain line. It
 declares only what cannot be measured. Membership IS measured: a folder holding
 ``.git`` belongs (``check_temp_artifacts.py``'s positive rule), so a new repo needs
 no roster edit to exist; one without an entry is reported as unclassified, never
 failed.
 
 Readers take the declaration directly -- ``push.ps1`` (``$RELEASE_ORDER``,
-``$STRICT_PACKAGES``), ``generate_api_registry.ECOSYSTEM_PACKAGES``,
+``$STRICT_PACKAGES``), ``check_api_surface.ECOSYSTEM_PACKAGES``,
 ``generate_workspace_inventory`` (domains) and ``check_context_budget`` -- so none of
 them spells the package set. What cannot read JSON is checked here:
 
-1. The root ``CLAUDE.md`` Dispatch table, rewritten from the manifest. The
+1. The root ``AGENTS.md`` Dispatch table, rewritten from the manifest. The
    workspace root is not a repo, so a CI checkout has no such file and that part
    is reported as skipped there.
 2. The ecosystem sibling loops in ``m3trik/.github/workflows/*.yml`` (a
    ``for repo in ...; do`` naming ``pythontk``), which must list
    :func:`ecosystem_packages` in order.
-3. The charter rule: every declared unit present on disk carries its ``CLAUDE.md``.
+3. The charter rule: every declared unit present on disk carries its ``AGENTS.md``,
+   and the instruction tree keeps its layout and its declared packs, vendored and
+   current (``pythontk.AgentInstructions``).
+4. Each package's committed operation catalog (``<package>/operations.json``)
+   against the declarations it is generated from (``pythontk.OperationCatalog``).
 
 Usage:
     python sync_workspace.py            # rewrite the dispatch table (idempotent)
@@ -40,8 +44,12 @@ from typing import Dict, List, Optional, Sequence, Tuple
 M3TRIK = Path(__file__).resolve().parents[1]
 WORKSPACE = M3TRIK.parent
 MANIFEST = M3TRIK / "workspace.json"
-ROOT_CLAUDE = WORKSPACE / "CLAUDE.md"
+ROOT_AGENTS = WORKSPACE / "AGENTS.md"
 WORKFLOWS = M3TRIK / ".github" / "workflows"
+#: The packs' source: every unit's vendored copy is checked against it.
+PACKS = M3TRIK / "agents" / "packs"
+#: The standard the instructions cite as ``§N``.
+STANDARD = M3TRIK / "docs" / "CODE_STANDARD.md"
 
 RELEASE_MODES = ("cascade", "standalone", "none")
 ROLES = ("product",)
@@ -66,6 +74,12 @@ def validate(data: dict) -> List[str]:
             problems.append(f"{unit.get('path')}: no domain line")
         if "role" in unit and unit["role"] not in ROLES:
             problems.append(f"{unit.get('path')}: role must be one of {ROLES}")
+        packs = unit.get("packs", [])
+        if not isinstance(packs, list) or not all(isinstance(p, str) for p in packs):
+            problems.append(f"{unit.get('path')}: packs must be a list of pack names")
+    root_packs = data.get("packs", [])
+    if not isinstance(root_packs, list) or not all(isinstance(p, str) for p in root_packs):
+        problems.append("packs (the workspace root's) must be a list of pack names")
     budget = data.get("line_budget")
     if budget is not None and (type(budget) is not int or budget <= 0):
         problems.append("line_budget must be a positive integer")
@@ -97,7 +111,7 @@ def load(path: Path = MANIFEST) -> dict:
 
 
 def ecosystem_packages(data: Optional[dict] = None) -> Tuple[str, ...]:
-    """The registry set: the cascade in release order, then the standalone
+    """The ecosystem set: the cascade in release order, then the standalone
     packages in manifest order."""
     data = data or load()
     standalone = [u["path"] for u in data["units"] if u["release"] == "standalone"]
@@ -119,7 +133,7 @@ def render_dispatch(data: Optional[dict] = None) -> str:
     rows = ["| Unit | Domain |", "|:---|:---|"]
     for unit in (data or load())["units"]:
         path = unit["path"]
-        rows.append(f"| [`{path}/`]({path}/CLAUDE.md) | {unit['domain']} |")
+        rows.append(f"| [`{path}/`]({path}/AGENTS.md) | {unit['domain']} |")
     return "\n".join(rows)
 
 
@@ -151,7 +165,7 @@ def _read(path: Path) -> Tuple[str, bool]:
     return raw.replace("\r\n", "\n"), "\r\n" in raw
 
 
-def dispatch_drift(path: Path = ROOT_CLAUDE) -> Optional[str]:
+def dispatch_drift(path: Path = ROOT_AGENTS) -> Optional[str]:
     """Why the Dispatch table in *path* disagrees with the manifest, or None."""
     text, _ = _read(path)
     try:
@@ -166,7 +180,7 @@ def dispatch_drift(path: Path = ROOT_CLAUDE) -> Optional[str]:
     return None
 
 
-def write_dispatch(path: Path = ROOT_CLAUDE) -> bool:
+def write_dispatch(path: Path = ROOT_AGENTS) -> bool:
     """Rewrite *path*'s Dispatch table from the manifest; True when it changed."""
     text, crlf = _read(path)
     wanted = splice_dispatch(text, render_dispatch())
@@ -194,13 +208,113 @@ def workflow_drift(workflows: Path = WORKFLOWS) -> List[str]:
 
 
 def missing_charters(workspace: Path = WORKSPACE) -> List[str]:
-    """Declared units present on disk that carry no ``CLAUDE.md``."""
+    """Declared units present on disk that carry no ``AGENTS.md``."""
     return [
         unit["path"]
         for unit in load()["units"]
         if (workspace / unit["path"]).is_dir()
-        and not (workspace / unit["path"] / "CLAUDE.md").is_file()
+        and not (workspace / unit["path"] / "AGENTS.md").is_file()
     ]
+
+
+def instruction_roots(workspace: Path = WORKSPACE) -> List[Tuple[Path, List[str], str]]:
+    """``(folder, packs, mode)`` for each instruction root present: the
+    workspace root (its packs imported once, ``import``) and every declared
+    unit (its packs added by its own hook in a session rooted there, ``hook``)."""
+    data = load()
+    roots = [(workspace, list(data.get("packs", [])), "import")] if workspace.is_dir() else []
+    for unit in data["units"]:
+        folder = workspace / unit["path"]
+        if folder.is_dir():
+            roots.append((folder, list(unit.get("packs", [])), "hook"))
+    return roots
+
+
+def _instructions():
+    """pythontk's ``AgentInstructions``, from the sibling checkout when not installed."""
+    sibling = str(WORKSPACE / "pythontk")
+    if (WORKSPACE / "pythontk" / "pythontk").is_dir() and sibling not in sys.path:
+        sys.path.insert(0, sibling)
+    from pythontk import AgentInstructions
+
+    return AgentInstructions
+
+
+def instruction_problems(workspace: Path = WORKSPACE) -> List[str]:
+    """Every way the instruction tree breaks its layout (once each), and each
+    declared pack a root does not carry."""
+    agent = _instructions()
+    seen, out = set(), []
+    for folder, packs, mode in instruction_roots(workspace):
+        if folder == workspace and not (workspace / "AGENTS.md").is_file():
+            continue  # no workspace root here: a CI runner clones the repos alone
+        result = agent.check(str(folder), source=str(PACKS), standard=str(STANDARD), mode=mode)
+        for problem in result["problems"]:
+            key = (problem["code"], problem["location"])
+            if key not in seen:
+                seen.add(key)
+                out.append(f"{problem['location']}: {problem['message']}")
+        missing = sorted(set(packs) - set(agent.vendored(str(folder))))
+        if missing:
+            out.append(f"{folder}: declares packs {missing} it does not carry")
+    return out
+
+
+def write_instructions(workspace: Path = WORKSPACE) -> List[str]:
+    """Bring every instruction root in line (``AgentInstructions.sync``); the files written."""
+    agent = _instructions()
+    written = []
+    for folder, packs, mode in instruction_roots(workspace):
+        result = agent.sync(str(folder), str(PACKS), packs=packs, mode=mode)
+        written += result["written"] + result["removed"]
+    return written
+
+
+def catalog_modules(workspace: Path = WORKSPACE, data: Optional[dict] = None) -> List[Tuple[Path, str]]:
+    """``(repo, module)`` for each declared unit whose package declares
+    operations: ``<unit>/<package>/operations.py``, beside its committed catalog."""
+    out = []
+    for unit in (data or load())["units"]:
+        repo = workspace / unit["path"]
+        if (repo / repo.name / "operations.py").is_file():
+            out.append((repo, f"{repo.name}.operations"))
+    return out
+
+
+def _operation_provider(repos: Sequence[Path]):
+    """pythontk's ``OperationProvider``, each of *repos* importable ahead of
+    whatever is installed (a repo folder off the path imports as an empty
+    namespace, so its package would not be found)."""
+    for repo in reversed(repos):
+        if str(repo) not in sys.path:
+            sys.path.insert(0, str(repo))
+    _instructions()  # pythontk itself, from the sibling checkout
+    from pythontk import OperationProvider
+
+    return OperationProvider
+
+
+def catalog_problems(workspace: Path = WORKSPACE, data: Optional[dict] = None) -> List[str]:
+    """Every way the packages' operations break the rules
+    (``OperationProvider.check``): a missing or stale catalog, a change that
+    cannot plan, an untyped argument, twins that disagree."""
+    modules = catalog_modules(workspace, data)
+    provider = _operation_provider([repo for repo, _ in modules])
+    return provider.check([module for _, module in modules])
+
+
+def write_catalogs(workspace: Path = WORKSPACE, data: Optional[dict] = None) -> List[str]:
+    """Rewrite every package's committed operation catalog; the files that changed."""
+    modules = catalog_modules(workspace, data)
+    provider = _operation_provider([repo for repo, _ in modules])
+    written = []
+    for _repo, module in modules:
+        path = provider.catalog_path(module)
+        before = path.read_bytes() if path.is_file() else None
+        provider.write_catalog(module)
+        if path.read_bytes() != before:
+            written.append(str(path))
+    return written
 
 
 def unclassified(workspace: Path = WORKSPACE) -> List[str]:
@@ -219,6 +333,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--check", action="store_true", help="report drift; write nothing"
     )
     args = parser.parse_args(argv)
+    # A rule may quote any character; a console's code page must not crash the report.
+    sys.stdout.reconfigure(errors="backslashreplace")
     try:
         load()
     except (OSError, ValueError) as exc:  # JSONDecodeError is a ValueError
@@ -226,8 +342,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
     failures = []
-    if not ROOT_CLAUDE.is_file():
-        print("[SKIP] dispatch: no workspace root CLAUDE.md (a CI runner clones repos)")
+    try:
+        if args.check:
+            failures += instruction_problems()
+            failures += catalog_problems()
+        else:
+            for path in write_instructions() + write_catalogs():
+                print(f"[WROTE] {path}")
+    except ImportError as exc:
+        print(f"[SKIP] instructions: pythontk is not importable here ({exc})")
+    except ValueError as exc:
+        failures.append(f"instructions: {exc}")
+    if not ROOT_AGENTS.is_file():
+        print("[SKIP] dispatch: no workspace root AGENTS.md (a CI runner clones repos)")
     elif args.check:
         drift = dispatch_drift()
         if drift:
@@ -236,12 +363,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             changed = write_dispatch()
         except ValueError as exc:
-            failures.append(f"{ROOT_CLAUDE.name}: {exc}")
+            failures.append(f"{ROOT_AGENTS.name}: {exc}")
         else:
             print(f"[{'WROTE' if changed else 'OK'}] dispatch table")
     failures += workflow_drift()
     failures += [
-        f"{path}: declared in workspace.json but carries no CLAUDE.md (its charter)"
+        f"{path}: declared in workspace.json but carries no AGENTS.md (its charter)"
         for path in missing_charters()
     ]
     for name in unclassified():

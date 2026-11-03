@@ -35,9 +35,11 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 
 **Imports are lazy and have no side effects.** A package declares its names and imports none of them until first use. Other packages are reached through their root, never through a private module.
 
-**Export is plug-and-play.** A deliverable is the authored scene written by a stock exporter, in open formats that pass their reference validators. A preview composes over the authored value; it never replaces it.
+**Adopt before building.** Anything new starts with a look for what already does the job: our own APIs, the host's built-ins, an open standard, a maintained library. What fits our users, our licenses and the package's dependencies is adopted; we build only when nothing fits, and say why.
 
-**Tests come from issues.** A bug gets a failing test first, then the fix; the test stays. Each change runs the affected tests; each release runs every suite and a fresh review, and `push.ps1` refuses to release a changed package without a recorded `review` and `tests` receipt for the current tree (the tests receipt is a hard gate). The GUI pass in a fresh Maya and Blender and the production-scene check are done by hand before a release; nothing gates them. Tests always launch a new DCC instance and never touch a user's open session.
+**Export is plug-and-play.** A deliverable is the authored scene written by a stock exporter, in open formats that pass their reference validators: one self-contained file per format, its records naming no container and carrying no build paths. A preview composes over the authored value; it never replaces it.
+
+**Tests come from issues.** A bug gets a failing test first, then the fix; the test stays. Each change runs the affected tests; each release runs every suite and a fresh review, and `push.ps1` refuses to release a changed package without a recorded `review` and `tests` receipt for the current tree (the tests receipt is a hard gate). The GUI pass in a fresh Maya and Blender and the production-scene check are done by hand before a release; nothing gates them. Tests launch their own DCC instance, reuse it across runs only while the tooling owns it and no other run is using it (changed code reloaded), and never touch a user's open session, its command ports or, while it is open, the mouse and keyboard.
 
 **Checked, not just written.** Each rule a script can hold is a check, run in CI or by the release gate (`push.ps1`):
 
@@ -46,20 +48,21 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 | `check_layers.py` | An import against the layer order, a role rule (a panel that imports a host), or an import of a product (tentacle, extapps) |
 | `check_dcc_twins.py` | A body written twice, a drifted copy, a host binding that overrides shared behavior |
 | `check_saved_names.py` | A saved widget or record name that disappeared |
-| `generate_api_registry.py --semver` | A removed public name with no moved-names entry and no deprecation |
+| `check_api_surface.py --semver` | A removed public name with no moved-names entry and no deprecation |
 | `check_docs.py` | A broken link or an unreachable doc |
 | `check_english_only.py`, `check_public_hygiene.py` | Non-English text; a private path or client name in a public repo |
 | `check_temp_artifacts.py`, `check_context_budget.py` | A temp file outside its home; instruction files past their size caps |
 | ruff | In every package: syntax errors, undefined names and unused imports (E4/E7/E9/F); in tentacle also oversized classes and functions, Qt imported past `qtpy`, PyMEL, and `print` |
 
-The full text of every rule, with its reasoning: [`docs/CODE_STANDARD.md`](docs/CODE_STANDARD.md). The instructions coding agents follow live in each repo's `CLAUDE.md`; a rule change updates them, the standard and this summary together.
+The full text of every rule, with its reasoning: [`docs/CODE_STANDARD.md`](docs/CODE_STANDARD.md). The instructions coding agents follow live in each repo's `AGENTS.md` and the shared packs ([`agents/packs/`](agents/packs/)); a rule change updates them, the standard and this summary together.
 
 ## This repo
 
 PowerShell DevOps for the ecosystem: release automation, repo-maintenance scripts and the cross-package standards.
 
-- **[`push.ps1`](push.ps1)**: the release path for the ecosystem packages (`pythontk`, `uitk`, `mayatk`, `blendertk`, `tentacle`). It makes one idempotent `Release X.Y.Z` commit per package (version stepped from what PyPI has, internal floors, fresh API registry), merges through a PR that fails fast on a red check, guards PyPI, tags versions, and writes GitHub Releases with the changelog notes since the previous tag. Re-running it completes any release an earlier run left merged but unfinished. `extapps` and `unitytk` are not its: each publishes itself from `main` through its own `publish.yml`.
-- **[`scripts/`](scripts/)**: the checks above, API-registry generation, Maya and Blender parity sweeps, and workspace inventory.
+- **[`push.ps1`](push.ps1)**: the release path for the ecosystem packages (`pythontk`, `uitk`, `mayatk`, `blendertk`, `tentacle`). It makes one idempotent `Release X.Y.Z` commit per package (version stepped from what PyPI has, internal floors), merges through a PR that fails fast on a red check, guards PyPI, tags versions, and writes GitHub Releases with the changelog notes since the previous tag. Re-running it completes any release an earlier run left merged but unfinished. `extapps` and `unitytk` are not its: each publishes itself from `main` through its own `publish.yml`.
+- **[`scripts/`](scripts/)**: the checks above, the API surface checks, Maya and Blender parity sweeps, and workspace inventory.
+- **Agent tooling**: the shared rule packs ([`agents/packs/`](agents/packs/)) and the Claude Code plugin ([`claude/`](claude/README.md): the review and sweep agents, `/backlog`, the hooks, and the MCP servers that serve the codebase's operations and its whole public API). Setting them up and using them: [`docs/AGENT_INSTRUCTIONS.md`](docs/AGENT_INSTRUCTIONS.md).
 - **[`docs/`](docs/)**: the cross-package standards for [code](docs/CODE_STANDARD.md), [docs](docs/DOCS_STANDARD.md), the [context budget](docs/CONTEXT_BUDGET.md) and [test badges](docs/TEST_BADGE_STANDARD.md), plus the API shadow report.
 
-Conventions and usage: [`CLAUDE.md`](CLAUDE.md).
+Conventions and usage: [`AGENTS.md`](AGENTS.md).

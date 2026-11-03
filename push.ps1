@@ -31,14 +31,15 @@ re-run after ANY abort resumes at the right place instead of re-doing or skippin
              that ships, or an upstream floor that must ratchet) becomes ONE commit,
              `Release X.Y.Z`: the version (Resolve-ReleaseVersion — stepped from what is
              PUBLISHED, never from the file), the internal floors, the standalone
-             ranges ($STANDALONE_RANGES), and a fresh API registry. One release = one version = one commit; every version number
+             ranges ($STANDALONE_RANGES), and (tentacle) fresh parity artifacts. One release = one version = one commit; every version number
              reaches PyPI. A hand-edited __version__ above the published one is honored
              as a deliberate minor/major bump.
 - Push       dev -> origin/dev when ahead.
 - Merge      dev -> main via PR (-UsePR) or direct. A MUST-REACH-MAIN delta (.github/**,
-             test/**, docs/** except the wheel's readme) merges WITHOUT a version:
+             test/**, docs/** except the wheel's readme, the agent instructions:
+             AGENTS.md, CLAUDE.md, .agents/**, .claude/**) merges WITHOUT a version:
              publish.yml is paths-filtered so nothing publishes. A RIDES-ALONG delta
-             (registry sidecars, CHANGELOG) skips the merge and lands with the next
+             (CHANGELOG) skips the merge and lands with the next
              release. A dead PR — a settled red check — fails in one poll, naming the
              check, instead of waiting out the timeout.
 
@@ -49,10 +50,10 @@ Core safety rules (Strict+Merge)
 - Refuses to proceed if conflict markers exist in pyproject.toml (local OR remote origin/main|origin/dev).
 - Refuses to release a real code delta without recorded "review" AND "tests" receipts
   for the current tree (release gate; receipts in .claude/receipts.json — see
-  m3trik/CLAUDE.md "Release preflight"). The tests receipt is enforced, not advisory:
+  m3trik/AGENTS.md "Release preflight"). The tests receipt is enforced, not advisory:
   the pull_request suite mayatk and blendertk run is the no-DCC subset, so it is the only
   evidence their FULL suite ever ran against the tree being published. Receipts key on a
-  content hash of the SOURCE tree (generated sidecars excluded), so a registry refresh
+  content hash of the SOURCE tree (generated parity docs excluded), so a parity refresh
   never voids one; Prepare re-keys them across its own Release commit.
 - Re-checks the tree the release gate judged before each commit that sweeps the working
   tree in. The gate runs once, before any mutation, and pins every strict package's tree
@@ -113,7 +114,7 @@ Key flags
                       is still required.
 -RecordReceipt        Record named verification receipt(s) (e.g. review,tests) for
                       the current tree of -Packages, then exit. See "Release
-                      preflight" in m3trik/CLAUDE.md.
+                      preflight" in m3trik/AGENTS.md.
 -ShowReceipts         Show receipt validity for -Packages (default: strict set),
                       then exit.
 -CommitMessage        Message for the auto-commit Sync-DevWithOrigin makes when
@@ -144,8 +145,8 @@ param(
     [switch]$SkipReview,
     [switch]$SkipTestsReceipt,
     # Ship a version that REMOVES public API as a patch anyway. The semver gate
-    # (Get-RequiredBump) refuses that by default because the root CLAUDE.md makes
-    # a break owe a minor: a consumer floored at `>=0.8.0` resolves a breaking
+    # (Get-RequiredBump) refuses that by default because the principles pack
+    # (CODE_STANDARD section 5) makes a break owe a minor: a consumer floored at `>=0.8.0` resolves a breaking
     # 0.8.1 as a bugfix. Measured 2026-09-19 -- blendertk's removal of the public
     # `smart_bake=` keyword would have shipped as 0.8.1. Deliberate exceptions
     # exist (retiring something provably unreachable), so the gate is a refusal
@@ -231,8 +232,7 @@ if (-not $RELEASE_ORDER -or $RELEASE_ORDER -contains $null) {
     exit 1
 }
 
-# The maintenance scripts a release shells out to (registry, semver verdict,
-# parity). Derived from -Root rather than from $SCRIPT_DIR deliberately: a
+# The maintenance scripts a release shells out to (semver verdict, parity). Derived from -Root rather than from $SCRIPT_DIR deliberately: a
 # hermetic run (`-Root <temp>`) then finds nothing here and SKIPS them, instead
 # of reaching the real workspace's tooling and regenerating against dummy repos.
 $M3TRIK_SCRIPTS = Join-Path (Join-Path $ROOT "m3trik") "scripts"
@@ -284,22 +284,21 @@ $RELEASE_ASSETS = @{
 # self-invalidates. The Strict+Merge release gate consumes BOTH "review" and "tests"
 # (-SkipTestsReceipt waives only the latter, loudly); sessions consult -ShowReceipts to
 # skip re-running a suite already green for an identical tree.
-# Protocol: m3trik/CLAUDE.md "Release preflight".
+# Protocol: m3trik/AGENTS.md "Release preflight".
 # ------------------------------------------------------------------------------------------------
 $RECEIPTS_PATH = Join-Path $ROOT ".claude\receipts.json"
 
-# Paths that are DERIVED from source by a generator and gated by CI (`generate_api_registry.py
-# --check`, tentacle's parity job). They are excluded from the receipt hash: if the source is
-# unchanged their content is determined, so regenerating them certifies nothing new -- and
-# including them made every registry refresh void a receipt for a tree whose code had not
-# moved. Git pathspec magic: `:!X` is anchored at the repo root (it does not match `sub/X`).
-$API_SIDECARS = @('API_INDEX.md', 'API_REGISTRY.md', 'API_REGISTRY.json', 'API_CHANGES.md')
-$GENERATED_PATHS = $API_SIDECARS + @('docs/PARITY_AUDIT.md', 'docs/PARITY_SURFACE.md')
+# Paths that are DERIVED from source by a generator and gated by CI (tentacle's parity job).
+# They are excluded from the receipt hash: if the source is unchanged their content is
+# determined, so regenerating them certifies nothing new -- and including them made every
+# refresh void a receipt for a tree whose code had not moved. Git pathspec magic: `:!X` is
+# anchored at the repo root (it does not match `sub/X`).
+$GENERATED_PATHS = @('docs/PARITY_AUDIT.md', 'docs/PARITY_SURFACE.md')
 $GENERATED_PATHSPEC = @($GENERATED_PATHS | ForEach-Object { ":!$_" })
 
 function Get-TreeHash {
     # Content-addressed hash of the SOURCE tree: a real git tree object, built in a
-    # throwaway index from the working tree with the generated sidecars excluded.
+    # throwaway index from the working tree with the generated paths excluded.
     # One sha, no text hashing -- so unlike the previous md5-of-`git diff` this is
     # immune to the host's console encoding (git emits the sha as ASCII), hashes
     # untracked files by CONTENT rather than name+size+mtime, and is unchanged by a
@@ -399,7 +398,7 @@ function Test-EnglishOnly {
 }
 
 function Test-LineBudget {
-    # The line budget (workspace.json line_budget): the registry set's source lines, $Names as
+    # The line budget (workspace.json line_budget): the ecosystem set's source lines, $Names as
     # this run would commit them and every other package as committed, refused past the
     # ceiling, so growth is a decision with a CHANGELOG line rather than a drift.
     # scripts/check_context_budget.py --line-budget over $Names; -Script exists for tests.
@@ -486,7 +485,7 @@ function Get-RecentlyModifiedFiles {
       failed receipt gate: a receipt is keyed on the tree hash, so a concurrent
       writer already invalidates it -- but "no tests receipt" reads identically
       to "you never ran the suite", and the fix for those two is opposite (wait
-      vs. run). Generated sidecars are excluded: regenerating the API registry
+      vs. run). Generated paths are excluded: regenerating the parity docs
       immediately before a release is the NORMAL flow and would otherwise make
       every clean release look like a collision.
     #>
@@ -653,7 +652,7 @@ function Get-GateVerdict {
         $verdict.Exempt = "has nothing to release"
         return $verdict
     }
-    # A CI-only or sidecar-only delta merges without a version (or not at all) and
+    # A CI-only or CHANGELOG-only delta merges without a version (or not at all) and
     # never reaches PyPI.
     $verdict.Class = Test-ReleaseDelta $PackageName $RepoPath $Versions
     if ($verdict.Class -ne 'artifact') {
@@ -1015,32 +1014,42 @@ function Resolve-ReleaseVersion {
 }
 
 function Get-RequiredBump {
-    # The smallest release this package's delta may ship as, from the generator
+    # The smallest release this package's delta may ship as, from the script
     # that already computes it: @{ bump = 'minor'|'patch'; reasons = @(...) }.
     #
-    # Asked of `generate_api_registry.py --semver` rather than re-derived here,
-    # and NOT read out of the rendered API_CHANGES.md: the generator owns what
-    # counts as a removal (it separates a genuine removal from a hoist, and
-    # exempts exec-templates), and a second opinion in PowerShell would drift
-    # from the document that explains the release. It walks SOURCE plus the
-    # origin/main sidecar, so it is safe to ask before anything is mutated.
+    # Asked of `check_api_surface.py --semver` rather than re-derived here: it
+    # owns what counts as a removal (it separates a genuine removal from a hoist,
+    # and exempts exec-templates), and a second opinion in PowerShell would drift
+    # from its `--changes` report, which explains the release. It reads SOURCE
+    # against the published version's tree (tag v$Published), so it is safe to
+    # ask before anything is mutated.
     #
-    # $null when the generator cannot answer (absent, unparseable output). The
-    # caller then proceeds: a gate that invented a verdict would block releases
-    # it cannot justify, which is how gates get bypassed on reflex.
-    param([string]$PackageName)
-    $gen = Join-Path $M3TRIK_SCRIPTS "generate_api_registry.py"
+    # @{ failed = <why>; detail = <its stderr> } when it gives no verdict: it
+    # failed, its output does not parse, or it has no baseline (exit 2: the tag
+    # names no commit here, as in a checkout that never fetched it). Each is a
+    # refusal: read as a clean patch, a missing tag shipped a removal unseen.
+    # $null only when the script is absent (a hermetic -Root run): nothing to ask.
+    param([string]$PackageName, [string]$Published)
+    $gen = Join-Path $M3TRIK_SCRIPTS "check_api_surface.py"
     if (-not (Test-Path $gen)) { return $null }
-    # `2>$null`, not the `2>&1` the other python calls here use: the generator
-    # writes its advisories to stderr (an unreadable `remove_in`, a missing
-    # `__version__`), and folding those into stdout would put prose in front of
-    # the JSON and fail the parse.
-    $raw = & $PYTHON $gen $PackageName --semver 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
-    try { $parsed = ($raw -join "`n") | ConvertFrom-Json } catch { return $null }
-    $row = @($parsed)[0]
-    if (-not $row -or -not $row.bump) { return $null }
-    # unaccounted: removals with no ptk.Deprecation alias and no MOVED_NAMES entry. A generator
+    $since = @()
+    if ($Published) { $since = @('--since', "v$Published") }
+    # stdout is the JSON; stderr (advisories, a traceback, why there is no
+    # verdict) is kept apart so it can be shown, never parsed.
+    $all = @(& $PYTHON $gen $PackageName --semver @since 2>&1)
+    $code = $LASTEXITCODE
+    $detail = @($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { $_.ToString() })
+    $raw = @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" })
+    $row = $null
+    try { $row = @(($raw -join "`n") | ConvertFrom-Json)[0] } catch { $row = $null }
+    if ($row -and $row.baseline -and ([string]$row.baseline).StartsWith('none')) {
+        return @{ failed = "no baseline: $($row.baseline)"; detail = $detail }
+    }
+    if ($code -ne 0) { return @{ failed = "check_api_surface.py exited $code"; detail = $detail } }
+    if (-not $row -or -not $row.bump) {
+        return @{ failed = 'check_api_surface.py printed no verdict'; detail = $detail + $raw }
+    }
+    # unaccounted: removals with no ptk.Deprecation alias and no MOVED_NAMES entry. A script
     # predating the field leaves it absent, which reads as none.
     return @{
         bump        = [string]$row.bump
@@ -1060,8 +1069,14 @@ function Test-SemverGate {
         [string]$Release
     )
     if ($AllowBreakingPatch) { return $true }
-    $required = Get-RequiredBump $PackageName
-    if (-not $required) { return $true }
+    $required = Get-RequiredBump $PackageName $Published
+    if (-not $required) { return $true }  # no script here (a hermetic run)
+    if ($required.failed) {
+        Write-Err "$PackageName has no semver verdict: $($required.failed)"
+        foreach ($line in (@($required.detail) | Select-Object -First 12)) { Write-Host "    $line" -ForegroundColor DarkGray }
+        Write-Err "Fix it (a missing tag: git -C <repo> fetch --tags origin), or re-run with -AllowBreakingPatch to release without one."
+        return $false
+    }
     # A removal nothing accounts for is a break whatever the version says: its caller gets a bare
     # AttributeError instead of an alias's warning or the moved-names error naming the new home.
     $unaccounted = @($required.unaccounted | Where-Object { $_ })
@@ -1069,7 +1084,7 @@ function Test-SemverGate {
         Write-Err "$PackageName removes public API nothing accounts for: each name owes a ptk.Deprecation alias, or a MOVED_NAMES entry in $PackageName/$PackageName/__init__.py when it left for another package."
         foreach ($r in ($unaccounted | Select-Object -First 8)) { Write-Host "    - $r" -ForegroundColor DarkGray }
         if ($unaccounted.Count -gt 8) {
-            Write-Host "    ... and $($unaccounted.Count - 8) more (API_CHANGES.md lists them all)" -ForegroundColor DarkGray
+            Write-Host "    ... and $($unaccounted.Count - 8) more (check_api_surface.py $PackageName --changes lists them all)" -ForegroundColor DarkGray
         }
         Write-Err "Account for them, or re-run with -AllowBreakingPatch."
         return $false
@@ -1086,10 +1101,10 @@ function Test-SemverGate {
     $wanted = "$($pub.Major).$($pub.Minor + 1).0"
     if ($rel -ge [version]$wanted) { return $true }
     Write-Err "$PackageName $Release REMOVES public API, so it owes a minor bump (>= $wanted)."
-    Write-Err "The root CLAUDE.md makes a break owe one: a consumer floored at >=$Published resolves $Release as a bugfix."
+    Write-Err "A break owes one (CODE_STANDARD section 5): a consumer floored at >=$Published resolves $Release as a bugfix."
     foreach ($r in ($required.reasons | Select-Object -First 8)) { Write-Host "    - $r" -ForegroundColor DarkGray }
     if ($required.reasons.Count -gt 8) {
-        Write-Host "    ... and $($required.reasons.Count - 8) more (API_CHANGES.md lists them all)" -ForegroundColor DarkGray
+        Write-Host "    ... and $($required.reasons.Count - 8) more (check_api_surface.py $PackageName --changes lists them all)" -ForegroundColor DarkGray
     }
     Write-Err "Set __version__ = `"$wanted`" in $PackageName/$PackageName/__init__.py, or re-run with -AllowBreakingPatch."
     return $false
@@ -1279,8 +1294,8 @@ function Update-InternalPins {
 # ------------------------------------------------------------------------------------------------
 # Delta classification — what does `origin/main..dev` (plus the working tree) contain?
 #   artifact        anything that ships, or an internal floor that must ratchet -> release
-#   must-reach-main CI/doc files that only take effect on main               -> merge, no version
-#   rides-along     generated sidecars + CHANGELOG                             -> skip; next release
+#   must-reach-main CI/doc/agent-instruction files that only take effect on main -> merge, no version
+#   rides-along     CHANGELOG                                                  -> skip; next release
 #   none            nothing                                                    -> skip
 # Paths that NEVER ship in the wheel. `<pkg>/__init__.py` is deliberately NOT here any more:
 # with the bump-dev bot retired, a version edit on dev is a deliberate artifact change.
@@ -1288,9 +1303,12 @@ function Update-InternalPins {
 # `docs/README.md` is an artifact even though it sits under docs/: every cascade pyproject
 # names it as the wheel's `readme`, so editing it changes the published metadata.
 # ------------------------------------------------------------------------------------------------
-$MUST_REACH_MAIN_PATHS = @('.github/', 'test/', 'docs/')
+# The agent instructions (the repo's AGENTS.md, its CLAUDE.md stub, the vendored packs and
+# hook in .agents/, .claude/) ship in no wheel; sync_workspace.py rewrites them in every
+# repo at once, and read as artifacts one pack edit cut a release of each package.
+$MUST_REACH_MAIN_PATHS = @('.github/', 'test/', 'docs/', 'AGENTS.md', 'CLAUDE.md', '.agents/', '.claude/')
 $ARTIFACT_EXCEPTIONS = @('docs/README.md')
-$RIDES_ALONG_PATHS = $API_SIDECARS + @('CHANGELOG.md')
+$RIDES_ALONG_PATHS = @('CHANGELOG.md')
 
 function Get-DeltaClass {
     # Classify one repo-relative path.
@@ -2514,8 +2532,8 @@ function Invoke-PreparePhase {
         return $null
     }
     # Semver gate, BEFORE anything is written: the verdict comes from source
-    # plus the origin/main sidecar, so it needs no regenerated artifact and can
-    # refuse while the tree is still untouched.
+    # against the published release's tag, so it can refuse while the tree is
+    # still untouched.
     $publishedNow = Resolve-PublishedVersion $PackageName $RepoPath $Versions
     if ($publishedNow -and -not (Test-SemverGate $PackageName $publishedNow $version)) {
         return $null
@@ -2536,9 +2554,9 @@ function Invoke-PreparePhase {
             Write-Step "[DryRun] Would pin $dep$($ranges[$dep].To) (was $($ranges[$dep].From))"
         }
         if (Test-Path (Join-Path $RepoPath "docs\PARITY_AUDIT.md")) {
-            Write-Step "[DryRun] Would regenerate the API registry + parity artifacts and commit 'Release $version'"
+            Write-Step "[DryRun] Would regenerate the parity artifacts and commit 'Release $version'"
         } else {
-            Write-Step "[DryRun] Would regenerate the API registry and commit 'Release $version'"
+            Write-Step "[DryRun] Would commit 'Release $version'"
         }
         # Downstream DryRun classification must see this package as published at
         # its would-be version, exactly as a real run refreshes the map in Finalize.
@@ -2567,20 +2585,7 @@ function Invoke-PreparePhase {
         # push.ps1's own edit is the new pinned tree: what the Release commit holds.
         $null = Set-GatedTree $PackageName $RepoPath
 
-        # A current registry in the release commit, so main always carries one and
-        # the PR's `API registry up to date` check is green by construction. Runs
-        # under the venv python (AST-only; no DCC import). --no-shadows keeps the
-        # cross-package shadow report — which lives in m3trik's tree — untouched.
-        $gen = Join-Path $M3TRIK_SCRIPTS "generate_api_registry.py"
-        if (Test-Path $gen) {
-            $genOut = & $PYTHON $gen $PackageName --no-shadows 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Err "API registry regeneration failed for $PackageName"
-                if ($genOut) { Write-Host "    $genOut" -ForegroundColor DarkGray }
-                return $null
-            }
-        }
-        # Same contract as the registry above, for the parity pair. tentacle's
+        # A current parity pair in the release commit. tentacle's
         # `parity` job regenerates docs/PARITY_SURFACE.md and runs
         # generate_parity_audit.py --check, and publish.yml gates on the WHOLE
         # reusable tests.yml (needs: test -> uses: ./.github/workflows/tests.yml).
@@ -2864,10 +2869,9 @@ if ($reposToProcess.Count -gt 0) {
 
 # ------------------------------------------------------------------------------------------------
 # m3trik-first guard (Strict+Merge releases only). Each package's release PR runs
-# `generate_api_registry.py <pkg> --check` against m3trik@MAIN, and publish.yml dispatches
-# refresh-api-registry.yml, which regenerates docs/API_SHADOWS.md from m3trik@main (since
-# 2026-08-23 that bot never pushes into a package repo). Releasing while local m3trik/scripts
-# differs from origin/main gates this release with the OLD tooling -- the 2026-08-01 incident
+# `check_api_surface.py <pkg> --check` (and tentacle's parity gate) against m3trik@MAIN.
+# Releasing while local m3trik/scripts differs from origin/main gates this release with the
+# OLD tooling -- the 2026-08-01 incident
 # the guard was written for (registries reverted: mayatk -495 / blendertk -234 lines, two
 # failed parity-audit gates, a full re-release cycle). Push m3trik first.
 # Accepted cost (maintainer, 2026-09-23): when the same release changes a sibling surface
@@ -2903,8 +2907,8 @@ if ($Merge -and $Strict -and -not $SkipReview) {
             Write-Header "m3trik-first guard"
             Write-Err "m3trik/scripts differs from origin/main (uncommitted, unpushed, or untracked changes)."
             Write-Host @"
-  Each package's release PR checks its registry with m3trik@main's generator, and the
-  publish-triggered refresh-api-registry.yml runs from m3trik@main. Releasing now would
+  Each package's release PR runs its API retirement check (and tentacle its parity
+  gate) with m3trik@main's scripts. Releasing now would
   gate this release with the OLD tooling.
   Fix: sync m3trik main first (pull, or commit and push), then re-run this same command.
   Emergency bypass: -SkipReview.
@@ -2936,7 +2940,7 @@ if ($Merge -and $Strict -and -not $SkipReview) {
 # ------------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------------
 # Behind-remote preflight (-Merge). Every other rev-list in this script measures origin/dev..dev
-# -- AHEAD. Nothing measured the reverse, so a repo the bump-version / API-registry bots had
+# -- AHEAD. Nothing measured the reverse, so a repo the bump-version / API-registry bots once
 # moved on looked pristine right up until the push failed, with every tree already mutated
 # (2026-08-19: all five cascade repos sat 2 commits back at once, and only a manual check found
 # it). Deliberately NOT under -SkipReview: that flag waives the review RECEIPT, and being behind
@@ -2959,8 +2963,8 @@ if ($Merge) {
         Write-Err "Local dev is behind: $($behindRepos -join ', ')"
         $behindNames = @($behindRepos | ForEach-Object { ($_ -split ' ')[0] })
         Write-Host @"
-  Those commits are normally the bump-version / API-registry bots from the LAST
-  release. Releasing now mutates every tree and then fails at push.
+  Those commits are normally another machine's or session's pushes. Releasing
+  now mutates every tree and then fails at push.
 
   Pull first, then re-run this command:
     '$($behindNames -join "','")' | ForEach-Object { git -C (Join-Path '$Root' `$_) pull --rebase }
@@ -3061,7 +3065,7 @@ if ($Merge -and $Strict -and -not $SkipReview) {
         }
 
         Write-Host @"
-  Release preflight (see m3trik/CLAUDE.md), for each package listed:
+  Release preflight (see m3trik/AGENTS.md), for each package listed:
     1. Review its release diff (git diff origin/main...dev + working tree):
        correctness -> DRY -> simplification -> efficiency. Implement fixes;
        out-of-scope findings -> .claude/BACKLOG.md.
@@ -3219,7 +3223,7 @@ foreach ($repo in $reposToProcess) {
     # Merge when dev is ahead of ORIGIN/main by anything that must reach main.
     $needsMerge = $Merge -and ($aheadOfMain -gt 0) -and ($prepared.Class -in @('artifact', 'must-reach-main'))
     if ($Merge -and $aheadOfMain -gt 0 -and $prepared.Class -eq 'rides-along') {
-        Write-Skip "Dev is ahead of main by sidecars/CHANGELOG only (rides along with the next release)"
+        Write-Skip "Dev is ahead of main by CHANGELOG only (rides along with the next release)"
     }
     if ($finishOnExit -and -not $needsMerge) {
         $results[$pkgName] = "workflow-failed"

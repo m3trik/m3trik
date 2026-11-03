@@ -2,10 +2,10 @@
 # coding=utf-8
 """Tests for sync_workspace.py -- the workspace manifest and what restates it.
 
-``m3trik/workspace.json`` is the one declaration of the cascade, the registry set
+``m3trik/workspace.json`` is the one declaration of the cascade, the ecosystem set
 and every unit's domain line. These tests pin that the real manifest validates and
 that every restatement agrees with it (the same checks as ``--check``), and the
-semantics on fixture manifests: what the registry set is, what the Dispatch table
+semantics on fixture manifests: what the ecosystem set is, what the Dispatch table
 looks like, and that a drifted CI loop or a missing charter is reported.
 """
 
@@ -41,9 +41,45 @@ class TestRealManifest(unittest.TestCase):
         self.assertEqual(sw.missing_charters(), [])
 
     def test_the_root_dispatch_table_is_current(self):
-        if not sw.ROOT_CLAUDE.is_file():
+        if not sw.ROOT_AGENTS.is_file():
             self.skipTest("no workspace root checkout (a CI runner clones repos only)")
         self.assertIsNone(sw.dispatch_drift())
+
+    def test_the_instruction_tree_is_in_line_with_its_packs(self):
+        """Every unit's AGENTS.md + stub, its declared packs vendored and
+        current against m3trik/agents/packs, its hook, its section citations."""
+        self.assertEqual(sw.instruction_problems(), [])
+
+    def test_every_committed_operation_catalog_is_current(self):
+        self.assertEqual(sw.catalog_problems(), [])
+
+
+class TestCatalogs(unittest.TestCase):
+    def test_a_missing_or_stale_catalog_is_reported_and_writing_brings_it_current(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            package = workspace / "swdemo" / "swdemo"
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text(
+                'def add(a: int) -> int:\n    """Add one."""\n    return a + 1\n', encoding="utf-8"
+            )
+            (package / "operations.py").write_text(
+                "from pythontk import Operation\nOPERATIONS = (Operation('demo.add', 'swdemo:add'),)\n",
+                encoding="utf-8",
+            )
+            data = {"units": [{"path": "swdemo"}, {"path": "notes"}]}
+            catalog = package / "operations.json"
+            try:
+                self.assertIn("missing", " ".join(sw.catalog_problems(workspace, data)))
+                self.assertEqual(sw.write_catalogs(workspace, data), [str(catalog)])
+                self.assertEqual(sw.catalog_problems(workspace, data), [])
+                self.assertEqual(sw.write_catalogs(workspace, data), [])  # idempotent
+                catalog.write_text(catalog.read_text(encoding="utf-8").replace("Add one.", "Old."), encoding="utf-8")
+                self.assertIn("stale (demo.add)", " ".join(sw.catalog_problems(workspace, data)))
+            finally:
+                sys.path.remove(str(workspace / "swdemo"))
+                for name in [m for m in sys.modules if m.split(".")[0] == "swdemo"]:
+                    del sys.modules[name]
 
 
 class TestSemantics(unittest.TestCase):
@@ -77,7 +113,7 @@ class TestSemantics(unittest.TestCase):
     def test_the_dispatch_table_links_each_charter_in_manifest_order(self):
         table = sw.render_dispatch(FIXTURE).splitlines()
         self.assertEqual(table[:2], ["| Unit | Domain |", "|:---|:---|"])
-        self.assertEqual(table[2], "| [`core/`](core/CLAUDE.md) | Core |")
+        self.assertEqual(table[2], "| [`core/`](core/AGENTS.md) | Core |")
         self.assertEqual(len(table), 2 + len(FIXTURE["units"]))
 
     def test_splice_replaces_only_the_table_under_the_heading(self):

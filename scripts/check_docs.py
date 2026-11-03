@@ -9,8 +9,10 @@ Mode 1 — package (``--root <pkg>``)
 Validates a package's hand-written docs against its ``docs/DOCMAP.md`` ledger
 (the docs SSoT — currently uitk). Checks: ledger↔disk sync, link + ``#anchor``
 integrity (GitHub slug rules), ``**Nav**:`` presence, ``DOC-TODO`` census vs.
-ledger status, cross-file ``sync:`` block identity, and API_INDEX→doc coverage
-triage (longest-prefix rules; an UNTRIAGED module fails — fix-or-ledger).
+ledger status, cross-file ``sync:`` block identity, and module→doc coverage
+triage over the package's public modules (``pythontk.ApiSurface.read``, from
+the pythontk sibling; longest-prefix rules; an UNTRIAGED module fails —
+fix-or-ledger).
 Ledger/coverage table formats are documented in uitk/docs/MAINTAINING.md.
 
 Mode 2 — workspace (``--workspace <dir>``)
@@ -22,7 +24,7 @@ links     relative links + ``#anchor`` fragments in hand-written files resolve
           (http(s)/mailto and cross-repo links that escape the workspace are
           skipped; targets may be files or directories).
 orphans   every hand-written ``.md`` has ≥1 inbound link from somewhere in the
-          workspace, unless self-describing: any ``README.md`` / ``CLAUDE.md``
+          workspace, unless self-describing: any ``README.md`` / ``AGENTS.md`` / ``CLAUDE.md``
           / ``CHANGELOG.md`` / ``DOCMAP.md``, anything under ``.github/``, and
           license files. An unreachable doc is invisible doc-rot → FAIL
           (wire it into a hub, or archive/remove it).
@@ -33,7 +35,7 @@ docmaps   any repo shipping ``docs/DOCMAP.md`` also gets the full Mode-1 suite.
 
 ``--skip-unversioned`` (CI only) records a MISSING link target that lies
 outside every child git repo -- the unversioned workspace root (its
-``CLAUDE.md``, ``.claude/``, ``.archive/``) or a repo the checkout does not
+``AGENTS.md``, ``.claude/``, ``.archive/``) or a repo the checkout does not
 have -- as a named SKIP instead of a FAIL. A CI runner clones the repos but
 never the root, which is not a repository, so those links can only fail there;
 every link INSIDE a repo is still checked, and each skip is printed by name so
@@ -99,7 +101,6 @@ SYNC_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 NAV_RE = re.compile(r"^\*\*Nav\*\*:")
-API_INDEX_MODULE_RE = re.compile(r"^### `(?P<module>[^`]+)`")
 FENCE_RE = re.compile(r"^(```|~~~)")
 NAV_SEARCH_LINES = 12
 
@@ -116,7 +117,6 @@ WS_VENDORED: Dict[str, Tuple[str, ...]] = {
 }
 # Generated markdown: never linted, but still provides inbound links.
 WS_GENERATED_NAMES = {
-    "API_INDEX.md", "API_REGISTRY.md", "API_CHANGES.md", "API_SHADOWS.md",
     "PARITY_SURFACE.md", "PARITY_AUDIT.md", "workspace_repo_inventory.md",
 }
 # History files describe the tree as it was when each entry landed; their links
@@ -127,7 +127,7 @@ WS_LINKCHECK_EXEMPT_NAMES = {"changelog.md"}
 WS_GENERATED_PATHS: Dict[str, Set[str]] = {
     "server": {"docs/README.md"},  # emitted by run-tests.ps1 -UpdateReadme
 }
-WS_ORPHAN_EXEMPT_NAMES = {"readme.md", "claude.md", "changelog.md", "docmap.md"}
+WS_ORPHAN_EXEMPT_NAMES = {"readme.md", "agents.md", "claude.md", "changelog.md", "docmap.md"}
 
 
 @dataclass
@@ -411,20 +411,33 @@ def check_sync_blocks(rows: List[LedgerRow], report: Report) -> None:
             report.fail("sync", f"sync block '{name}' differs across: {files}")
 
 
+def public_modules(repo_root: Path) -> Optional[List[str]]:
+    """The package's public module paths (``relpath``, as ``api.search`` names
+    them), read from ``<repo_root>/<name>/`` with the workspace's pythontk;
+    None when there is no such source or no pythontk to read it."""
+    repo_root = repo_root.resolve()
+    source = repo_root / repo_root.name
+    if not source.is_dir():
+        return None
+    sibling = str(repo_root.parent / "pythontk")
+    if sibling not in sys.path:
+        sys.path.insert(0, sibling)
+    try:
+        from pythontk import ApiSurface
+    except ImportError:
+        return None
+    return [m.relpath for m in ApiSurface.read(source).modules]
+
+
 def check_coverage(rules: List[CoverageRule], rows: List[LedgerRow], repo_root: Path, report: Report) -> None:
-    api_index = repo_root / "API_INDEX.md"
-    if not api_index.exists():
-        report.warn("coverage", f"{api_index.name} not found — coverage check skipped")
+    modules = public_modules(repo_root)
+    if modules is None:
+        report.warn("coverage", f"no {repo_root.name}/ source or no pythontk sibling to read it — coverage check skipped")
         return
     ledgered_rels = {r.rel for r in rows}
     for rule in rules:
         if rule.doc_rel and rule.doc_rel not in ledgered_rels:
             report.fail("coverage", f"rule `{rule.prefix}` (DOCMAP.md:{rule.line_no}) maps to '{rule.doc_rel}', which has no ledger row")
-    modules = [
-        m.group("module")
-        for m in map(API_INDEX_MODULE_RE.match, api_index.read_text(encoding="utf-8").splitlines())
-        if m
-    ]
     for module in modules:
         best: Optional[CoverageRule] = None
         for rule in rules:
@@ -439,7 +452,7 @@ def check_coverage(rules: List[CoverageRule], rows: List[LedgerRow], repo_root: 
             best.hits += 1
     for rule in rules:
         if rule.hits == 0:
-            report.warn("coverage", f"rule `{rule.prefix}` (DOCMAP.md:{rule.line_no}) matches no module in API_INDEX.md — stale?")
+            report.warn("coverage", f"rule `{rule.prefix}` (DOCMAP.md:{rule.line_no}) matches no public module — stale?")
 
 
 def run_docmap_suite(
@@ -591,7 +604,7 @@ def run_workspace(
 
     # Repo-standard changelog headers: entries live under a year (or version)
     # heading; a `## [Unreleased]` section defeats "which release shipped this"
-    # (root CLAUDE.md: no [Unreleased] ritual). Checked here rather than in the
+    # (root AGENTS.md: no [Unreleased] ritual). Checked here rather than in the
     # link pass because CHANGELOGs are link-check exempt.
     for repo_name, repo in repos:
         changelog = repo / "CHANGELOG.md"
@@ -606,7 +619,7 @@ def run_workspace(
                 "changelog",
                 f"{repo_name}/CHANGELOG.md carries a '## [Unreleased]' header — "
                 "the repo standard files entries under a year/version heading "
-                "(root CLAUDE.md: no [Unreleased] ritual)",
+                "(root AGENTS.md: no [Unreleased] ritual)",
             )
 
     tracked_cache: Dict[str, Optional[Set[str]]] = {
@@ -627,9 +640,13 @@ def run_workspace(
             srcs = ", ".join(sorted(inbound[path])[:3])
             report.warn("tracked", f"{label} is linked (from {srcs}) but not git-tracked — 404 on GitHub")
         try:
-            if path.stat().st_size < 20:
+            # A CLAUDE.md stub (@ imports only) is short by design.
+            stub = path.name == "CLAUDE.md" and all(
+                line.startswith("@") for line in path.read_text(encoding="utf-8").split()
+            )
+            if path.stat().st_size < 20 and not stub:
                 report.warn("empty", f"{label} is effectively empty ({path.stat().st_size} B)")
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             pass
 
     summaries = [f"{len(catalog)} md file(s) across {len(repos)} repo(s), {len(hand_written)} hand-written"]

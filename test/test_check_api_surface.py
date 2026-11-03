@@ -1,13 +1,13 @@
-"""Tests for generate_api_registry.py — the shadow-report parity bucketing and
-JSON reconstruction added in the context-budget pass, and the ``--check``
-staleness gate each ecosystem package's CI now runs per package
-(``StalenessGate`` + the end-to-end fixture-tree cases at the bottom)."""
+"""Tests for check_api_surface.py: the shadow report, the static read it
+checks, the delta against the last release tag and the semver verdict from
+it, and the ``--check`` retirement gate each ecosystem package's CI runs."""
 
 import ast
 import contextlib
 import datetime
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -19,19 +19,20 @@ from unittest import mock
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import generate_api_registry as g  # noqa: E402
+import check_api_surface as g  # noqa: E402
+from pythontk import ApiSurface, ClassSurface, ModuleSurface, PackageSurface, SymbolRecord  # noqa: E402
 
 
-def _cls(name: str) -> "g.ClassEntry":
-    return g.ClassEntry(name=name, summary="", line=1, bases=["object"], members=[])
+def _cls(name: str) -> "ClassSurface":
+    return ClassSurface(name=name, summary="", line=1, bases=["object"], members=[])
 
 
-def _mod(relpath: str, classes: list) -> "g.ModuleEntry":
-    return g.ModuleEntry(relpath=relpath, summary="", functions=[], classes=classes)
+def _mod(relpath: str, classes: list) -> "ModuleSurface":
+    return ModuleSurface(relpath=relpath, summary="", functions=[], classes=classes)
 
 
-def _pkg(name: str, modules: list) -> "g.PackageData":
-    return g.PackageData(name=name, source_root=f"{name}/{name}", modules=modules)
+def _pkg(name: str, modules: list) -> "PackageSurface":
+    return PackageSurface(name=name, source_root=f"{name}/{name}", modules=modules)
 
 
 class TestShadowBucketing(unittest.TestCase):
@@ -73,7 +74,7 @@ class TestShadowBucketing(unittest.TestCase):
 class TestJsonReconstruction(unittest.TestCase):
     def test_roundtrip_preserves_symbols(self):
         pkg = _pkg("pythontk", [_mod("m.py", [_cls("CoreUtils")])])
-        rebuilt = g._package_data_from_json(asdict(pkg))
+        rebuilt = PackageSurface.from_dict(asdict(pkg))
         self.assertEqual(rebuilt.name, "pythontk")
         names = [c.name for mod in rebuilt.modules for c in mod.classes]
         self.assertIn("CoreUtils", names)
@@ -81,7 +82,7 @@ class TestJsonReconstruction(unittest.TestCase):
     def test_reconstructed_package_feeds_shadow_report(self):
         # A package reconstructed from JSON must collide like a walked one.
         walked = _pkg("mayatk", [_mod("m.py", [_cls("CoreUtils")])])
-        from_json = g._package_data_from_json(
+        from_json = PackageSurface.from_dict(
             asdict(_pkg("pythontk", [_mod("m.py", [_cls("CoreUtils")])]))
         )
         md = g.emit_shadow_report([walked, from_json])
@@ -100,21 +101,21 @@ class TestPropertyAccessorSkip(unittest.TestCase):
 
     def test_setter_is_accessor(self):
         self.assertTrue(
-            g._is_property_accessor(self._func("@x.setter\ndef x(self, v): ..."))
+            ApiSurface._is_property_accessor(self._func("@x.setter\ndef x(self, v): ..."))
         )
 
     def test_deleter_is_accessor(self):
         self.assertTrue(
-            g._is_property_accessor(self._func("@x.deleter\ndef x(self): ..."))
+            ApiSurface._is_property_accessor(self._func("@x.deleter\ndef x(self): ..."))
         )
 
     def test_getter_is_not_accessor(self):
         self.assertFalse(
-            g._is_property_accessor(self._func("@property\ndef x(self): ..."))
+            ApiSurface._is_property_accessor(self._func("@property\ndef x(self): ..."))
         )
 
     def test_plain_method_is_not_accessor(self):
-        self.assertFalse(g._is_property_accessor(self._func("def x(self): ...")))
+        self.assertFalse(ApiSurface._is_property_accessor(self._func("def x(self): ...")))
 
     def test_walk_module_emits_property_once(self):
         src = (
@@ -129,7 +130,7 @@ class TestPropertyAccessorSkip(unittest.TestCase):
             root = Path(td)
             f = root / "m.py"
             f.write_text(src, encoding="utf-8")
-            mod = g._walk_module(f, root)
+            mod = ApiSurface._walk_module(f, root)
             members = {(m.name, m.kind) for m in mod.classes[0].members}
             self.assertIn(("val", "property"), members)
             self.assertIn(("plain", "method"), members)
@@ -146,8 +147,8 @@ class TestPrivateBaseMembersResolved(unittest.TestCase):
     (``Matrices(_MatrixMath, ...)``, ``TaskManager(_TaskChecksMixin, ...)``,
     ``PackageManager(_PackageManagerHelperMixin, ...)``). A private class is
     never emitted on its own, so before this ~100 genuinely public members
-    across four packages were unfindable in ``API_INDEX.md`` — which defeats
-    the "grep the registry before writing a helper" rule.
+    across four packages were unfindable by a search — which defeats the
+    "search before writing a helper" rule.
     """
 
     @staticmethod
@@ -156,7 +157,7 @@ class TestPrivateBaseMembersResolved(unittest.TestCase):
             root = Path(td)
             f = root / "m.py"
             f.write_text(src, encoding="utf-8")
-            return g._walk_module(f, root)
+            return ApiSurface._walk_module(f, root)
 
     def _members(self, src: str, cls_index: int = 0):
         mod = self._walk(src)
@@ -303,7 +304,7 @@ class TestImportedPrivateBasesResolve(unittest.TestCase):
     def setUp(self):
         # ASTs are cached per path for the whole run; never serve a fixture
         # another test's tree.
-        g._PARSED.clear()
+        ApiSurface._PARSED.clear()
 
     @staticmethod
     def _members(files: dict) -> set:
@@ -313,7 +314,7 @@ class TestImportedPrivateBasesResolve(unittest.TestCase):
             (pkg / "__init__.py").write_text("", encoding="utf-8")
             for name, src in files.items():
                 (pkg / name).write_text(src, encoding="utf-8")
-            mod = g._walk_module(pkg / "public.py", pkg)
+            mod = ApiSurface._walk_module(pkg / "public.py", pkg)
             public = next(c for c in mod.classes if c.name == "Public")
             return {m.name for m in public.members}
 
@@ -395,15 +396,15 @@ class TestSemverVerdict(unittest.TestCase):
             path = src / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8")
-        g._PARSED.clear()
+        ApiSurface._PARSED.clear()
         return g.walk_package(pkg, root)
 
     def _tree(self, before: dict[str, str], after: dict[str, str]):
         """``(data, prior)`` -- *after* walked, and *before* as its baseline
-        sidecar. Both walked for real, so the fixtures exercise the same path
+        mapping. Both walked for real, so the fixtures exercise the same path
         a release does."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
-            prior = g._to_jsonable(self._walk(Path(td) / "a", "pkg", before))
+            prior = self._walk(Path(td) / "a", "pkg", before).to_dict()
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             data = self._walk(Path(td) / "b", "pkg", after)
         return data, prior
@@ -442,7 +443,7 @@ class TestSemverVerdict(unittest.TestCase):
         )
 
     def test_no_baseline_owes_nothing(self):
-        """An initial registry is not evidence of a break."""
+        """A package with no release is not evidence of a break."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             data = self._walk(Path(td) / "p", "pkg", {"mod.py": self.WIDGET_1})
         self.assertIsNone(g.compute_api_delta(data, None))
@@ -451,7 +452,7 @@ class TestSemverVerdict(unittest.TestCase):
     def test_the_verdict_cannot_drift_from_the_document_that_explains_it(self):
         """Both come from one computation -- the point of extracting it. The
         rendered `## Removed (N)` and the delta must agree on N, or the
-        release tool and the changelog would disagree about the same release."""
+        release gate and the report would disagree about the same release."""
         data, prior = self._tree({"mod.py": self.WIDGET_2}, {"mod.py": self.WIDGET_1})
         delta = g.compute_api_delta(data, prior)
         md = g.emit_changes_markdown(data, prior)
@@ -459,11 +460,18 @@ class TestSemverVerdict(unittest.TestCase):
         for key in delta.removed:
             self.assertIn(key, md)
 
-    def test_an_unwalkable_package_is_not_a_break(self):
+    def test_an_unwalkable_package_has_no_verdict(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             verdict = g.semver_verdict("nope", Path(td))
         self.assertEqual(
-            verdict, {"package": "nope", "bump": "patch", "reasons": [], "unaccounted": []}
+            verdict,
+            {
+                "package": "nope",
+                "bump": None,
+                "reasons": [],
+                "unaccounted": [],
+                "baseline": "none (no package here)",
+            },
         )
 
     MOVED = {"Widget.spin": ("tentacle.tools.spin.Spin.spin", "0.30.0")}
@@ -517,162 +525,178 @@ class TestSemverVerdict(unittest.TestCase):
         self.assertNotIn("## Removed", md)
 
 
-class TestChangesBaseline(unittest.TestCase):
-    """API_CHANGES.md must diff against the last RELEASE (origin/main), not
-    the working-tree JSON the run is about to rewrite. The working-tree
-    baseline advanced on every regeneration, so a second run in one session
-    (or a subset run, or a release-time conflict resolution) reported "no
-    changes" and silently erased the recorded delta — including 4 of 5
-    packages shipping empty API_CHANGES on the 2026-08-10 release."""
+class TestReleaseBaseline(unittest.TestCase):
+    """The delta is read against the package's last release: its newest ``v*``
+    tag, read from a ``git archive`` copy of the tag's source -- never the
+    working tree, which is what the delta is OF. A baseline that advanced with
+    every run reported "no changes" and erased the recorded delta (4 of 5
+    packages shipped an empty API_CHANGES on the 2026-08-10 release)."""
+
+    WIDGET = '"""Mod."""\n\n\nclass Widget:\n    """W."""\n\n    def spin(self):\n        """S."""\n'
+    GADGET = '\n\nclass Gadget:\n    """G."""\n'
 
     @staticmethod
     def _git(repo: Path, *args: str) -> None:
         subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo),
-                "-c",
-                "user.email=test@test",
-                "-c",
-                "user.name=test",
-                *args,
-            ],
+            ["git", "-C", str(repo), "-c", "user.email=test@test", "-c", "user.name=test", *args],
             check=True,
             capture_output=True,
         )
 
-    @staticmethod
-    def _make_pkg(root: Path, name: str) -> Path:
-        pkg = root / name
-        (pkg / name).mkdir(parents=True)
-        (pkg / name / "mod.py").write_text(
-            '"""Mod."""\n\n\nclass Widget:\n    def spin(self):\n        pass\n',
-            encoding="utf-8",
-        )
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name)
+
+    def _write(self, name: str, files: dict) -> Path:
+        pkg = self.root / name
+        for rel, text in files.items():
+            path = pkg / name / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        ApiSurface._PARSED.clear()
         return pkg
 
-    def _commit_empty_baseline(self, pkg: Path) -> None:
-        """Point origin/main at a sidecar that predates Widget."""
-        baseline = {
-            "name": pkg.name,
-            "source_root": f"{pkg.name}/{pkg.name}",
-            "modules": [],
-        }
-        (pkg / "API_REGISTRY.json").write_text(json.dumps(baseline), encoding="utf-8")
-        self._git(pkg, "init")
-        self._git(pkg, "add", "API_REGISTRY.json")
-        self._git(pkg, "commit", "-m", "release baseline")
-        self._git(pkg, "update-ref", "refs/remotes/origin/main", "HEAD")
+    def _release(self, name: str, files: dict, tag: str, repo: Path = None) -> Path:
+        """*files* written into ``<root>/<name>/<name>/``, committed and tagged
+        *tag* in *repo* (the package's own repo by default)."""
+        pkg = self._write(name, files)
+        repo = repo or pkg
+        if not (repo / ".git").exists():
+            self._git(repo, "init")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "--allow-empty", "-m", tag)
+        self._git(repo, "tag", tag)
+        return pkg
 
-    def test_repeated_and_multi_package_regens_keep_the_delta(self):
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
-            root = Path(td)
-            for name in ("pkga", "pkgb"):
-                self._commit_empty_baseline(self._make_pkg(root, name))
-            for run in (1, 2):  # the second run must NOT absorb the delta
-                g.regenerate(["pkga", "pkgb"], repo_root=root)
-                for name in ("pkga", "pkgb"):
-                    changes = (root / name / "API_CHANGES.md").read_text(
-                        encoding="utf-8"
-                    )
-                    self.assertIn(
-                        "Added",
-                        changes,
-                        f"{name} run {run}: the delta was absorbed",
-                    )
-                    self.assertIn("Widget", changes)
-                    self.assertIn("origin/main", changes)
+    def _quiet(self, fn, *args, **kwargs):
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            return fn(*args, **kwargs), err.getvalue()
 
-    def test_no_git_falls_back_to_working_tree_sidecar(self):
-        """Without a resolvable origin/main (fresh public clone, no remote)
-        the pre-anchor behavior is preserved: diff vs the working-tree
-        sidecar, labeled as such."""
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
-            root = Path(td)
-            self._make_pkg(root, "pkga")  # no git repo at all
-            g.regenerate(["pkga"], repo_root=root)
-            first = (root / "pkga" / "API_CHANGES.md").read_text(encoding="utf-8")
-            self.assertIn("No prior baseline", first)
-            g.regenerate(["pkga"], repo_root=root)
-            second = (root / "pkga" / "API_CHANGES.md").read_text(encoding="utf-8")
-            self.assertIn("No public API changes", second)
-            self.assertIn("origin/main unresolvable", second)
+    def test_a_change_since_the_tag_is_reported_against_it_run_after_run(self):
+        self._release("pkga", {"mod.py": self.WIDGET}, "v0.1.0")
+        self._write("pkga", {"mod.py": self.WIDGET + self.GADGET})
+        for run in (1, 2):  # nothing a run does moves the baseline
+            md = g.changes_report("pkga", self.root)
+            self.assertIn("_Diff vs the last release (v0.1.0)._", md, f"run {run}")
+            self.assertIn("## Added (1)", md, f"run {run}")
+            self.assertIn("mod.py::Gadget", md, f"run {run}")
 
+    def test_the_newest_release_by_version_is_the_baseline(self):
+        """By version, not by name: ``v0.10.0`` is newer than ``v0.9.0``."""
+        self._release("pkga", {"mod.py": self.WIDGET}, "v0.9.0")
+        self._release("pkga", {"mod.py": self.WIDGET + self.GADGET}, "v0.10.0")
+        md = g.changes_report("pkga", self.root)
+        self.assertIn("No public API changes since the last release (v0.10.0).", md)
 
-class TestStalenessGate(unittest.TestCase):
-    """The ``--check`` comparison itself.
+    def test_since_names_another_baseline(self):
+        self._release("pkga", {"mod.py": self.WIDGET}, "v0.9.0")
+        self._release("pkga", {"mod.py": self.WIDGET + self.GADGET}, "v0.10.0")
+        md = g.changes_report("pkga", self.root, since="v0.9.0")
+        self.assertIn("(v0.9.0)", md)
+        self.assertIn("mod.py::Gadget", md)
 
-    The gate is a CONTENT HASH of the two hand-read docs, never an mtime (a
-    fresh CI checkout has no meaningful mtimes) and never the JSON sidecar
-    (which records a line for every member, so one inserted import rewrites
-    hundreds of numbers while the public surface is untouched)."""
+    def test_a_since_naming_no_commit_is_no_baseline_never_an_older_one(self):
+        """Measured by the review: with v0.2.0 missing from the checkout, a
+        removal released in 0.2.0 shipped as a patch against v0.1.0. A ref the
+        caller named and git cannot find is no verdict, said plainly."""
+        self._release("pkga", {"mod.py": self.WIDGET}, "v0.1.0")
+        self._write("pkga", {"mod.py": '"""Mod."""\n'})
+        verdict = g.semver_verdict("pkga", self.root, since="v0.2.0")
+        self.assertIsNone(verdict["bump"])
+        self.assertEqual(
+            verdict["baseline"], "none (v0.2.0 names no commit in pkga: fetch its tags)"
+        )
+        md = g.changes_report("pkga", self.root, since="v0.2.0")
+        self.assertIn("_No release to compare with: none (v0.2.0 names no commit", md)
+        self.assertNotIn("v0.1.0", md)
 
-    def test_generation_date_is_not_staleness(self):
-        old = "# pkg\n\n_Generated: 2026-01-01_\n\n- `class Widget`\n"
-        new = "# pkg\n\n_Generated: 2026-08-17_\n\n- `class Widget`\n"
-        self.assertFalse(g.StalenessGate.is_stale(old, new))
+    def test_semver_exits_2_with_no_verdict_and_says_why(self):
+        self._release("pkga", {"mod.py": self.WIDGET}, "v0.1.0")
+        for argv, want in (
+            (["pkga", "--semver"], 0),
+            (["pkga", "--semver", "--since", "v0.2.0"], 2),
+        ):
+            with self.subTest(argv=argv):
+                out, err = io.StringIO(), io.StringIO()
+                with mock.patch.object(g, "REPO_ROOT", self.root):
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        rc = g.main(argv)
+                self.assertEqual(rc, want, err.getvalue())
+                verdict = json.loads(out.getvalue())[0]
+                self.assertEqual(verdict["bump"] is None, want == 2)
+                self.assertEqual("no verdict for pkga" in err.getvalue(), want == 2)
 
-    def test_a_registry_from_the_dated_generator_is_not_stale(self):
-        """A registry written BEFORE the date was removed must still gate clean.
+    def test_only_a_three_part_version_tag_is_a_release(self):
+        """push.ps1 tags ``v<major>.<minor>.<patch>``; a two-part or a
+        suffixed tag is someone else's and never the baseline."""
+        pkg = self._release("pkga", {"mod.py": self.WIDGET}, "v0.1.0")
+        for tag in ("v0.2", "v0.3.0rc1", "v1"):
+            self._git(pkg, "tag", tag)
+        self.assertEqual(g.release_tag(pkg), "v0.1.0")
 
-        The pre-2026-08-23 generator emitted the stamp between two blank
-        lines. Filtering only the date LINE left such a file one blank line
-        longer than anything the current generator writes, so every
-        committed registry in the ecosystem read STALE the moment the stamp
-        was dropped -- `API registry up to date` would have gone red on all
-        seven packages' PRs at once, with no source change behind it.
-        Caught against a real committed registry in a clean worktree.
-        """
-        dated = "# pkg\n\n_Generated: 2026-01-01_\n\n## Index\n\n- `class Widget`\n"
-        undated = "# pkg\n\n## Index\n\n- `class Widget`\n"
-        self.assertFalse(g.StalenessGate.is_stale(dated, undated))
-        # ...and a real surface change is still caught through the same filter.
-        moved = "# pkg\n\n## Index\n\n- `class Gadget`\n"
-        self.assertTrue(g.StalenessGate.is_stale(dated, moved))
-
-    def test_source_line_numbers_are_not_staleness(self):
-        old = "- [`class Widget(object)`](pkg/pkg/mod.py#L12) — spins.\n"
-        new = "- [`class Widget(object)`](pkg/pkg/mod.py#L340) — spins.\n"
-        self.assertFalse(g.StalenessGate.is_stale(old, new))
-
-    def test_base_change_is_staleness(self):
-        old = "- [`class Widget(object)`](pkg/pkg/mod.py#L12)\n"
-        new = "- [`class Widget(Base)`](pkg/pkg/mod.py#L12)\n"
-        self.assertTrue(g.StalenessGate.is_stale(old, new))
-
-    def test_signature_change_is_staleness(self):
-        self.assertTrue(
-            g.StalenessGate.is_stale(
-                "  - `Widget.spin(self)`\n", "  - `Widget.spin(self, n=1)`\n"
-            )
+    def test_a_removal_since_the_tag_owes_a_minor_and_nothing_accounts_for_it(self):
+        self._release("pkga", {"mod.py": self.WIDGET}, "v1.0.0")
+        self._write("pkga", {"mod.py": '"""Mod."""\n\n\nclass Widget:\n    """W."""\n'})
+        verdict = g.semver_verdict("pkga", self.root)
+        self.assertEqual(
+            verdict,
+            {
+                "package": "pkga",
+                "bump": "minor",
+                "reasons": ["mod.py::Widget.spin"],
+                "unaccounted": ["mod.py::Widget.spin"],
+                "baseline": "the last release (v1.0.0)",
+            },
         )
 
-    def test_missing_artifact_is_staleness(self):
-        self.assertTrue(g.StalenessGate.is_stale(None, "- `class Widget`\n"))
+    def test_no_release_tag_is_no_delta_and_no_verdict(self):
+        for tagged in (False, True):
+            with self.subTest(git_without_tags=tagged):
+                pkg = self._write("pkga", {"mod.py": self.WIDGET})
+                if tagged:  # a repo with history but no release tag
+                    self._git(pkg, "init")
+                    self._git(pkg, "add", "-A")
+                    self._git(pkg, "commit", "-m", "work")
+                verdict = g.semver_verdict("pkga", self.root)
+                self.assertEqual((verdict["bump"], verdict["baseline"]), (None, "none (no release tag)"))
+                md = g.changes_report("pkga", self.root)
+                self.assertIn("_No release to compare with: none (no release tag)._", md)
 
-    def test_digest_is_a_hash(self):
-        digest = g.StalenessGate.digest("- `class Widget`\n")
-        self.assertRegex(digest, r"^[0-9a-f]{64}$")
-        self.assertIsNone(g.StalenessGate.digest(None))
+    def test_the_tag_is_read_never_the_working_tree(self):
+        pkg = self._release("pkga", {"mod.py": self.WIDGET}, "v0.1.0")
+        self._write("pkga", {"mod.py": self.WIDGET + self.GADGET, "new.py": '"""New."""\n'})
+        surface = g.release_surface(pkg, "v0.1.0")
+        self.assertEqual([m.relpath for m in surface.modules], ["mod.py"])
+        self.assertEqual([c.name for c in surface.modules[0].classes], ["Widget"])
+        self.assertEqual(surface.source_root, "pkga/pkga")
 
-    def test_covers_ecosystem(self):
-        self.assertTrue(g.StalenessGate.covers_ecosystem(g.ECOSYSTEM_PACKAGES))
-        self.assertFalse(g.StalenessGate.covers_ecosystem(["pythontk"]))
+    def test_a_package_inside_a_larger_repo_reads_its_own_folder(self):
+        """A test fixture or a monorepo holds the package below its git root:
+        the archive's paths carry the prefix, the read does not."""
+        self._git(self.root, "init")
+        self._release("pkga", {"mod.py": self.WIDGET}, "v0.1.0", repo=self.root)
+        surface = g.release_surface(self.root / "pkga", "v0.1.0")
+        self.assertEqual(surface.source_root, "pkga/pkga")
+        self.assertEqual([m.relpath for m in surface.modules], ["mod.py"])
+
+    def test_the_release_copy_is_gone_after_the_read_even_a_failed_one(self):
+        pkg = self._release("pkga", {"mod.py": self.WIDGET}, "v0.1.0")
+        temp_root = self.root / "temp_root"
+        temp_root.mkdir()
+        with mock.patch.dict(os.environ, {"PYTHONTK_TEMP_ROOT": str(temp_root)}):
+            self.assertIsNotNone(g.release_surface(pkg, "v0.1.0"))
+            self.assertEqual(list(temp_root.rglob("*.py")), [])
+            with mock.patch.object(g.ApiSurface, "read", side_effect=RuntimeError("read failed")):
+                with self.assertRaises(RuntimeError):
+                    g.release_surface(pkg, "v0.1.0")
+        self.assertEqual(list(temp_root.rglob("*.py")), [])
 
 
-class TestCheckGateOnFixtureTree(unittest.TestCase):
-    """``--check`` end to end: a clean package tree passes, a genuinely stale
-    one fails, and the churn classes that made the gate un-wireable (JSON
-    line-number drift, a cross-package shadow report a per-package CI checkout
-    cannot see) do not.
-
-    Fixtures live in the system temp via ``TemporaryDirectory`` — the
-    convention every m3trik test module already follows, and deliberately NOT
-    the cloud-synced repo drive: these cases write an artifact and immediately
-    hash it back, which is exactly the read-after-write that
-    ``check_context_budget.check_registry_fresh`` had to add a retry for.
-    """
+class TestCheckGate(unittest.TestCase):
+    """``--check`` end to end: source only -- nothing written, no git history,
+    no generated file to go stale -- and a run that names its package must
+    walk it (a typo or a wrong checkout path never reads green)."""
 
     SOURCE = (
         '"""Mod."""\n'
@@ -696,207 +720,67 @@ class TestCheckGateOnFixtureTree(unittest.TestCase):
         (pkg / name / "mod.py").write_text(self.SOURCE, encoding="utf-8")
         return pkg
 
-    def _check(self, names: list[str]) -> tuple[int, str]:
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
-            rc = g.regenerate(names, repo_root=self.root, check_only=True)
-        return rc, err.getvalue()
+    def _check(self, names: list) -> tuple:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+            rc = g.check(names, repo_root=self.root)
+        return rc, out.getvalue() + err.getvalue()
 
-    def _generate(self, names: list[str]) -> None:
-        with contextlib.redirect_stdout(io.StringIO()):
-            g.regenerate(names, repo_root=self.root)
-
-    def test_clean_tree_passes(self):
+    def test_a_clean_tree_passes_and_writes_nothing(self):
         self._make_pkg()
-        self._generate(["pythontk"])
-        rc, _ = self._check(["pythontk"])
-        self.assertEqual(0, rc)
+        before = sorted(self.root.rglob("*"))
+        rc, text = self._check(["pythontk"])
+        self.assertEqual(0, rc, text)
+        self.assertIn("API retirements on time: pythontk.", text)
+        self.assertEqual(before, sorted(self.root.rglob("*")))
 
-    def test_regenerating_unchanged_source_is_byte_identical(self):
-        """No clock in the outputs: a second run over the same tree writes
-        nothing new. This is what keeps the registry bot, receipts and
-        `git status` quiet on a day boundary -- before 2026-08-23 the JSON
-        sidecar and API_CHANGES.md carried a generation date, so every first
-        run of a UTC day was a 7-repo 'refresh' commit with no surface change."""
-        pkg = self._make_pkg()
-        # Run 1 bootstraps the baseline ("Initial registry"); run 2 is the
-        # first steady-state output, which is what every real repo (always
-        # holding an origin/main sidecar) produces. Runs 2 and 3 must match.
-        self._generate(["pythontk"])
-        self._generate(["pythontk"])
-        names = (
-            "API_INDEX.md",
-            "API_REGISTRY.md",
-            "API_REGISTRY.json",
-            "API_CHANGES.md",
-        )
-        steady = {n: (pkg / n).read_bytes() for n in names}
-        self._generate(["pythontk"])
-        again = {n: (pkg / n).read_bytes() for n in names}
-        self.assertEqual(steady, again)
-        for n in names:
-            self.assertNotIn(b"Generated", steady[n], n)
-
-    def test_no_shadows_leaves_the_shadow_report_untouched(self):
-        """A per-package release commit must not dirty m3trik's tree."""
+    def test_the_gate_never_touches_git(self):
+        """CI runs it in a shallow checkout with no tags."""
         self._make_pkg()
-        shadow = self.root / "m3trik" / "docs" / "API_SHADOWS.md"
-        with contextlib.redirect_stdout(io.StringIO()):
-            g.regenerate(["pythontk"], repo_root=self.root, shadows=False)
-        self.assertFalse(shadow.exists())
-        with contextlib.redirect_stdout(io.StringIO()):
-            g.regenerate(["pythontk"], repo_root=self.root)
-        self.assertTrue(shadow.exists())
-
-    def test_added_public_class_is_stale(self):
-        pkg = self._make_pkg()
-        self._generate(["pythontk"])
-        with (pkg / "pythontk" / "mod.py").open("a", encoding="utf-8") as fh:
-            fh.write('\n\nclass Gadget:\n    """Undocumented in the registry."""\n')
-        rc, err = self._check(["pythontk"])
-        self.assertEqual(1, rc)
-        self.assertIn("API_INDEX.md", err)
-        self.assertIn("API_REGISTRY.md", err)
-
-    def test_removed_method_is_stale(self):
-        pkg = self._make_pkg()
-        self._generate(["pythontk"])
-        (pkg / "pythontk" / "mod.py").write_text(
-            '"""Mod."""\n\n\nclass Widget:\n    """A widget."""\n',
-            encoding="utf-8",
-        )
-        rc, _ = self._check(["pythontk"])
-        self.assertEqual(1, rc)
-
-    def test_line_shift_alone_is_not_stale(self):
-        """The regression this gate could not be wired without: an edit that
-        moves every symbol down without touching the public surface."""
-        pkg = self._make_pkg()
-        self._generate(["pythontk"])
-        mod = pkg / "pythontk" / "mod.py"
-        # Inserted AFTER the module docstring: nothing about the public surface
-        # changes, every symbol below just moves down.
-        mod.write_text(
-            self.SOURCE.replace(
-                '"""Mod."""\n',
-                '"""Mod."""\n\n# a new comment block\nimport os  # noqa: F401\n',
-                1,
-            ),
-            encoding="utf-8",
-        )
-
-        # Guard against a vacuous test: the committed artifacts really ARE
-        # byte-different now (the #L deep links moved), so a plain equality
-        # check would call this stale.
-        fresh = g.emit_registry_markdown(g.walk_package(pkg, self.root))
-        committed = (pkg / "API_REGISTRY.md").read_text(encoding="utf-8")
-        self.assertNotEqual(fresh, committed)
-
-        rc, err = self._check(["pythontk"])
-        self.assertEqual(0, rc, err)
-
-    def test_line_shifted_json_sidecar_alone_is_not_stale(self):
-        pkg = self._make_pkg()
-        self._generate(["pythontk"])
-        sidecar = pkg / "API_REGISTRY.json"
-        data = json.loads(sidecar.read_text(encoding="utf-8"))
-        for mod in data["modules"]:
-            for cls in mod["classes"]:
-                cls["line"] += 7
-                for member in cls["members"]:
-                    member["line"] += 7
-        sidecar.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        rc, err = self._check(["pythontk"])
-        self.assertEqual(0, rc, err)
-
-    def test_missing_index_is_stale(self):
-        pkg = self._make_pkg()
-        self._generate(["pythontk"])
-        (pkg / "API_INDEX.md").unlink()
-        rc, err = self._check(["pythontk"])
-        self.assertEqual(1, rc)
-        self.assertIn("API_INDEX.md", err)
-
-    def test_changes_narrative_is_not_gated(self):
-        pkg = self._make_pkg()
-        self._generate(["pythontk"])
-        (pkg / "API_CHANGES.md").write_text("clobbered\n", encoding="utf-8")
-        rc, err = self._check(["pythontk"])
-        self.assertEqual(0, rc, err)
-
-    def test_check_writes_nothing(self):
-        pkg = self._make_pkg()
-        self._generate(["pythontk"])
-        (pkg / "pythontk" / "mod.py").write_text(
-            '"""Mod."""\n\n\nclass Other:\n    """Different surface."""\n',
-            encoding="utf-8",
-        )
-        before = {p.name: p.read_bytes() for p in pkg.glob("API_*") if p.is_file()}
-        rc, _ = self._check(["pythontk"])
-        self.assertEqual(1, rc)
-        after = {p.name: p.read_bytes() for p in pkg.glob("API_*") if p.is_file()}
-        self.assertEqual(before, after, "--check must not write")
-
-    def test_check_does_not_shell_out_to_git(self):
-        """The CI step runs in a shallow checkout with no origin/main, so the
-        gate must not depend on the release-baseline lookup at all."""
-        self._make_pkg()
-        self._generate(["pythontk"])
-        with mock.patch.object(
-            g, "_baseline_registry_json", side_effect=AssertionError("git touched")
-        ):
-            rc, err = self._check(["pythontk"])
-        self.assertEqual(0, rc, err)
-
-    def test_single_package_check_ignores_the_shadow_report(self):
-        """A per-package CI checkout holds one package plus m3trik, so the
-        cross-package report it could compute is meaningless there."""
-        self._make_pkg("pythontk")
-        self._make_pkg("uitk")
-        self._generate(["pythontk", "uitk"])
-        shadow = self.root / "m3trik" / "docs" / "API_SHADOWS.md"
-        self.assertTrue(shadow.exists())
-        shadow.write_text("# clobbered\n", encoding="utf-8")
-        rc, err = self._check(["pythontk"])
-        self.assertEqual(0, rc, err)
+        with mock.patch.object(g, "_git_output", side_effect=AssertionError("git touched")):
+            rc, text = self._check(["pythontk"])
+        self.assertEqual(0, rc, text)
 
     def test_scoped_check_of_an_absent_package_fails(self):
-        """The CI step names its package; if the checkout put it somewhere
-        else (or the name is a typo) the gate must not read green."""
-        rc, err = self._check(["pythontk"])
+        rc, text = self._check(["pythontk"])
         self.assertEqual(1, rc)
-        self.assertIn("Nothing to check", err)
+        self.assertIn("Nothing to check", text)
 
     def test_scoped_check_of_a_package_without_a_source_root_fails(self):
         (self.root / "pythontk").mkdir()
-        rc, err = self._check(["pythontk"])
+        rc, text = self._check(["pythontk"])
         self.assertEqual(1, rc)
-        self.assertIn("Nothing to check", err)
+        self.assertIn("Nothing to check", text)
 
     def test_full_sweep_tolerates_a_missing_sibling(self):
-        """refresh-api-registry.yml clones the siblings best-effort, so the
-        unscoped sweep must warn rather than fail on one absent package."""
-        present = [n for n in g.ECOSYSTEM_PACKAGES if n != "unitytk"]
-        for name in present:
-            self._make_pkg(name)
-        self._generate(list(g.ECOSYSTEM_PACKAGES))
-        rc, err = self._check(list(g.ECOSYSTEM_PACKAGES))
-        self.assertEqual(0, rc, err)
-        self.assertIn("unitytk", err)
-
-    def test_full_ecosystem_check_still_gates_the_shadow_report(self):
+        """A checkout may lack a package; the unscoped sweep warns instead."""
         for name in g.ECOSYSTEM_PACKAGES:
-            self._make_pkg(name)
-        self._generate(list(g.ECOSYSTEM_PACKAGES))
-        shadow = self.root / "m3trik" / "docs" / "API_SHADOWS.md"
-        shadow.write_text("# clobbered\n", encoding="utf-8")
-        rc, err = self._check(list(g.ECOSYSTEM_PACKAGES))
-        self.assertEqual(1, rc)
-        self.assertIn("API_SHADOWS.md", err)
+            if name != "unitytk":
+                self._make_pkg(name)
+        rc, text = self._check(list(g.ECOSYSTEM_PACKAGES))
+        self.assertEqual(0, rc, text)
+        self.assertIn("unitytk", text)
+
+    def test_a_mode_is_required(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                g.main(["pythontk"])
+
+    def test_a_report_prints_through_a_cp1252_pipe(self):
+        """A piped Windows console is cp1252, and a report quotes dashes and
+        arrows: printing one crashed with UnicodeEncodeError."""
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "check_api_surface.py"), "pythontk", "--shadows"],
+            capture_output=True,
+            env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+            timeout=300,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+        self.assertIn("API Shadows", proc.stdout.decode("utf-8"))
 
 
-def _member(owner: str, name: str) -> "g.SymbolRecord":
-    return g.SymbolRecord(
+def _member(owner: str, name: str) -> "SymbolRecord":
+    return SymbolRecord(
         name=name,
         qualname=f"{owner}.{name}",
         kind="method",
@@ -970,8 +854,8 @@ class TestModuleReexports(unittest.TestCase):
             self.assertNotIn(name, served)
 
 
-def _const(name: str) -> "g.SymbolRecord":
-    return g.SymbolRecord(
+def _const(name: str) -> "SymbolRecord":
+    return SymbolRecord(
         name=name, qualname=name, kind="constant", signature="", summary="", line=1
     )
 
@@ -1030,7 +914,7 @@ class TestHoistIsMovedNotRemoved(unittest.TestCase):
 
         base = _cls("BlenderBridgeSlotsBase")
         base.members = [_member("BlenderBridgeSlotsBase", "select_bake_source")]
-        moved_sub = g.ClassEntry(
+        moved_sub = ClassSurface(
             name="SubstanceBridgeSlots",
             summary="",
             line=1,
@@ -1087,7 +971,7 @@ class TestHoistIsMovedNotRemoved(unittest.TestCase):
         sub = _cls("Panel")
         sub.members = [_member("Panel", "on_show")]
         before = _pkg("mayatk", [_mod("a.py", [sub])])
-        after_sub = g.ClassEntry(
+        after_sub = ClassSurface(
             name="Panel", summary="", line=1, bases=["QtWidgets.QWidget"], members=[]
         )
         after = _pkg("mayatk", [_mod("a.py", [after_sub])])
@@ -1166,7 +1050,7 @@ class TestANamesakeDoesNotForgiveARemoval(unittest.TestCase):
 
         def tree(path, hoisted):
             base = _cls("_OpRegistryInternal")
-            reg = g.ClassEntry(
+            reg = ClassSurface(
                 name="OpRegistry",
                 summary="",
                 line=1,
@@ -1214,7 +1098,7 @@ class TestACrossPackageHoistIsMoved(unittest.TestCase):
         ]
         before = _pkg("mayatk", [_mod("anim_utils/playblast_exporter.py", [exporter])])
 
-        hoisted = g.ClassEntry(
+        hoisted = ClassSurface(
             name="PlayblastExporter",
             summary="",
             line=1,
@@ -1244,7 +1128,7 @@ class TestACrossPackageHoistIsMoved(unittest.TestCase):
         ]
         before = _pkg("mayatk", [_mod("anim_utils/_shot_sequencer.py", [seq])])
 
-        hoisted = g.ClassEntry(
+        hoisted = ClassSurface(
             name="ShotSequencer",
             summary="",
             line=1,
@@ -1271,7 +1155,7 @@ class TestACrossPackageHoistIsMoved(unittest.TestCase):
             _member("ShotSequencer", "move_content"),
         ]
         before = _pkg("mayatk", [_mod("anim_utils/_shot_sequencer.py", [seq])])
-        hoisted = g.ClassEntry(
+        hoisted = ClassSurface(
             name="ShotSequencer",
             summary="",
             line=1,
@@ -1337,7 +1221,7 @@ class TestACrossPackageHoistIsMoved(unittest.TestCase):
         before = _pkg("mayatk", [_mod(old, [ctrl])])
         mixin = _cls("KeyMenuMixin")
         mixin.members = [_member("KeyMenuMixin", "tangent_from_handle")]
-        moved = g.ClassEntry(
+        moved = ClassSurface(
             name="ShotSequencerController",
             summary="",
             line=1,
@@ -1371,7 +1255,7 @@ class TestACrossPackageHoistIsMoved(unittest.TestCase):
         exporter = _cls("PlayblastExporter")
         exporter.members = [_member("PlayblastExporter", "deleted_method")]
         before = _pkg("mayatk", [_mod("a.py", [exporter])])
-        after_cls = g.ClassEntry(
+        after_cls = ClassSurface(
             name="PlayblastExporter",
             summary="",
             line=1,
@@ -1414,7 +1298,7 @@ class TestModuleConstantsAreTracked(unittest.TestCase):
             root = Path(td)
             f = root / "m.py"
             f.write_text(src, encoding="utf-8")
-            return g._walk_module(f, root)
+            return ApiSurface._walk_module(f, root)
 
     def _prior(self, pkg):
         return json.loads(json.dumps(asdict(pkg)))
@@ -1440,7 +1324,7 @@ class TestModuleConstantsAreTracked(unittest.TestCase):
     def _pkg_with(self, *names):
         mod = _mod("cli.py", [])
         mod.constants = [
-            g.SymbolRecord(
+            SymbolRecord(
                 name=n, qualname=n, kind="constant", signature="", summary="", line=1
             )
             for n in names
@@ -1476,7 +1360,7 @@ class TestModuleConstantsAreTracked(unittest.TestCase):
         """
         after = self._pkg_with("TIMEOUT", "RETRIES")
         prior = self._prior(self._pkg_with("TIMEOUT"))
-        for mod in prior["modules"]:  # a sidecar written before constants existed
+        for mod in prior["modules"]:  # a baseline read before constants existed
             mod.pop("constants", None)
 
         md = g.emit_changes_markdown(after, prior)
@@ -1512,7 +1396,7 @@ class TestDeprecationRecognition(unittest.TestCase):
     rule leaves no other spelling. Nothing in seven packages was ever marked.
     """
 
-    def _walk(self, source: str) -> "g.ModuleEntry":
+    def _walk(self, source: str) -> "ModuleSurface":
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             pkg = root / "pythontk"
@@ -1529,7 +1413,7 @@ class TestDeprecationRecognition(unittest.TestCase):
         ):
             with self.subTest(source=source):
                 node = ast.parse(source).body[0]
-                self.assertEqual(g._decorator_path(node.decorator_list[0]), expected)
+                self.assertEqual(ApiSurface._decorator_path(node.decorator_list[0]), expected)
 
     def test_symbol_decorator_marks_a_method_with_its_deadline(self):
         mod = self._walk(
@@ -1630,7 +1514,7 @@ class TestSymbolRemoveInReadsTheSharedConstant(unittest.TestCase):
     symbol walk did not.
     """
 
-    def _walk(self, source: str, **siblings: str) -> "g.ModuleEntry":
+    def _walk(self, source: str, **siblings: str) -> "ModuleSurface":
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             pkg = root / "pythontk"
@@ -1638,7 +1522,7 @@ class TestSymbolRemoveInReadsTheSharedConstant(unittest.TestCase):
             (pkg / "pythontk" / "mod.py").write_text(source, encoding="utf-8")
             for stem, text in siblings.items():
                 (pkg / "pythontk" / f"{stem}.py").write_text(text, encoding="utf-8")
-            g._PARSED.clear()
+            ApiSurface._PARSED.clear()
             data = g.walk_package(pkg, root)
         return next(m for m in data.modules if m.relpath.endswith("mod.py"))
 
@@ -1798,7 +1682,7 @@ class TestTheStaticGateCountsTheCalendarWindow(unittest.TestCase):
             '        """Old."""\n',
             encoding="utf-8",
         )
-        g._PARSED.clear()
+        ApiSurface._PARSED.clear()
         return pkg
 
     def test_a_symbol_due_by_version_is_held_until_its_window_closes(self):
@@ -1834,9 +1718,9 @@ class TestTheStaticGateCountsTheCalendarWindow(unittest.TestCase):
         self.assertEqual([r[2:] for r in rows], [("0.18.0", "2026-09-04")])
         self.assertEqual(g._expired(rows, "0.18.0", datetime.date(2026, 10, 4)), rows)
 
-    def test_the_date_never_reaches_the_registry_sidecar(self):
-        """Carried beside the record, not in it: a new field would churn every
-        committed ``API_REGISTRY.json`` for a value only the gate reads."""
+    def test_the_date_never_reaches_the_mapping(self):
+        """Carried beside the record, not in it: a new field would change the
+        shape every reader of the mapping shares, for a value only the gate reads."""
         pkg = self._write_pkg(
             "0.18.0",
             "@Deprecation.symbol('Widget.spin', remove_in='0.18.0', since='2026-09-04')",
@@ -1855,16 +1739,15 @@ class TestTheStaticGateCountsTheCalendarWindow(unittest.TestCase):
         }
         for since, (want_rc, mark) in cases.items():
             with self.subTest(since=since):
-                pkg = self._write_pkg(
+                self._write_pkg(
                     "0.18.0",
                     f"@Deprecation.symbol('Widget.spin', remove_in='0.18.0', "
                     f"since='{since}')",
                 )
                 out, err = io.StringIO(), io.StringIO()
                 with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                    g.regenerate(["pythontk"], repo_root=self.root, check_only=False)
-                    rc = g.regenerate(["pythontk"], repo_root=self.root, check_only=True)
-                changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
+                    rc = g.check(["pythontk"], repo_root=self.root)
+                    changes = g.changes_report("pythontk", self.root)
                 self.assertEqual(rc, want_rc, out.getvalue() + err.getvalue())
                 self.assertIn(f"- {mark} `mod.py::Widget.whirl`", changes)
 
@@ -1898,7 +1781,7 @@ class TestTheStaticGateCountsTheCalendarWindow(unittest.TestCase):
                 err = io.StringIO()
                 with contextlib.redirect_stdout(io.StringIO()):
                     with contextlib.redirect_stderr(err):
-                        g.regenerate(["pythontk"], repo_root=self.root, check_only=True)
+                        g.check(["pythontk"], repo_root=self.root)
                 said = err.getvalue()
                 self.assertEqual("naming no since=" in said, named, said)
                 if named:
@@ -1915,7 +1798,7 @@ class TestDeprecationExpiryGate(unittest.TestCase):
 
     def setUp(self):
         # The gate is only ACTIVE when the pythontk sibling supplies
-        # ``Deprecation.version_key``; without it the generator deliberately
+        # ``Deprecation.version_key``; without it the script deliberately
         # degrades to a stand-in that raises ValueError, so every deadline
         # reads as "cannot expire" and these expectations do not apply. That
         # is a routine state, not a broken one -- m3trik must reach main
@@ -1954,23 +1837,37 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         )
         return pkg
 
-    def _run(self, check_only: bool) -> tuple[int, str]:
+    def _run(self) -> tuple[int, str]:
+        """The gate: ``(exit code, what it printed)``."""
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            rc = g.regenerate(["pythontk"], repo_root=self.root, check_only=check_only)
+            rc = g.check(["pythontk"], repo_root=self.root)
         return rc, out.getvalue() + err.getvalue()
 
-    def test_debt_is_reported_on_a_first_generation(self):
-        """The first run has no baseline to diff, but the debt is a property of
-        the tree rather than of the delta."""
-        pkg = self._make_pkg("0.12.0", "0.11.0")
-        self._run(check_only=False)
-        changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
-        self.assertIn("Initial registry", changes)
+    def _changes(self) -> str:
+        """The ``--changes`` report."""
+        with contextlib.redirect_stderr(io.StringIO()):
+            return g.changes_report("pythontk", self.root)
+
+    def _tag(self, pkg: Path, tag: str) -> None:
+        """Release *pkg* as it stands: commit it and tag *tag*."""
+        for args in (("init",), ("add", "-A"), ("commit", "-m", tag), ("tag", tag)):
+            subprocess.run(
+                ["git", "-C", str(pkg), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+                check=True,
+                capture_output=True,
+            )
+
+    def test_debt_is_reported_with_no_release_to_compare_with(self):
+        """A package with no release has no delta, but the debt is a property
+        of the tree rather than of the delta."""
+        self._make_pkg("0.12.0", "0.11.0")
+        changes = self._changes()
+        self.assertIn("No release to compare with", changes)
         self.assertIn("- **EXPIRED** `mod.py::Widget.whirl`", changes)
 
     def test_package_version_is_read_without_importing(self):
-        """The generator runs on a CI box where the package it walks is not
+        """The gate runs on a CI box where the package it walks is not
         installed and its dependencies are absent."""
         self._make_pkg("0.10.0", "0.11.0")
         self.assertEqual(
@@ -1999,7 +1896,7 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         as a clean bill of health."""
         pkg = self._make_pkg("0.10.0", "0.11.0")
         (pkg / "pythontk" / "__init__.py").write_text('"""Root."""\n', encoding="utf-8")
-        rc, text = self._run(check_only=False)
+        rc, text = self._run()
         self.assertEqual(0, rc)
         self.assertIn("UNCHECKED", text)
         self.assertIn("1 dated deprecation(s)", text)
@@ -2011,7 +1908,7 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         (pkg / "pythontk" / "mod.py").write_text(
             '"""Mod."""\n\n\nclass Live:\n    """Live."""\n', encoding="utf-8"
         )
-        rc, text = self._run(check_only=False)
+        rc, text = self._run()
         self.assertEqual(0, rc)
         self.assertNotIn("UNCHECKED", text)
 
@@ -2022,30 +1919,26 @@ class TestDeprecationExpiryGate(unittest.TestCase):
 
     def test_a_future_deadline_passes(self):
         self._make_pkg("0.10.0", "0.11.0")
-        self._run(check_only=False)
-        rc, text = self._run(check_only=True)
+        rc, text = self._run()
         self.assertEqual(0, rc)
         self.assertNotIn("expired:", text)
 
     def test_a_reached_deadline_fails_the_check(self):
         self._make_pkg("0.11.0", "0.11.0")
-        self._run(check_only=False)
-        rc, text = self._run(check_only=True)
+        rc, text = self._run()
         self.assertEqual(1, rc)
         self.assertIn("Widget.whirl", text)
         self.assertIn("was due in 0.11.0", text)
 
     def test_a_passed_deadline_fails_the_check(self):
         self._make_pkg("0.12.0", "0.11.0")
-        self._run(check_only=False)
-        rc, _ = self._run(check_only=True)
+        rc, _ = self._run()
         self.assertEqual(1, rc)
 
     def test_the_comparison_is_numeric_not_lexical(self):
         """``"0.9.40" > "0.10.0"`` as strings, and the reverse as releases."""
         self._make_pkg("0.9.40", "0.10.0")
-        self._run(check_only=False)
-        rc, _ = self._run(check_only=True)
+        rc, _ = self._run()
         self.assertEqual(0, rc)
 
     def _add_retired_keyword(self, pkg: Path, remove_in: str) -> None:
@@ -2073,8 +1966,7 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         gate read decorators on symbols only."""
         pkg = self._make_pkg("0.12.0", "0.13.0")  # its symbol is not yet due
         self._add_retired_keyword(pkg, "0.12.0")
-        self._run(check_only=False)
-        rc, text = self._run(check_only=True)
+        rc, text = self._run()
         self.assertEqual(1, rc)
         self.assertIn("kw.py::Deprecation.parameter('old')", text)
         self.assertIn("was due in 0.12.0", text)
@@ -2082,8 +1974,7 @@ class TestDeprecationExpiryGate(unittest.TestCase):
     def test_a_live_retired_keyword_passes(self):
         pkg = self._make_pkg("0.12.0", "0.13.0")
         self._add_retired_keyword(pkg, "0.13.0")
-        self._run(check_only=False)
-        rc, text = self._run(check_only=True)
+        rc, text = self._run()
         self.assertEqual(0, rc, text)
 
     def test_a_remove_in_bound_to_a_module_constant_still_expires(self):
@@ -2101,8 +1992,7 @@ class TestDeprecationExpiryGate(unittest.TestCase):
             "        ptk.Deprecation.warn('Owner.go(old=)', 'new=', remove_in=_REMOVE_IN)\n",
             encoding="utf-8",
         )
-        self._run(check_only=False)
-        rc, text = self._run(check_only=True)
+        rc, text = self._run()
         self.assertEqual(1, rc)
         overdue = "expired: pythontk/kw.py::Deprecation.warn('Owner.go(old=)')"
         self.assertEqual(1, text.count(overdue), text)
@@ -2118,26 +2008,24 @@ class TestDeprecationExpiryGate(unittest.TestCase):
             "    ptk.Deprecation.warn('go(old=)', 'new=', remove_in=_when())\n",
             encoding="utf-8",
         )
-        self._run(check_only=False)
-        rc, text = self._run(check_only=True)
+        rc, text = self._run()
         self.assertEqual(0, rc, text)
         self.assertIn("UNCHECKED", text)
         self.assertIn("Deprecation.warn('go(old=)')", text)
 
-    def test_a_plain_regeneration_reports_but_does_not_fail(self):
-        """The registry refresh bot runs the plain form; failing it would block
-        the very commit that carries the report. CI is where the red gate
-        reaches someone who can delete the alias."""
+    def test_the_report_marks_an_overdue_alias_without_failing(self):
+        """``--changes`` explains; only ``--check`` fails, in CI, where the red
+        gate reaches someone who can delete the alias."""
         self._make_pkg("0.12.0", "0.11.0")
-        rc, text = self._run(check_only=False)
-        self.assertEqual(0, rc)
+        self.assertIn("- **EXPIRED** `mod.py::Widget.whirl`", self._changes())
+        rc, text = self._run()
+        self.assertEqual(1, rc)
         self.assertIn("expired:", text)
 
-    def test_api_changes_lists_the_debt_and_marks_the_overdue(self):
+    def test_the_report_lists_the_debt_and_marks_the_overdue(self):
         pkg = self._make_pkg("0.12.0", "0.11.0")
-        self._run(check_only=False)
-        self._run(check_only=False)  # second pass: a baseline now exists
-        changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
+        self._tag(pkg, "v0.12.0")  # a release to compare with
+        changes = self._changes()
         self.assertIn("## Deprecations (1)", changes)
         self.assertIn("- **EXPIRED** `mod.py::Widget.whirl`", changes)
 
@@ -2145,9 +2033,8 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         """An alias runs out of time during a release that touched nothing
         near it, so the section cannot sit behind the has-changes guard."""
         pkg = self._make_pkg("0.10.0", "0.11.0")
-        self._run(check_only=False)
-        self._run(check_only=False)  # second pass: no surface delta
-        changes = (pkg / "API_CHANGES.md").read_text(encoding="utf-8")
+        self._tag(pkg, "v0.10.0")  # released as it stands: no surface delta
+        changes = self._changes()
         self.assertIn("No public API changes", changes)
         self.assertIn("## Deprecations (1)", changes)
         # The legend names EXPIRED whether or not anything is; only a ROW
@@ -2155,10 +2042,10 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         self.assertIn("- `mod.py::Widget.whirl`", changes)
         self.assertNotIn("- **EXPIRED**", changes)
 
-    def test_the_sidecar_does_not_grow_a_key_for_live_symbols(self):
+    def test_the_mapping_does_not_grow_a_key_for_live_symbols(self):
         """``asdict`` would write ``"remove_in": ""`` against every symbol in
-        the ecosystem: tens of thousands of lines of committed machine file
-        saying nothing, burying the surface change it shipped with."""
+        the ecosystem: tens of thousands of keys saying nothing, in every read
+        kept in the cache and every release read."""
         pkg = self._make_pkg("0.10.0", "0.11.0")
         (pkg / "pythontk" / "live.py").write_text(
             '"""Live."""\n\n\nclass Live:\n    """Live."""\n\n'
@@ -2166,22 +2053,22 @@ class TestDeprecationExpiryGate(unittest.TestCase):
             '        """Go."""\n',
             encoding="utf-8",
         )
-        self._run(check_only=False)
-        sidecar = json.loads((pkg / "API_REGISTRY.json").read_text(encoding="utf-8"))
+        ApiSurface._PARSED.clear()
+        mapping = g.walk_package(pkg, self.root).to_dict()
         rows = {
             member["qualname"]: member
-            for mod in sidecar["modules"]
+            for mod in mapping["modules"]
             for cls in mod["classes"]
             for member in cls["members"]
         }
         self.assertNotIn("remove_in", rows["Live.go"])
         self.assertEqual(rows["Widget.whirl"]["remove_in"], "0.11.0")
 
-    def test_a_reconstructed_sidecar_round_trips(self):
+    def test_a_mapping_round_trips(self):
         pkg = self._make_pkg("0.10.0", "0.11.0")
-        self._run(check_only=False)
-        sidecar = json.loads((pkg / "API_REGISTRY.json").read_text(encoding="utf-8"))
-        rebuilt = g._package_data_from_json(sidecar)
+        ApiSurface._PARSED.clear()
+        mapping = json.loads(json.dumps(g.walk_package(pkg, self.root).to_dict()))
+        rebuilt = PackageSurface.from_dict(mapping)
         member = rebuilt.modules[0].classes[0].members[0]
         self.assertTrue(member.deprecated)
         self.assertEqual(member.remove_in, "0.11.0")

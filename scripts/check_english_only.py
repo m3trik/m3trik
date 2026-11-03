@@ -33,8 +33,7 @@ range in code, write integers (``chr(0x3040)``).
 What it cannot see: a foreign word spelled in Latin letters. That stays a
 review question; this gate checks scripts, not languages.
 
-Exempt: generated files (``API_*``, ``PARITY_*``; fix their source, never the
-output), the third-party trees in :data:`VENDORED`, and binaries (a NUL byte in
+Exempt: generated files (``PARITY_*``; fix their source, never the output), the third-party trees in :data:`VENDORED`, and binaries (a NUL byte in
 the first 8 KB; a UTF-16 byte order mark makes it text -- the public-hygiene
 gate's ``read_text``).
 
@@ -61,7 +60,7 @@ SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE = os.path.dirname(os.path.dirname(SCRIPTS))
 
 #: File-name prefixes of generated files: their text is their source's.
-GENERATED_PREFIXES = ("API_", "PARITY_")
+GENERATED_PREFIXES = ("PARITY_",)
 
 #: Repo name -> repo-relative prefixes of third-party trees: not ours to translate.
 VENDORED = {

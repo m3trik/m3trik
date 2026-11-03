@@ -4,11 +4,11 @@
   drift gate).
 
 .DESCRIPTION
-  The static registry walker (generate_api_registry.py) cannot import Maya / Qt /
+  The static read (pythontk's ApiSurface.read, ast only) cannot import Maya / Qt /
   Blender, so metaclass / mixin / dynamically-composed members are invisible to
   it. This dumps each package's LIVE HelpMixin surface - from a fresh,
   session-safe DCC instance where one is needed - and diffs it against the
-  committed registry via verify_runtime_surface.py.
+  static read of its source via verify_runtime_surface.py.
 
   Runs where the runtimes actually exist (a local workstation), NOT cloud CI
   (ubuntu, no DCC). Graceful degradation: a package whose runtime is unavailable
@@ -18,7 +18,7 @@
 
 .NOTES
   verify_runtime_surface exit codes: 0 = clean, 1 = missing-member drift (FAIL -
-  the registry promises a member the live class lacks), 2 = runtime unavailable /
+  the source promises a member the live class lacks), 2 = runtime unavailable /
   empty (SKIP). advisory 'added' / 'kind_changed' notes never fail.
 
   Exit code: 0 = no drift, 1 = at least one package FAILed.
@@ -51,7 +51,7 @@ function Invoke-Verify([string]$pkg, [string[]]$extra = @()) {
     switch ($rc) {
         0 { Record 'OK'   $pkg }
         2 { Record 'SKIP' $pkg 'runtime unavailable' }
-        default { Record 'FAIL' $pkg 'registry promises a live-missing member' }
+        default { Record 'FAIL' $pkg 'source promises a live-missing member' }
     }
     foreach ($l in $out) {
         if ($l -match '^\s+(FAIL|note)') { $results.Add("      $l") }

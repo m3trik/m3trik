@@ -1,0 +1,13 @@
+{
+  "name": "m3trik",
+  "owner": {
+    "name": "m3trik"
+  },
+  "plugins": [
+    {
+      "name": "m3trik",
+      "source": "./claude",
+      "description": "Agents, skills, hooks and the operations MCP servers for the m3trik ecosystem."
+    }
+  ]
+}

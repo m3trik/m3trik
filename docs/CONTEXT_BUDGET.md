@@ -1,6 +1,6 @@
 # Context Budget — keeping Claude agent queries fast
 
-The instructions, API registry, and auto-memory exist to make agent queries
+The instructions and auto-memory exist to make agent queries
 *better*. They only do that while they stay small and in sync. Past a few silent
 size cliffs they make queries **worse** — context the agent pays for on every
 query, or recall that is dropped without warning. This is the contract that keeps
@@ -17,28 +17,26 @@ is what enforces it.
 
 | Tier | What | Rule |
 |:---|:---|:---|
-| **Always-on** | root + the relevant sub `CLAUDE.md`, `MEMORY.md` (index) | Bounded & lean. Paid on *every* query. |
-| **On-demand** | memory topic files, `API_INDEX.md` | Pulled only when relevant; keep each one fact / one tool. |
-| **Raw** | `API_REGISTRY.md` / `.json` | **`grep`/slice only — never Read whole.** |
+| **Always-on** | root + the relevant sub `AGENTS.md` (through its `CLAUDE.md` stub), the packs, `MEMORY.md` (index) | Bounded & lean. Paid on *every* query. |
+| **On-demand** | memory topic files; the public API through `api.search` / `api.describe` | Pulled only when relevant; keep each one fact / one tool. |
 
 **Any instruction that says "Read `<file>`" where the file is >~40 KB is a bug.**
-`mayatk/API_REGISTRY.md` is ~350 KB (~90 K tokens, ~half a context window).
+The API is never a file to read: a search returns the few symbols asked for.
 
 ## Hard budgets (enforced — FAIL the build)
 
 - `MEMORY.md` ≤ **24,400 bytes** (the harness load cap). Over → the index is silently truncated.
 - Each `MEMORY.md` index entry ≤ **280 chars** (slug + link + one ≤200-char relevance hook).
 - Every `memory/*.md` topic file has **exactly one** index link — no orphans (un-recallable), no broken links — **or** one link from an indexed **hub** topic (a family index like the live-pass queue: the whole family costs MEMORY.md one entry; hub links are checked too, one level deep).
-- Each `CLAUDE.md` ≤ **10,240 bytes**, measured as git stores it (LF), so a `core.autocrlf` checkout reads what CI reads.
-- Registries fresh vs source (`generate_api_registry.py --check`).
+- Each `AGENTS.md` ≤ **10,240 bytes**, measured as git stores it (LF), so a `core.autocrlf` checkout reads what CI reads.
 - Root dispatch table matches `m3trik/workspace.json` (`sync_workspace.py`).
-- Every relative markdown link in a `CLAUDE.md` resolves (no broken nav).
-- Every registry-set package's `CLAUDE.md` **Nav `Deps:`** line names each ecosystem package its `pyproject.toml` depends on (the hand-maintained line must not lag the declared dependency).
-- The registry set's source lines ≤ `line_budget` in `m3trik/workspace.json`: non-blank `.py` lines outside each repo's `test/`. Enforced at release, not in the build (the guard's full run only warns): `push.ps1` gates each package it releases (`check_context_budget.py --line-budget <pkg>`), counting that package as the release would commit it and every other one as committed, so work in progress elsewhere never stops a release. Growth is a decision: the change that grows past the ceiling raises `line_budget` to the new count, with a CHANGELOG line naming the growth; a change that shrinks the code may lower it.
+- Every relative markdown link in an `AGENTS.md` resolves (no broken nav).
+- Every ecosystem-set package's `AGENTS.md` **Nav `Deps:`** line names each ecosystem package its `pyproject.toml` depends on (the hand-maintained line must not lag the declared dependency).
+- The ecosystem set's source lines ≤ `line_budget` in `m3trik/workspace.json`: non-blank `.py` lines outside each repo's `test/`. Enforced at release, not in the build (the guard's full run only warns): `push.ps1` gates each package it releases (`check_context_budget.py --line-budget <pkg>`), counting that package as the release would commit it and every other one as committed, so work in progress elsewhere never stops a release. Growth is a decision: the change that grows past the ceiling raises `line_budget` to the new count, with a CHANGELOG line naming the growth; a change that shrinks the code may lower it.
 
 ## Soft budgets (WARN — advisory, flag for cleanup)
 
-- Sub-repo `CLAUDE.md` > 6,144 bytes — trim; move runbook/recipe content into `<subdir>/docs/`. The **root** `CLAUDE.md` gets 8,192: it carries the ecosystem-wide one-line rules for every sub-repo and holds no runbook content (the long form is [`CODE_STANDARD.md`](CODE_STANDARD.md)); every sub file loaded beside it stays under the 6,144 line, so the always-on pair stays lean.
+- Sub-repo `AGENTS.md` > 6,144 bytes — trim; move runbook/recipe content into `<subdir>/docs/`. The **root** `AGENTS.md` gets 8,192: it carries the ecosystem-wide one-line rules for every sub-repo and holds no runbook content (the long form is [`CODE_STANDARD.md`](CODE_STANDARD.md)); every sub file loaded beside it stays under the 6,144 line, so the always-on pair stays lean.
 - Topic file > 20,480 bytes — compress to durable lessons or split (one fact per file).
 
 ## The rules behind the numbers
@@ -52,17 +50,16 @@ is what enforces it.
    ships, extract the one gotcha that survives the fix and let `CHANGELOG`/`git`
    own the history. Retire DONE `project_*` files to `reference_*`. Name-prefix ==
    frontmatter `type`. One fact per file.
-3. **Don't ship a control the agent can't afford to use.** "Check the registry
-   before writing a helper" is only real because a compact, grep-able
-   `API_INDEX.md` backs it. Grep `API_REGISTRY.md` for a symbol; never Read it whole.
+3. **Don't ship a control the agent can't afford to use.** "Search before
+   writing a helper" is only real because `api.search` answers in under a
+   second with just the matching symbols, read live so it is never stale.
 4. **One SSoT for the package set.** [`m3trik/workspace.json`](../workspace.json)
-   is canonical (`generate_api_registry.ECOSYSTEM_PACKAGES` and `push.ps1` read it).
+   is canonical (`check_api_surface.ECOSYSTEM_PACKAGES` and `push.ps1` read it).
    The root dispatch table and the CI clone/commit loops restate it and are
    CI-asserted equal (`sync_workspace.py --check`) — never hand-maintained lists
    that drift.
 5. **Protect the prompt cache.** It keys on a stable prefix. Keep `MEMORY.md`
-   edits small (the index sits in that prefix) and confine churny registry
-   refreshes to a fixed off-peak window.
+   edits small (the index sits in that prefix).
 
 ## How to run it
 
@@ -72,43 +69,27 @@ python m3trik/scripts/check_context_budget.py
 
 # Repo-side only (what CI runs; no local memory dir)
 python m3trik/scripts/check_context_budget.py --no-memory --no-runtime
-
-# Refresh registries + indexes, then re-check
-python m3trik/scripts/generate_api_registry.py
-python m3trik/scripts/check_context_budget.py
 ```
 
 ## Maintenance cadence
 
-- **Repo-side (automated):** the guard runs in
-  [`refresh-api-registry.yml`](../.github/workflows/refresh-api-registry.yml) on
-  every registry refresh — monthly cron + after each PyPI publish. A hard budget
-  breach fails that job, but the step runs **last, after the registry pushes**:
-  that job clones all seven packages as siblings, so it must never let a doc
-  breach in a repo it neither owns nor can fix block the registry propagation it
-  exists to perform (stale registries then fail tentacle's parity-audit gate).
+- **Repo-side (automated):** the guard runs in m3trik's
+  [`tests.yml`](../.github/workflows/tests.yml) on every push to `main`, over
+  the seven packages cloned as siblings at `dev`. A hard budget breach fails it.
 - **Memory-side (local):** the auto-memory dir is local, so it can't be checked in
   the cloud. The **`ClaudeContextBudget`** Windows Scheduled Task runs the guard
   weekly (Mon ~09:07) via
   [`Invoke-ContextBudgetCheck.ps1`](../scripts/Invoke-ContextBudgetCheck.ps1) —
   logging to `%LOCALAPPDATA%\claude-context-budget.log` and raising a toast on a
-  hard FAIL or when `MEMORY.md` is within 2 KB of cap. It runs with
-  `--no-registry` (see the Nextcloud caveat below). The agent also self-enforces
+  hard FAIL or when `MEMORY.md` is within 2 KB of cap. The agent also self-enforces
   the `MEMORY.md` cap whenever it writes a memory (the cap is in the header).
 - **Runtime API drift (local):** the same weekly task then runs
   [`Check-RuntimeSurface.ps1`](../scripts/Check-RuntimeSurface.ps1) — the DCC half
   of the drift gate cloud CI can't run (no Maya/Qt/Blender). It dumps each
-  package's live `HelpMixin` surface from a fresh session-safe DCC instance and
-  diffs it against the committed registry (`verify_runtime_surface.py`), logging to
+  package's live surface (`ApiSurface.members`) from a fresh session-safe DCC instance and
+  diffs it against a static read of the source (`verify_runtime_surface.py`), logging to
   `%LOCALAPPDATA%\claude-runtime-surface.log` and toasting on a `missing`-member
   FAIL. This covers ALL packages incl. pythontk; cloud CI stays import-free
   (`--no-runtime`), since runtime drift needs importable/DCC runtimes it lacks.
 - **When a WARN shows up,** don't wait for it to become a FAIL — that is the
   early-warning the audit found was missing.
-
-> **Nextcloud caveat:** this repo lives on a cloud-synced drive (O:). Reading a
-> just-written `.json` sidecar can transiently return an incoherent byte view, so
-> `generate_api_registry.py --check` may **false-flag one registry as stale**
-> locally (different file each run; generation itself is deterministic). Registry
-> freshness is therefore gated in CI (clean checkout), and the local weekly task
-> skips it. To confirm a *real* local drift, re-run `--check` after the drive settles.

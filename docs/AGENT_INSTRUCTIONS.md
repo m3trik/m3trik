@@ -125,7 +125,7 @@ Registered, its whole public API is reached through `api.search` and code ([Reac
 An operation is what code cannot reach on its own, so a library function is never wrapped as one: an agent finds it with `api.search` and calls it in a host's `python.exec` ([Reach the whole API](#reach-the-whole-api)). Three kinds are declared:
 
 - **A Python host's two**: its console (`<host>.python.exec`) and an image of its scene (`<host>.scene.view`), declared by the host's library (mayatk, blendertk), since only it knows its host runs Python and how it renders.
-- **A host Python cannot run**: each action, declared in that host's language (the Unity package's C# `[Operation]` methods, whose catalog it writes).
+- **A host Python cannot run**: the same two plus a doctor, declared in that host's language: the Unity kernel's C# `[Operation]` methods (`unity.csharp.exec`, `unity.scene.view`, `unity.project.doctor`), whose catalog the editor writes. A Unity feature's actions are its public C# API, reached through `unity.csharp.exec` like any library function.
 - **The tooling's own actions**: work on the codebase itself (`instructions.*`, `operations.*`, `api.*`).
 
 Each one:
@@ -210,7 +210,7 @@ OPERATIONS = (
 )
 ```
 
-- **Ids** are `<area>.<action>`, at most 34 characters: the plugin serves one as the tool `mcp__plugin_m3trik_<server>__<id>`, and Claude caps a tool name at 64. One a host application runs starts with its host (`maya.scene.view`, `blender.scene.view`, `unity.audio.apply`), and no other id may.
+- **Ids** are `<area>.<action>`, at most 34 characters: the plugin serves one as the tool `mcp__plugin_m3trik_<server>__<id>`, and Claude caps a tool name at 64. One a host application runs starts with its host (`maya.scene.view`, `blender.scene.view`, `unity.scene.view`), and no other id may.
 - **Effects** say what an operation may change, and so what undoes it: `read` (nothing; agents run it freely), `state` (what the running application holds, its open scenes and their objects: one undo step), `files` (a dry run lists every file first; version control is the way back) and `code` (a host's console: it may change anything, has no plan and no undo, so only `apply` runs it).
 - **Hosts**: mayatk and blendertk register a runner under `pythontk.operation_hosts` (`MayaSceneFiles`, `BlenderSceneFiles`), and pythontk one for plain Python (`python`, `PureSceneFiles`, which opens no scenes): a call runs in a mayapy, background Blender or Python the tooling started, a NEW one per call from the command line (`ptk.BatchOperationHost`) or one kept per session over MCP (`ptk.SessionOperationHost`: the same run folders, served in order from a `ptk.JobQueue`, bound to the server that started it, restarted when code it loaded changes). It opens the scenes named with `--scene` (`scenes` over MCP) and saves those a finished live run of an operation that plans changed. A person's open session is never reached.
 - **Command line**: `python -m pythontk ops list | search | describe | run | apply | mcp`; the upkeep is `operations.init`, `catalog` and `check`. `--provider` adds a declaration module (built live from a checkout) or a catalog file (`.json`, read as it stands: one a Unity project's editor writes into the project, with no Python package).

@@ -81,6 +81,10 @@ def mirrors(repo_root: Path = REPO_ROOT):
         if not root.is_dir():
             continue
         if relative is None:  # the Unity package's include: found by name under its declared root
+            # A sibling script: on the path when this one runs, not when a test loads it by file.
+            here = str(Path(__file__).resolve().parent)
+            if here not in sys.path:
+                sys.path.insert(0, here)
             from sync_scene_records import unity_file
 
             out.append((unity_file("ShadowPlaneHorizon.hlsl"), language))

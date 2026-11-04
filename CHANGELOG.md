@@ -1,5 +1,7 @@
 # m3trik — Changelog
 
+- **2026-11-04 -- `sync_shadow_shaders.py` loads by file path again (`scripts/sync_shadow_shaders.py`).** The review fix above resolved unitytk's include through `sync_scene_records`, a sibling script that is on the path only when the script runs; pythontk's test loads it by file, so three of its tests failed on the import. The script now puts its own folder on the path first, as `scaffold_unity_part.py` does.
+  - Test(s): pythontk `test_sync_shadow_shaders` (7, three red before).
 - **2026-11-04 -- `check_csharp.py` refuses `ctx?.Issue(...)` (`scripts/check_csharp.py`).** An action called with no context (a script, `unity.csharp.exec`) dropped every problem it reported that way: the kernel-bypass rule now names the call (`bypass: <File>.cs: ctx?.Issue`, through a member or a call too) and its fix, unitytk's `ctx.Raise`, which records the issue on a context and writes the Console line without one. Never frozen: unitytk has none left.
   - Test(s): `test_check_csharp.TestReviewEvasions.test_an_issue_only_a_context_hears_is_refused` (a bare, a member's and a call's are caught; `ctx.Raise`, a context's own `ctx.Issue` and a comment are not); the real workspace holds its baseline.
 - **2026-11-04 -- Fixed (review): the C# checks close four gaps (`scripts/check_csharp.py`, `check_layers.py`, `scaffold_unity_part.py`, `sync_shadow_shaders.py`).**

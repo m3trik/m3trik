@@ -54,7 +54,8 @@ _MIRRORS = (
         "pythontk/net_utils/preview/features/shadow_rig/shadow_rig.js",
         "glsl",
     ),
-    ("unitytk", "Packages/com.m3trik.unitytk/Features/ShadowPlane/ShadowPlaneHorizon.hlsl", "hlsl"),
+    # unitytk's include, wherever the Unity package's declared root holds it.
+    ("unitytk", None, "hlsl"),
 )
 
 
@@ -78,6 +79,11 @@ def mirrors(repo_root: Path = REPO_ROOT):
     for package, relative, language in _MIRRORS:
         root = repo_root / package
         if not root.is_dir():
+            continue
+        if relative is None:  # the Unity package's include: found by name under its declared root
+            from sync_scene_records import unity_file
+
+            out.append((unity_file("ShadowPlaneHorizon.hlsl"), language))
             continue
         out.append((root / relative, language))
     return out

@@ -50,12 +50,15 @@ class UnityScaffold:
 
     @staticmethod
     def package_root() -> Path:
-        """unitytk's declared C# root (``[tool.m3trik.layers.csharp] root``)."""
-        text = (UNITYTK / "pyproject.toml").read_text(encoding="utf-8")
-        match = re.search(r"\[tool\.m3trik\.layers\.csharp\][^\[]*?^root\s*=\s*\"([^\"]+)\"", text, re.S | re.M)
-        if not match:
-            raise SystemExit("unitytk/pyproject.toml declares no [tool.m3trik.layers.csharp] root: name --root")
-        return UNITYTK / match.group(1)
+        """unitytk's declared C# root: the one reader every script shares
+        (``sync_scene_records.unity_package``)."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        try:
+            from sync_scene_records import unity_package
+
+            return unity_package()
+        except ValueError as error:
+            raise SystemExit(f"{error}; or name --root") from error
 
     def _meta(self, path: Path) -> None:
         meta = Path(str(path) + ".meta")
@@ -109,18 +112,21 @@ class UnityScaffold:
                     core + ["M3trik.Unitytk.Kernel", "M3trik.Unitytk.Contracts.Editor", f"M3trik.Unitytk.{feature}"], editor=True)
         self.file(f"{base}/Editor/{feature}s.cs", f'''using M3trik.Unitytk.Kernel;
 
-/// <summary>
-/// The {feature} feature's actions: what a person's menu item and an agent's code
-/// do to a project. Each takes an optional <see cref="OpContext"/>: a dry run
-/// plans, a menu's run is one undo step, and none just runs.
-/// </summary>
-/// <remarks>
-/// Prior art: TODO -- what was weighed (our API via api.search, Unity's built-ins
-/// and packages, an open standard, a maintained library), and why each was or
-/// was not adopted.
-/// </remarks>
-public static class {feature}s
+namespace M3trik.Unitytk.{feature}
 {{
+    /// <summary>
+    /// The {feature} feature's actions: what a person's menu item and an agent's code
+    /// do to a project. Each takes an optional <see cref="OpContext"/>: a dry run
+    /// plans, a menu's run is one undo step, and none just runs.
+    /// </summary>
+    /// <remarks>
+    /// Prior art: TODO -- what was weighed (our API via api.search, Unity's built-ins
+    /// and packages, an open standard, a maintained library), and why each was or
+    /// was not adopted. check_csharp.py refuses the TODO.
+    /// </remarks>
+    public static class {feature}s
+    {{
+    }}
 }}
 ''')
         self.asmdef(f"{base}/Tests", f"M3trik.Unitytk.{feature}.Tests",
@@ -130,17 +136,20 @@ public static class {feature}s
         self.file(f"{base}/Tests/{feature}sTests.cs", f'''using M3trik.Unitytk.Kernel;
 using NUnit.Framework;
 
-/// <summary>
-/// The {feature} actions, each held to the kernel's three checks: one Ctrl+Z after
-/// a run restores the scene, the dry run's plan names every change the run makes,
-/// and a second run plans nothing.
-/// </summary>
-public class {feature}sTests
+namespace M3trik.Unitytk.{feature}.Tests
 {{
-    [Test]
-    public void The_first_action_is_planned_undone_and_converges()
+    /// <summary>
+    /// The {feature} actions, each held to the kernel's three checks: one Ctrl+Z after
+    /// a run restores the scene, the dry run's plan names every change the run makes,
+    /// and a second run plans nothing.
+    /// </summary>
+    public class {feature}sTests
     {{
-        Assert.Fail("write the first action's test, then the action ({feature}s.cs)");
+        [Test]
+        public void The_first_action_is_planned_undone_and_converges()
+        {{
+            Assert.Fail("write the first action's test, then the action ({feature}s.cs)");
+        }}
     }}
 }}
 ''')
@@ -177,10 +186,13 @@ public class {feature}sTests
         self.file(f"Tools/{feature}/{feature}Menu.cs", f'''using M3trik.Unitytk.Kernel;
 using UnityEditor;
 
-/// <summary>Tools ▸ unitytk ▸ {feature}: a line per menu item over the feature's actions ({feature}s).</summary>
-/// <remarks>Prior art: Unity's MenuItem; Unity Search already finds each item.</remarks>
-static class {feature}Menu
+namespace M3trik.Unitytk.Tools.{feature}
 {{
+    /// <summary>Tools ▸ unitytk ▸ {feature}: a line per menu item over the feature's actions ({feature}s).</summary>
+    /// <remarks>Prior art: Unity's MenuItem; Unity Search already finds each item.</remarks>
+    static class {feature}Menu
+    {{
+    }}
 }}
 ''')
 

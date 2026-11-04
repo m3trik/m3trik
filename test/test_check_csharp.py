@@ -217,6 +217,60 @@ class TestPriorArt(unittest.TestCase):
         self.assertIn("<remarks>", found["prior-art: P.A.asmdef"])
 
 
+class TestReviewEvasions(unittest.TestCase):
+    """2026-11-04 review: calls the line rule missed by name (LogAssertion, the
+    logger property, UnityEditor.Progress, a using static), a scaffold's
+    placeholder counting as prior art, and a test assembly that compiles
+    without the Test Framework."""
+
+    def test_the_evasions_are_caught(self):
+        files = {
+            "Pkg/Features/A/Editor/AMenu.cs": """\
+                using static UnityEngine.Debug;
+                class AMenu {
+                    void F() {
+                        Debug.LogAssertion("a");
+                        Debug.unityLogger.Log("b");
+                        Progress.Start("c");
+                        ctx.Progress(0.5, "fine");
+                    }
+                }
+                """,
+        }
+        with _scratch("evasions") as tmp:
+            root = Path(tmp.dir_path())
+            _tree(root, ASMDEFS, files)
+            found = cc.bypass(cl.CSharpLayout(root, DECLARED))
+        self.assertEqual(
+            sorted(found),
+            [
+                "bypass: AMenu.cs: Debug.LogAssertion",
+                "bypass: AMenu.cs: Debug.unityLogger",
+                "bypass: AMenu.cs: Progress.Start",
+                "bypass: AMenu.cs: using static.Debug",
+            ],
+        )
+
+    def test_a_placeholder_is_no_prior_art(self):
+        self.assertFalse(cc.declares_prior_art("/// <remarks>Prior art: TODO -- weigh it.</remarks>\nclass A { }\n"))
+        self.assertTrue(cc.declares_prior_art("/// <remarks>Prior art: Unity's menus.</remarks>\nclass A { }\n"))
+
+    def test_a_test_assembly_needs_the_framework_guard(self):
+        asmdefs = dict(ASMDEFS)
+        asmdefs["Pkg/Features/B/Tests/P.B.Tests.asmdef"] = {
+            "defineConstraints": ["UNITY_INCLUDE_TESTS", "P_TESTS"],
+            "versionDefines": [{"name": "com.unity.test-framework", "expression": "1.6.0", "define": "P_TESTS"}],
+        }
+        declared = dict(DECLARED, order=["Features/*/Tests", "Features/*/Editor", "Features/*", "Kernel", "Core"])
+        with _scratch("framework") as tmp:
+            root = Path(tmp.dir_path())
+            _tree(root, asmdefs, {})
+            found = cc.test_framework(cl.CSharpLayout(root, declared))
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("Features/A/Tests/P.A.Tests.asmdef", found[0])
+        self.assertIn("com.unity.test-framework", found[0])
+
+
 class TestGenerated(unittest.TestCase):
     def setUp(self):
         scratch = _scratch("generated")

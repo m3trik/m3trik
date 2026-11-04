@@ -228,12 +228,39 @@ BYPASS: Tuple[Tuple["re.Pattern[str]", bool, str], ...] = (
         re.compile(
             _OWN + r"(?:UnityEngine\s*\.\s*)?(Debug)\s*\.\s*"
             r"(Log|LogWarning|LogError|LogFormat|LogWarningFormat|LogErrorFormat|"
-            r"LogException)\b"
+            r"LogException|LogAssertion|LogAssertionFormat|unityLogger)\b"
         ),
         False,
         "an action reports through ctx.Log or ctx.Issue, an importer through "
         "ImportLog.Info / Warning / Error",
     ),
+)
+#: Calls a line-based rule cannot see by name: the editor's progress API, and a
+#: ``using static`` that turns the next call into a bare ``Log(...)``.
+BYPASS += (
+    (
+        re.compile(_OWN + r"(?:UnityEditor\s*\.\s*)?(Progress)\s*\.\s*([A-Za-z_]\w*)"),
+        True,
+        "report ctx.Progress(fraction, message); OpContext.RunMenu shows the bar "
+        "and its Cancel",
+    ),
+    (
+        re.compile(
+            r"(using\s+static)\s+(?:UnityEngine\s*\.\s*|UnityEditor\s*\.\s*)?"
+            r"(Debug|Undo|EditorUtility|Progress)\b"
+        ),
+        False,
+        "call the kernel's ctx / ImportLog by name; a using static hides the "
+        "call from this rule",
+    ),
+)
+#: What a test assembly needs besides UNITY_INCLUDE_TESTS: a define only the
+#: Test Framework's presence sets, so a project without it (an embedded
+#: deploy) never compiles the tests.
+TEST_FRAMEWORK = "com.unity.test-framework"
+TEST_FRAMEWORK_FIX = (
+    "add a versionDefines row on com.unity.test-framework and its define to "
+    "defineConstraints (the scaffold writes both)"
 )
 PRIOR_ART_FIX = (
     "write what the part weighed, and why it was or was not adopted, under "
@@ -282,7 +309,8 @@ _TYPE = re.compile(
     r"abstract|partial|readonly|unsafe|new|ref)\s+)*"
     r"(?:class|struct|interface|enum|record|delegate)\b"
 )
-_PRIOR_ART = re.compile(r"<remarks>(?:(?!</remarks>).)*Prior\s+art:", re.S)
+# A record, not the scaffold's placeholder: "Prior art: TODO" says nothing yet.
+_PRIOR_ART = re.compile(r"<remarks>(?:(?!</remarks>).)*Prior\s+art:(?!\s*TODO)", re.S)
 
 
 def declares_prior_art(text: str) -> bool:
@@ -326,6 +354,21 @@ def prior_art(layout: "cl.CSharpLayout") -> Dict[str, str]:
         for a in layout.asmdefs
         if not a.is_test and a.name not in weighed
     }
+
+
+def test_framework(layout: "cl.CSharpLayout") -> List[str]:
+    """What rule 4 finds: each test assembly that would compile without the
+    Test Framework: its ``defineConstraints`` lacks a define only a
+    ``versionDefines`` row on ``com.unity.test-framework`` sets. Never frozen."""
+    found = []
+    for asmdef in layout.asmdefs:
+        if not asmdef.is_test:
+            continue
+        rows = asmdef.data.get("versionDefines") or []
+        defines = {r.get("define") for r in rows if isinstance(r, dict) and r.get("name") == TEST_FRAMEWORK}
+        if not defines & set(asmdef._list("defineConstraints")):
+            found.append(f"test-framework: {layout.rel(asmdef.path)} compiles without the Test Framework: {TEST_FRAMEWORK_FIX}")
+    return found
 
 
 _GENERATOR = re.compile(r"m3trik/scripts/\w+\.py")
@@ -469,6 +512,7 @@ def scan(
         found.update(prior_art(layout))
         violations[package] = found
         strict[package] = generated(layout, generators)
+        strict[package] += test_framework(layout)
     return violations, problems, strict
 
 

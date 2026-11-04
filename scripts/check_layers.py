@@ -627,7 +627,12 @@ class CSharpLayout:
         """The most specific declared pattern *folder* lies in: most segments,
         then fewest wildcards."""
         segments = _segments(folder)
-        matches = [p for p in self.rank if _segments_match(segments, _segments(p))]
+        # "." is the root folder alone, never a catch-all: an assembly in a
+        # folder no part declares is a declaration problem, not the monolith's.
+        matches = [
+            p for p in self.rank
+            if (_segments_match(segments, _segments(p)) if _segments(p) else not segments)
+        ]
         if not matches:
             return None
         return max(

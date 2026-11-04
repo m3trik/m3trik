@@ -367,6 +367,26 @@ def _door(*refs: str, **fields) -> dict:
     return door
 
 
+class TestTheRootPartIsTheRootAlone(unittest.TestCase):
+    """2026-11-04 review: "." matched every folder, so an assembly in a folder
+    no part declares took the monolith's rank and a reference up the order
+    passed. "." is the root folder alone."""
+
+    def test_an_undeclared_folder_is_in_no_part(self):
+        from pythontk import TempArtifacts
+
+        with TempArtifacts.scoped("check_layers_root_part") as tmp:
+            root = Path(tmp.dir_path())
+            for rel, name in (("M.asmdef", "M"), ("Core/C.asmdef", "C"), ("Kits/Foo/K.asmdef", "K")):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text(json.dumps({"name": name, "references": []}), encoding="utf-8")
+            layout = cl.CSharpLayout(root, {"root": ".", "order": [".", "Core"]})
+        self.assertEqual(layout.part_of(""), ".")
+        self.assertEqual(layout.part_of("Core"), "Core")
+        self.assertIsNone(layout.part_of("Kits/Foo"))
+        self.assertTrue(any("Kits/Foo/K.asmdef is in no declared C# part" in p for p in layout.problems), layout.problems)
+
+
 class TestCSharpAssemblies(unittest.TestCase):
     """Rule 5: each asmdef's references point down the declared C# order, never
     across peers, and outside the package only from a door or a test assembly."""

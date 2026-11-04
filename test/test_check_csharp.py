@@ -283,6 +283,48 @@ class TestReviewEvasions(unittest.TestCase):
         )
         self.assertIn("ctx.Raise", found["bypass: AFix.cs: ctx?.Issue"])
 
+    def test_a_null_safe_extension_called_through_a_null_check_is_refused(self):
+        """2026-11-04 review: the kernel's ``Raise``, ``Log``, ``Created``,
+        ``Destroy`` and ``AddComponent`` work on a null context, so ``ctx?.`` skips
+        the edit or the line when there is none; a ternary that calls ``Issue``
+        only on a context drops the problem as ``ctx?.Issue`` does."""
+        files = {
+            "Pkg/Features/A/Editor/AFix.cs": """\
+                class AFix {
+                    void F(OpContext ctx, GameObject go) {
+                        ctx?.Raise("a", "skipped with no context");
+                        ctx?.Log("skipped too");
+                        ctx?.Created(go);
+                        ctx ?. Destroy(go);
+                        ctx?.AddComponent<Collider>(go);
+                        var i = ctx != null ? ctx.Issue("b", "dropped") : null;
+                        ctx.Raise("c", "said either way");
+                        ctx.AddComponent<Collider>(go);
+                        ctx?.Progress(0.5, "a checkpoint, fine to skip");
+                        bool any = ctx != null ? ctx.ShouldChange(go) : true;
+                        // ctx?.Raise("d", "a comment")
+                    }
+                }
+                """,
+        }
+        with _scratch("null-safe") as tmp:
+            root = Path(tmp.dir_path())
+            _tree(root, ASMDEFS, files)
+            found = cc.bypass(cl.CSharpLayout(root, DECLARED))
+        self.assertEqual(
+            sorted(found),
+            [
+                "bypass: AFix.cs: ctx != null ? ctx.Issue",
+                "bypass: AFix.cs: ctx ?.Destroy",
+                "bypass: AFix.cs: ctx?.AddComponent",
+                "bypass: AFix.cs: ctx?.Created",
+                "bypass: AFix.cs: ctx?.Log",
+                "bypass: AFix.cs: ctx?.Raise",
+            ],
+        )
+        self.assertIn("ctx.Raise", found["bypass: AFix.cs: ctx != null ? ctx.Issue"])
+        self.assertIn("works with no context", found["bypass: AFix.cs: ctx?.AddComponent"])
+
     def test_a_placeholder_is_no_prior_art(self):
         self.assertFalse(cc.declares_prior_art("/// <remarks>Prior art: TODO -- weigh it.</remarks>\nclass A { }\n"))
         self.assertTrue(cc.declares_prior_art("/// <remarks>Prior art: Unity's menus.</remarks>\nclass A { }\n"))

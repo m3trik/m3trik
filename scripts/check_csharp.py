@@ -13,9 +13,12 @@ the nearest asmdef above it.
    ``ClearProgressBar`` or ``Debug.Log`` / ``LogWarning`` / ``LogError`` (and
    their ``Format`` forms) / ``LogException`` itself: an action asks its
    ``OpContext`` (which records the undo and shows the progress), an importer
-   writes to ``ImportLog``. Nor does it report a problem as ``ctx?.Issue(...)``,
-   which says nothing when no context runs the action: ``ctx.Raise(...)``
-   writes the Console line then. Editor code is an editor-only assembly
+   writes to ``ImportLog``. Nor does it report a problem as ``ctx?.Issue(...)``
+   or ``ctx != null ? ctx.Issue(...) : ...``, which say nothing when no context
+   runs the action: ``ctx.Raise(...)`` writes the Console line then; nor call
+   the kernel's null-safe extensions through ``?.`` (``Raise``, ``Log``,
+   ``Created``, ``Destroy``, ``AddComponent``), which skips the edit or the
+   line with no context. Editor code is an editor-only assembly
    (``includePlatforms: ["Editor"]``) or a ``#if UNITY_EDITOR`` region; the
    ``Undo`` and ``EditorUtility`` calls are editor API, so they count anywhere.
    Comments and strings do not count. Exempt: the declared ``kernel`` part and
@@ -262,6 +265,23 @@ BYPASS += (
         True,
         "raise it with ctx.Raise(code, message, ...): an issue on the context, "
         "the Console line when there is none",
+    ),
+    (
+        re.compile(r"((?<!\w)[A-Za-z_]\w*\s*!=\s*null\s*\?\s*[A-Za-z_]\w*)\s*\.\s*(Issue)\s*\("),
+        True,
+        "raise it with ctx.Raise(code, message, ...): an issue on the context, "
+        "the Console line when there is none",
+    ),
+    # The kernel's edits and reports are extensions that work on a null context
+    # (OpContextEdits): '?.' skips the edit or the line when there is none.
+    (
+        re.compile(
+            r"((?:(?<!\w)[A-Za-z_]\w*|\))\s*\?)\s*\.\s*"
+            r"(Raise|Log|Created|Destroy|AddComponent)\s*(?:<[^<>()]*>)?\s*\("
+        ),
+        True,
+        "call it as ctx.Raise / Log / Created / Destroy / AddComponent: each "
+        "works with no context, and '?.' skips it then",
     ),
 )
 #: What a test assembly needs besides UNITY_INCLUDE_TESTS: a define only the

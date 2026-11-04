@@ -542,7 +542,7 @@ class TestCSharpAssemblies(unittest.TestCase):
         )
 
     def test_the_root_folder_is_a_part(self):
-        """Today's layout: a monolith at the root, its almost-door above it."""
+        """An assembly at the root (unitytk's monolith until 0.7.0), its almost-door above it."""
         declared = {
             "root": "templates",
             "order": ["Rig/XR", ".", "Kernel/Editor", "Kernel/Core"],

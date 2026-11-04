@@ -628,7 +628,7 @@ class CSharpLayout:
         then fewest wildcards."""
         segments = _segments(folder)
         # "." is the root folder alone, never a catch-all: an assembly in a
-        # folder no part declares is a declaration problem, not the monolith's.
+        # folder no part declares is a declaration problem, not the root's.
         matches = [
             p for p in self.rank
             if (_segments_match(segments, _segments(p)) if _segments(p) else not segments)

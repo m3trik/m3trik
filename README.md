@@ -17,12 +17,12 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 
 1. **The tools work in harmony.** Maya and Blender expose the same operation under the same name, and one tool can use another's results.
 2. **Each part is reusable on its own.** The marking menu, a panel, a script or another tool can call any operation, and a test can run it without a DCC.
-3. **Each library stands on its own.** pythontk, uitk, mayatk and blendertk are useful to any developer on their platform, with no knowledge of this pipeline.
+3. **Each library stands on its own.** pythontk, uitk, mayatk, blendertk and unitytk are useful to any developer on their platform, with no knowledge of this pipeline or of the tools above them.
 4. **Tools behave the way their users already expect:** the host's conventions (Maya: selection in, one undo step, option boxes; Blender: operator undo and redo), with progress, cancel, undo, preview and fixable errors.
 
 ## The rules, in brief
 
-**Placement: libraries hold the logic, tentacle holds the UI.** A tool's operations live in mayatk and blendertk, mirrored. Logic both hosts share, and that is truly reusable, lives once in pythontk behind a small adapter each host implements. Generic Qt lives in uitk. tentacle holds the launcher, the UIs and the Slots classes, and reaches the host only through the library API. A host-free app (no host half, needing no DCC to run) is the other product's, extapps': its engine, panel and Slots class together, with no host and no tentacle import, opened by name through uitk's external-app handler. Dependencies point down only; nothing imports a product.
+**Placement: libraries hold the logic, tentacle holds the UI.** A tool's operations live in mayatk and blendertk, mirrored. Logic both hosts share, and that is truly reusable, lives once in pythontk behind a small adapter each host implements. Generic Qt lives in uitk. tentacle holds the launcher, the UIs and the Slots classes, and reaches the host only through the library API. A host-free app (no host half, needing no DCC to run) is the other product's, extapps': its engine, panel and Slots class together, with no host and no tentacle import, opened by name through uitk's external-app handler. Dependencies and knowledge point down only: a unit names, reads and tests against nothing above it, and nothing imports a product.
 
 **Construction: small parts, composed.**
 - A large object is a facade over small collaborators that own their own state. A mixin is only for a capability several classes share.

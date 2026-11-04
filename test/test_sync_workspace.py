@@ -98,6 +98,19 @@ class TestSemantics(unittest.TestCase):
         for fragment in ("duplicate unit paths", "release must be", "no domain line"):
             self.assertIn(fragment, problems)
 
+    def test_a_twin_is_declared_on_one_side_and_read_both_ways(self):
+        paired = dict(FIXTURE, units=[
+            dict(u, twin="ui") if u["path"] == "core" else u for u in FIXTURE["units"]
+        ])
+        self.assertEqual(sw.validate(paired), [])
+        self.assertEqual(sw.twins(paired), {"core": "ui", "ui": "core"})
+        for twin in ("nowhere", "core"):
+            broken = dict(FIXTURE, units=[
+                dict(u, twin=twin) if u["path"] == "core" else u for u in FIXTURE["units"]
+            ])
+            with self.subTest(twin=twin):
+                self.assertTrue(any("twin" in p for p in sw.validate(broken)))
+
     def test_the_cascade_must_name_exactly_the_cascade_units(self):
         drifted = dict(FIXTURE, cascade=["core"])
         self.assertTrue(any("cascade" in p for p in sw.validate(drifted)))

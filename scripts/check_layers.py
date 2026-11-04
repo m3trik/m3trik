@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # coding=utf-8
-"""Hold every package to its declared layer order, and the workspace to its declared dependencies.
+"""Hold every package to its declared layer order, and the workspace to its declared dependencies and names.
 
 CODE_STANDARD section 0, Parts: a unit's parts sit in a declared order and depend
 only downward. One rule, checked at two scales:
@@ -78,6 +78,24 @@ and are exempt, as ruff already treats them.
    skips (a ``.`` prefix, a ``~`` suffix) and build output are not read. Its
    violations name the asmdef (``<name>.asmdef -> <reference> (<rule>)``), so a
    move keeps them frozen; each rule's fix is printed with it (``CSHARP_FIXES``).
+
+6. **Names.** Knowledge points down as imports do (CODE_STANDARD section 0,
+   Parts): a package's code, tests and shipped files (its package folder,
+   ``test/``, and the ``[tool.m3trik.layers.csharp]`` root) name no ecosystem
+   package it does not depend on, directly or through another
+   (``pyproject.toml`` dependencies and extras), save its twin
+   (``workspace.json`` ``"twin"``: mayatk and blendertk). A package may also
+   declare application names it never uses::
+
+       [tool.m3trik.names]
+       forbid = ["Maya", "Blender"]          # unitytk: what produces its assets
+
+   Words are read with identifiers split at case and underscores, so
+   ``MayaSurface`` and ``maya_surface`` name Maya while ``mayatk`` names only
+   mayatk. History and agent maps (``CHANGELOG.md``, ``AGENTS.md``,
+   ``CLAUDE.md``) name their neighbours by design and are not read; nor are
+   exec-templates, ``plugin_src/``, build output or test scratch. A violation
+   reads ``<repo-relative path> names <word> (names)``.
 
 A new check starts by freezing today's violations: ``check_layers_baseline.json``
 lists them, ``--check`` fails only on a violation it does not list, and reports
@@ -742,6 +760,8 @@ def scan(
     sync = _sync_workspace()
     ecosystem = sync.ecosystem_packages()
     products = set(sync.products())
+    closure = ecosystem_closure(workspace, ecosystem)
+    twins = sync.twins()
     violations: Dict[str, List[str]] = {}
     strict: Dict[str, List[str]] = {}
     problems: List[str] = []
@@ -759,6 +779,8 @@ def scan(
             problems.append(f"{package}: pyproject.toml does not parse ({error})")
             continue
         found = chain_violations(repo, package, ecosystem)
+        above = set(ecosystem) - closure.get(package, set()) - {package, twins.get(package)}
+        found |= name_violations(repo, package, data, above | name_forbid(data))
         order = layer_order(data)
         if order is not None:
             problems += [
@@ -778,6 +800,112 @@ def scan(
             hard |= role_violations(repo, package, declared)
         strict[package] = sorted(hard)
     return violations, problems, strict
+
+
+# ------------------------------------------------------------------ names
+#: The files rule 6 reads: code, shaders, UI and the docs a package ships.
+NAME_SUFFIXES = {
+    ".py", ".pyi", ".cs", ".hlsl", ".cginc", ".shader", ".compute",
+    ".js", ".mjs", ".ts", ".md", ".asmdef", ".ui", ".uxml", ".uss",
+}
+#: History and agent maps name a unit's neighbours by design.
+NAME_SKIP_FILES = {"CHANGELOG.md", "AGENTS.md", "CLAUDE.md"}
+NAME_SKIP_DIRS = EXEMPT_DIRS | {
+    "temp_tests", "test_output", "build", "dist", "node_modules",
+    "Library", "Temp", "Logs",
+}
+NAMES_FIX = (
+    "name only what sits below: say it in the contract's terms, or move what "
+    "needs the name to a unit that may know it (CODE_STANDARD section 0, Parts)"
+)
+_WORD = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+\d*|[A-Z]+\d*")
+
+
+def words(text: str) -> Set[str]:
+    """The lower-cased words of *text*, identifiers split at case and
+    underscores: ``MayaSurface`` holds ``maya``; ``mayatk`` is one word."""
+    return {match.group(0).lower() for match in _WORD.finditer(text)}
+
+
+def name_forbid(data: dict) -> Set[str]:
+    """The application names a package declares it never uses
+    (``[tool.m3trik.names] forbid``), lower-cased."""
+    names = data.get("tool", {}).get("m3trik", {}).get("names", {})
+    return {name.lower() for name in names.get("forbid", [])}
+
+
+def ecosystem_closure(workspace: Path, ecosystem: Sequence[str]) -> Dict[str, Set[str]]:
+    """Package -> every ecosystem package it depends on, directly or through
+    another; a package with no readable pyproject depends on none."""
+    members = set(ecosystem)
+    direct: Dict[str, Set[str]] = {}
+    for package in ecosystem:
+        try:
+            direct[package] = declared_dependencies(pyproject(workspace / package)) & members
+        except (OSError, tomllib.TOMLDecodeError):
+            direct[package] = set()
+    closure: Dict[str, Set[str]] = {}
+    for package in ecosystem:
+        seen: Set[str] = set()
+        stack = list(direct[package])
+        while stack:
+            dependency = stack.pop()
+            if dependency not in seen:
+                seen.add(dependency)
+                stack.extend(direct.get(dependency, ()))
+        closure[package] = seen
+    return closure
+
+
+def name_roots(repo: Path, package: str, data: dict) -> List[Path]:
+    """The folders rule 6 reads: the package, its tests, its Unity package."""
+    roots = [repo / package, repo / "test"]
+    declared_cs = csharp(data)
+    if declared_cs and declared_cs.get("root"):
+        roots.append(repo / declared_cs["root"])
+    return [root for root in roots if root.is_dir()]
+
+
+def iter_named_files(roots: Sequence[Path]) -> Iterator[Path]:
+    seen: Set[Path] = set()
+    for root in roots:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [
+                d for d in dirnames if d not in NAME_SKIP_DIRS and not d.startswith(".")
+            ]
+            for name in filenames:
+                path = Path(dirpath) / name
+                if (
+                    path.suffix.lower() in NAME_SUFFIXES
+                    and name not in NAME_SKIP_FILES
+                    and path not in seen
+                ):
+                    seen.add(path)
+                    yield path
+
+
+def name_violations(repo: Path, package: str, data: dict, forbidden: Set[str]) -> Set[str]:
+    """Each file of *package* naming a word of *forbidden*: an ecosystem package
+    above it, or an application it declared it never uses."""
+    found: Set[str] = set()
+    if not forbidden:
+        return found
+    for path in iter_named_files(name_roots(repo, package, data)):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        lowered = text.lower()
+        if not any(name in lowered for name in forbidden):
+            continue  # the cheap test first: most files name nothing
+        for word in sorted(words(text) & forbidden):
+            found.add(f"{path.relative_to(repo).as_posix()} names {word} (names)")
+    return found
+
+
+def layers_fix(violation: str) -> str:
+    """The fix a violation names: a C# reference rule's, or rule 6's."""
+    return csharp_fix(violation) or (NAMES_FIX if violation.endswith("(names)") else "")
 
 
 # -------------------------------------------------------------------- CLI
@@ -870,9 +998,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"[WROTE] {frozen_file}: {total} frozen violation(s)")
         return 1 if problems or strict_total else 0
 
-    new_total = compare(
-        violations, load_baseline(frozen_file), lambda _, v: csharp_fix(v)
-    )
+    new_total = compare(violations, load_baseline(frozen_file), lambda _, v: layers_fix(v))
     return 1 if new_total or problems or strict_total else 0
 
 

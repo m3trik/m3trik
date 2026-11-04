@@ -74,6 +74,9 @@ def validate(data: dict) -> List[str]:
             problems.append(f"{unit.get('path')}: no domain line")
         if "role" in unit and unit["role"] not in ROLES:
             problems.append(f"{unit.get('path')}: role must be one of {ROLES}")
+        twin = unit.get("twin")
+        if twin is not None and (twin not in paths or twin == unit.get("path")):
+            problems.append(f"{unit.get('path')}: twin {twin!r} names no other unit")
         packs = unit.get("packs", [])
         if not isinstance(packs, list) or not all(isinstance(p, str) for p in packs):
             problems.append(f"{unit.get('path')}: packs must be a list of pack names")
@@ -116,6 +119,17 @@ def ecosystem_packages(data: Optional[dict] = None) -> Tuple[str, ...]:
     data = data or load()
     standalone = [u["path"] for u in data["units"] if u["release"] == "standalone"]
     return tuple(data["cascade"]) + tuple(standalone)
+
+
+def twins(data: Optional[dict] = None) -> Dict[str, str]:
+    """Unit path -> its mirror in another host (``"twin"``, declared on one
+    side), in both directions."""
+    pairs: Dict[str, str] = {}
+    for unit in (data or load())["units"]:
+        if unit.get("twin"):
+            pairs[unit["path"]] = unit["twin"]
+            pairs[unit["twin"]] = unit["path"]
+    return pairs
 
 
 def products(data: Optional[dict] = None) -> Tuple[str, ...]:

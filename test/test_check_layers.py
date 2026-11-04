@@ -645,5 +645,78 @@ class TestCSharpAssemblies(unittest.TestCase):
         )
 
 
+
+class TestNames(unittest.TestCase):
+    """Rule 6: knowledge points down as imports do. A package names no
+    ecosystem package above it (save its twin) and no application it declared
+    it never uses; history, agent maps and exec-templates are not read."""
+
+    def _workspace(self, root: Path) -> None:
+        def package(name: str, pyproject: str, files: dict) -> None:
+            repo = root / name
+            (repo / name).mkdir(parents=True)
+            (repo / name / "__init__.py").write_text("")
+            (repo / "pyproject.toml").write_text(textwrap.dedent(pyproject))
+            for rel, text in files.items():
+                path = repo / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(textwrap.dedent(text), encoding="utf-8")
+
+        package("pythontk", '[project]\nname = "pythontk"\n', {
+            "pythontk/handoff.py": "# the bridge uitk's panels call\n",
+            "test/test_handoff.py": "# launches tentacle\n",
+            "pythontk/CHANGELOG.md": "uitk and mayatk read this now\n",
+            "pythontk/templates/run.py": "import mayatk\n",
+        })
+        package("uitk", '[project]\nname = "uitk"\ndependencies = ["pythontk"]\n', {
+            "uitk/panel.py": "import pythontk  # pythontk sits below\n",
+        })
+        package("mayatk", '[project]\nname = "mayatk"\ndependencies = ["uitk"]\n', {
+            "mayatk/mirror.py": "# blendertk mirrors this; pythontk holds the model\n",
+        })
+        package("unitytk", textwrap.dedent("""\
+            [project]
+            name = "unitytk"
+            dependencies = ["pythontk"]
+            [tool.m3trik.names]
+            forbid = ["Maya"]
+            """), {
+            "unitytk/importer.py": "class MayaSurface: pass  # see mayatk\n",
+            "unitytk/reader.py": "# reads the record pythontk declares\n",
+        })
+
+    def test_each_upward_name_is_a_violation_and_nothing_else_is(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._workspace(root)
+            violations, problems, strict = cl.scan(
+                root, ["pythontk", "uitk", "mayatk", "unitytk"]
+            )
+        names = {
+            pkg: sorted(v for v in found if v.endswith("(names)"))
+            for pkg, found in violations.items()
+        }
+        self.assertEqual(problems, [])
+        self.assertEqual(names["pythontk"], [
+            "pythontk/handoff.py names uitk (names)",
+            "test/test_handoff.py names tentacle (names)",
+        ])
+        self.assertEqual(names["uitk"], [])
+        self.assertEqual(names["mayatk"], [])  # its twin and what sits below
+        self.assertEqual(names["unitytk"], [
+            "unitytk/importer.py names maya (names)",
+            "unitytk/importer.py names mayatk (names)",
+        ])
+
+    def test_identifiers_split_at_case_and_underscores(self):
+        self.assertTrue({"maya", "surface"} <= cl.words("MayaSurface maya_surface"))
+        self.assertIn("mayatk", cl.words("import mayatk"))
+        self.assertNotIn("maya", cl.words("import mayatk"))
+        self.assertIn("unitytk", cl.words("UNITYTK_URP"))
+
+    def test_a_names_violation_names_its_fix(self):
+        self.assertIn("CODE_STANDARD section 0", cl.layers_fix("a.py names uitk (names)"))
+        self.assertEqual(cl.layers_fix("a -> b"), "")
+
 if __name__ == "__main__":
     unittest.main()

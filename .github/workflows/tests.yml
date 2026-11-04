@@ -259,7 +259,7 @@ jobs:
 
       # The operation contract: pythontk's payloads (OpRequest, Outcome,
       # Change, Issue, OpCall, the catalog document) restated as unitytk's
-      # generated C# types in templates/Kernel/Core. Needs pythontk and
+      # generated C# types in its core assembly. Needs pythontk and
       # unitytk side by side, as the step above does.
       - name: Operation contract C# types in sync
         run: python m3trik/scripts/sync_operation_contract.py --check
@@ -289,9 +289,20 @@ jobs:
       # [tool.m3trik.layers] imports only downward. Today's exceptions are frozen
       # in check_layers_baseline.json; this fails only on a new one. The product
       # and role rules (section 3) are strict: no other package imports tentacle,
-      # and each part of a tool imports only what its role allows.
+      # and each part of a tool imports only what its role allows. A package that
+      # ships a Unity package (unitytk) has its asmdef references held to the
+      # [tool.m3trik.layers.csharp] order the same way.
       - name: Declared layer order and dependencies hold
         run: python m3trik/scripts/check_layers.py --check
+
+      # The same C# parts' code: editor code above the kernel goes through its
+      # OpContext and import log (no Undo, progress bar or Debug.Log of its
+      # own), each part assembly records its prior art, and every *.g.cs is
+      # exactly what its generator writes. The first two are frozen in
+      # check_csharp_baseline.json; the generated files are strict. Needs
+      # pythontk beside unitytk (the generators' declarations).
+      - name: C# kernel seams, prior art and generated files
+        run: python m3trik/scripts/check_csharp.py --check
 
       # Saved names (CODE_STANDARD section 5): each .ui stem's widget names and
       # the SceneRecords keys, frozen by name so a panel or tool may move between

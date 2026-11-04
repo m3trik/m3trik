@@ -54,7 +54,7 @@ _MIRRORS = (
         "pythontk/net_utils/preview/features/shadow_rig/shadow_rig.js",
         "glsl",
     ),
-    ("unitytk", "unitytk/templates/ShadowPlane/ShadowPlaneHorizon.hlsl", "hlsl"),
+    ("unitytk", "Packages/com.m3trik.unitytk/Features/ShadowPlane/ShadowPlaneHorizon.hlsl", "hlsl"),
 )
 
 

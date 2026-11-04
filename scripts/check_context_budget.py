@@ -568,6 +568,11 @@ def run_checks(memory_dir: Path, do_memory: bool, do_runtime: bool) -> Report:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # A FAIL line quotes an arrow (a broken link's "a → b"); a piped Windows
+    # console is cp1252, which must not crash the report.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

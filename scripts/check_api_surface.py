@@ -32,10 +32,21 @@ is a break push.ps1 refuses. With no baseline (no tag, or a ``--since`` naming
 no commit) there is no verdict: ``--semver`` says so and exits 2, and
 ``--changes`` says there is no release to compare with.
 
+A package that declares C# (``CSHARP_SOURCES`` in its root ``__init__.py``:
+unitytk) is read and judged twice, with the same reader and the same rules:
+its Python, then its C# (``ApiSurface.read_csharp``: a module per namespace,
+keys ``Namespace::Type.Member``). A removed public C# name is a break unless
+a ``MOVED_NAMES`` row (its name or full name) or an ``[Obsolete]`` forwarder
+in the release accounts for it; an ``[Obsolete]`` naming the release it goes
+in is held to the window a ``Deprecation`` is. Overloads of a name are one
+key, their signatures joined: one added or dropped while the name stays is a
+changed signature, never a removal.
+
 Design notes:
   * It walks <pkg>/<pkg>/ only: top-level functions, classes and ALL_CAPS
     constants whose names do not start with `_`, the classes' public members,
-    those inherited from private bases included.
+    those inherited from private bases included; and the C# folder the
+    package declares.
   * A member hoisted to a base, or a class re-exported from its old home, is
     moved, not removed (:func:`compute_api_delta`).
   * Adopted, not built (CODE_STANDARD section 15): the release is read by the
@@ -50,7 +61,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import dataclasses
 import datetime
+import functools
 import importlib.util
 import io
 import json
@@ -306,6 +319,45 @@ def walk_package(pkg_dir: Path, repo_root: Path = REPO_ROOT) -> PackageSurface:
     return ApiSurface.read(source_root, root=repo_root)
 
 
+@functools.lru_cache(maxsize=None)
+def _reads_csharp() -> bool:
+    """Whether the pythontk sibling reads C# (``ApiSurface.read_csharp``).
+
+    One predating it is a routine state, as :func:`_load_version_key` says of
+    ``Deprecation``: this repo reaches main before the packages land their
+    side, so C# goes unread, said once on stderr, rather than failing every
+    package's ``--check``."""
+    if hasattr(ApiSurface, "read_csharp"):
+        return True
+    print(
+        "[api-surface] NOTE: the pythontk sibling reads no C# (no "
+        "ApiSurface.read_csharp): a package's C# is unchecked this run.",
+        file=sys.stderr,
+    )
+    return False
+
+
+def walk_csharp(pkg_dir: Path, repo_root: Path = REPO_ROOT) -> PackageSurface | None:
+    """The public C# surface of the folder ``<repo>/<pkg>/<pkg>/__init__.py``
+    declares (``ApiSurface.csharp_root``), named ``<pkg> (C#)``, its
+    ``source_root`` relative to *repo_root*; None when it declares none (or
+    the pythontk sibling reads no C#).
+
+    Raises:
+        FileNotFoundError: The package has no source root there.
+    """
+    source_root = pkg_dir / pkg_dir.name
+    if not source_root.is_dir():
+        raise FileNotFoundError(f"Expected package source root at {source_root}, not found.")
+    if not _reads_csharp() or not ApiSurface.csharp_sources(source_root):
+        return None
+    folder = ApiSurface.csharp_root(source_root)
+    if folder is None:
+        return None
+    surface = ApiSurface.read_csharp(folder, root=repo_root)
+    return dataclasses.replace(surface, name=f"{pkg_dir.name} (C#)")
+
+
 # ---------- The last release --------------------------------------------------
 
 #: A release tag: push.ps1 tags each release ``v<major>.<minor>.<patch>``.
@@ -383,34 +435,103 @@ def release_surface(pkg_dir: Path, ref: str) -> PackageSurface | None:
         tmp.cleanup()
 
 
-def release_baseline(pkg_dir: Path, since: str | None = None) -> tuple[dict | None, str]:
+def release_csharp_surface(pkg_dir: Path, ref: str) -> PackageSurface | None:
+    """*pkg_dir*'s public C# surface as of *ref*: its ``.cs`` files and its
+    root ``__init__.py`` from a ``git archive`` of *ref*, laid out as the
+    repo had them in a scoped temp copy, read in the folder the release
+    declared (or, a release predating the declaration, the folders today's
+    declares). A release with no C# there is an empty surface: all of
+    today's is new. None when git cannot produce them."""
+    name = pkg_dir.name
+    init = f"{name}/__init__.py"
+    archive = None
+    for pathspecs in (["*.cs", init], [init]):  # the second: a release with no C#
+        try:
+            proc = subprocess.run(
+                ["git", "-C", str(pkg_dir), "archive", "--format=tar", ref, "--", *pathspecs],
+                capture_output=True,
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if proc.returncode == 0 and proc.stdout:
+            archive = proc.stdout
+            break
+    if archive is None:
+        return None
+    tmp = TempArtifacts.scoped("api_release_cs")
+    try:
+        root = Path(tmp.dir_path()).resolve()
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            for member in tar.getmembers():
+                if not (member.isfile() and member.name.endswith((".cs", ".py"))):
+                    continue
+                target = (root / name / member.name).resolve()
+                if root not in target.parents:
+                    continue  # a path that would leave the copy
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(tar.extractfile(member).read())
+        released = root / name / name
+        released.mkdir(parents=True, exist_ok=True)
+        sources = ApiSurface.csharp_sources(released) or ApiSurface.csharp_sources(
+            pkg_dir / name
+        )
+        folder = ApiSurface.csharp_root(released, sources)
+        if folder is None:
+            return PackageSurface(name=f"{name} (C#)", source_root="", modules=[])
+        surface = ApiSurface.read_csharp(folder, root=root, cache=False)
+        return dataclasses.replace(surface, name=f"{name} (C#)")
+    finally:
+        tmp.cleanup()
+
+
+def release_baseline(
+    pkg_dir: Path, since: str | None = None, read=None
+) -> tuple[dict | None, str]:
     """``(surface mapping, label)`` of the last release (:func:`release_tag`),
-    or ``(None, why there is none)``."""
+    or ``(None, why there is none)``; *read* reads it (default
+    :func:`release_surface`; :func:`release_csharp_surface` for the C#)."""
     tag = release_tag(pkg_dir, since)
     if tag is None and since:
         return None, f"none ({since} names no commit in {pkg_dir.name}: fetch its tags)"
     if tag is None:
         return None, "none (no release tag)"
-    surface = release_surface(pkg_dir, tag)
+    surface = (read or release_surface)(pkg_dir, tag)
     if surface is None:
         return None, f"none ({tag} could not be read)"
     return surface.to_dict(), f"the last release ({tag})"
 
 
+def _symbol_key(qualname: str) -> str:
+    """*qualname* as the delta keys it: a C# overload's (``Json.Write(object,
+    bool)``) without its parameter types, so a name's overloads are one key."""
+    return qualname.split("(", 1)[0]
+
+
 def _flatten_signatures(pkg: PackageSurface) -> dict[str, str]:
     """{module:qualname: signature} for all public callables."""
-    out: dict[str, str] = {}
-    for mod in pkg.modules:
-        prefix = mod.relpath
-        for fn in mod.functions:
-            out[f"{prefix}::{fn.qualname}"] = fn.signature
-        for const in mod.constants:
-            out[f"{prefix}::{const.name}"] = "(constant)"
-        for cls in mod.classes:
-            out[f"{prefix}::{cls.name}"] = "(class)"
-            for member in cls.members:
-                out[f"{prefix}::{member.qualname}"] = member.signature
-    return out
+    return _flatten_mapping(pkg.to_dict())
+
+
+def _flatten_mapping(data: dict) -> dict[str, str]:
+    """{module:qualname: signature} of a surface's mapping: a name's C#
+    overloads one key, their signatures joined in order, so one added or
+    dropped while the name stays reads as a changed signature."""
+    groups: dict[str, list[str]] = {}
+    for mod in data.get("modules", []):
+        prefix = mod["relpath"]
+        for fn in mod.get("functions", []):
+            groups.setdefault(f"{prefix}::{_symbol_key(fn['qualname'])}", []).append(
+                fn["signature"]
+            )
+        for const in mod.get("constants", []):
+            groups.setdefault(f"{prefix}::{const['name']}", []).append("(constant)")
+        for cls in mod.get("classes", []):
+            groups.setdefault(f"{prefix}::{cls['name']}", []).append("(class)")
+            for member in cls.get("members", []):
+                key = f"{prefix}::{_symbol_key(member['qualname'])}"
+                groups.setdefault(key, []).append(member["signature"])
+    return {key: " | ".join(sorted(set(sigs))) for key, sigs in groups.items()}
 
 
 def _class_index(
@@ -496,7 +617,7 @@ def _pkg_class_entries(
                 mod.relpath,
                 cls.name,
                 list(cls.bases or []),
-                {m.qualname.split(".")[-1] for m in cls.members},
+                {_symbol_key(m.qualname).split(".")[-1] for m in cls.members},
             )
 
 
@@ -785,25 +906,29 @@ def _retired_keys(prior_json: dict) -> set[str]:
         prefix = mod["relpath"]
         for fn in mod.get("functions", []):
             if fn.get("deprecated"):
-                keys.add(f"{prefix}::{fn['qualname']}")
+                keys.add(f"{prefix}::{_symbol_key(fn['qualname'])}")
         for cls in mod.get("classes", []):
             whole = bool(cls.get("deprecated"))
             if whole:
                 keys.add(f"{prefix}::{cls['name']}")
             for member in cls.get("members", []):
                 if whole or member.get("deprecated"):
-                    keys.add(f"{prefix}::{member['qualname']}")
+                    keys.add(f"{prefix}::{_symbol_key(member['qualname'])}")
     return keys
 
 
 def _moved_entry(
-    symbol: str, table: dict[str, tuple[str, str]]
+    symbol: str, table: dict[str, tuple[str, str]], namespace: str = ""
 ) -> tuple[str, str] | None:
     """The moved-names entry that covers *symbol* (``Name`` or
     ``Class.member``): the symbol itself, its whole class, or a member's flat
-    name (a wildcard module's methods are exposed flat)."""
+    name (a wildcard module's methods are exposed flat); a C# one also by its
+    full name in *namespace* (``M3trik.Unitytk.Core.Json.Parse``)."""
     parts = symbol.split(".")
-    for candidate in (symbol, parts[0], parts[-1] if len(parts) == 2 else None):
+    candidates = [symbol, parts[0], parts[-1] if len(parts) == 2 else None]
+    if namespace:
+        candidates += [f"{namespace}.{symbol}", f"{namespace}.{parts[0]}"]
+    for candidate in candidates:
         if candidate in table:
             return table[candidate]
     return None
@@ -835,18 +960,8 @@ def compute_api_delta(
         return None
     new = _flatten_signatures(pkg)
 
-    # Reconstruct a flat map from prior JSON (which mirrors PackageSurface shape).
-    prior: dict[str, str] = {}
-    for mod in prior_json.get("modules", []):
-        prefix = mod["relpath"]
-        for fn in mod.get("functions", []):
-            prior[f"{prefix}::{fn['qualname']}"] = fn["signature"]
-        for const in mod.get("constants", []):
-            prior[f"{prefix}::{const['name']}"] = "(constant)"
-        for cls in mod.get("classes", []):
-            prior[f"{prefix}::{cls['name']}"] = "(class)"
-            for member in cls.get("members", []):
-                prior[f"{prefix}::{member['qualname']}"] = member["signature"]
+    # The same flat map from the prior JSON (which mirrors PackageSurface shape).
+    prior = _flatten_mapping(prior_json)
 
     added = sorted(set(new) - set(prior))
     removed = sorted(set(prior) - set(new))
@@ -911,7 +1026,8 @@ def compute_api_delta(
     unaccounted: list[str] = []
     destinations: dict[str, tuple[str, str]] = {}
     for key in still_removed:
-        entry = _moved_entry(key.split("::", 1)[1], table)
+        relpath, symbol = key.split("::", 1)
+        entry = _moved_entry(symbol, table, "" if relpath.endswith(".py") else relpath)
         if entry is not None:
             moved_out.append(key)
             destinations[key] = entry
@@ -1012,7 +1128,11 @@ def emit_changes_markdown(
         lines.append("")
         for key in added:
             mod, sym = key.split("::", 1)
-            lines.append(f"- `{mod}::{sym}{new[key]}`")
+            sig = new[key]
+            if not sig or sig.startswith("("):  # Python's ``(args) -> result``
+                lines.append(f"- `{mod}::{sym}{sig}`")
+            else:  # a C# declaration, which names the member itself
+                lines.append(f"- `{mod}::{sym}` — `{sig}`")
         lines.append("")
     lines.extend(deprecation_lines)
     if moved:
@@ -1159,7 +1279,10 @@ def check(package_names: list[str], repo_root: Path = REPO_ROOT) -> int:
         # retirement that named ``remove_in`` and then shipped past it is caught
         # by comparing it against the package's own ``__version__``.
         pkg_version = package_version(pkg_dir, name)
-        dated = [row for row in deprecations(data) if row[2]]
+        # Its C# ``[Obsolete]`` names, when it declares C#, by the same rule.
+        csharp = walk_csharp(pkg_dir, repo_root)
+        symbols = deprecations(data) + (deprecations(csharp) if csharp else [])
+        dated = [row for row in symbols if row[2]]
         if dated and not pkg_version:
             # A gate that passes because it compared against NOTHING is worse
             # than no gate: without a readable __version__ nothing here can
@@ -1181,9 +1304,9 @@ def check(package_names: list[str], repo_root: Path = REPO_ROOT) -> int:
                 "since= date, judged by version alone: " + "; ".join(undated),
                 file=sys.stderr,
             )
-        for relpath, qualname, remove_in, *_ in expired_deprecations(
-            data, pkg_version
-        ) + _expired(forms, pkg_version):
+        for relpath, qualname, remove_in, *_ in _expired(dated, pkg_version) + _expired(
+            forms, pkg_version
+        ):
             overdue.append(f"{name}/{relpath}::{qualname} (was due in {remove_in})")
 
     # A gate that passes because it walked NOTHING is worse than no gate: a typo
@@ -1238,6 +1361,25 @@ def _delta(
     return data, delta, prior, label
 
 
+def _csharp_delta(
+    name: str, repo_root: Path, since: str | None
+) -> tuple[PackageSurface, ApiDelta | None, dict | None, str] | None:
+    """:func:`_delta` of *name*'s C#, or None when it declares none: read
+    against the same release, accounted for by the same ``MOVED_NAMES``
+    (no base resolves across packages, no Python module re-exports).
+
+    Raises:
+        FileNotFoundError: The package has no source root here.
+    """
+    pkg_dir = repo_root / name
+    data = walk_csharp(pkg_dir, repo_root)
+    if data is None:
+        return None
+    prior, label = release_baseline(pkg_dir, since, read=release_csharp_surface)
+    moved_table = moved_names(pkg_dir / name)
+    return data, compute_api_delta(data, prior, moved_table=moved_table), prior, label
+
+
 def semver_verdict(name: str, repo_root: Path = REPO_ROOT, since: str | None = None) -> dict:
     """``{package, bump, reasons, unaccounted, baseline}`` -- the smallest
     release *name* may ship as (:func:`required_bump`) against its last
@@ -1252,12 +1394,19 @@ def semver_verdict(name: str, repo_root: Path = REPO_ROOT, since: str | None = N
     none = {"package": name, "bump": None, "reasons": [], "unaccounted": []}
     try:
         _data, delta, _prior, label = _delta(name, repo_root, since)
+        csharp = _csharp_delta(name, repo_root, since)
     except (FileNotFoundError, NotADirectoryError):
         return {**none, "baseline": "none (no package here)"}
     if delta is None:
         return {**none, "baseline": label}
-    bump, reasons = required_bump(delta)
-    unaccounted = [k for k in (delta.removed if delta else []) if not _is_semver_exempt(k)]
+    deltas = [delta]
+    if csharp is not None:
+        if csharp[1] is None:  # its C# could not be read at the release
+            return {**none, "baseline": f"{label}; its C#: {csharp[3]}"}
+        deltas.append(csharp[1])
+    reasons = [r for d in deltas for r in required_bump(d)[1]]
+    bump = "minor" if reasons else "patch"
+    unaccounted = [k for d in deltas for k in d.removed if not _is_semver_exempt(k)]
     return {
         "package": name,
         "bump": bump,
@@ -1287,7 +1436,24 @@ def changes_report(name: str, repo_root: Path = REPO_ROOT, since: str | None = N
         ),
         version=package_version(pkg_dir, name),
         moved_table=moved_names(repo_root / data.source_root),
+    ) + _csharp_changes(name, repo_root, since)
+
+
+def _csharp_changes(name: str, repo_root: Path, since: str | None) -> str:
+    """*name*'s C# changes and retirement debt (:func:`changes_report`'s
+    second part), or ``""`` when it declares no C#."""
+    csharp = _csharp_delta(name, repo_root, since)
+    if csharp is None:
+        return ""
+    data, _delta_cs, prior, label = csharp
+    report = emit_changes_markdown(
+        data,
+        prior,
+        label,
+        version=package_version(repo_root / name, name),
+        moved_table=moved_names(repo_root / name / name),
     )
+    return f"\n{report}"
 
 
 def shadow_report(package_names: list[str], repo_root: Path = REPO_ROOT) -> str:

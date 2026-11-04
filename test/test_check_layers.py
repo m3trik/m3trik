@@ -9,6 +9,7 @@ import, an upward import, a peer import, and a subpackage in no declared part.
 
 import contextlib
 import io
+import json
 import sys
 import tempfile
 import textwrap
@@ -316,6 +317,312 @@ class TestWebRuntime(unittest.TestCase):
             problems = cl.order_problems(repo, "pkg", self.ORDER)
         self.assertEqual(order[0], ["web/features/rig", "web/features/spin"])
         self.assertEqual(problems, [])
+
+
+def _scratch(name: str):
+    """A scratch folder in the house temp home (``ptk.TempArtifacts``), gone on a
+    clean exit and kept for debugging on a failure."""
+    pythontk = str(SCRIPTS.parents[1] / "pythontk")
+    if pythontk not in sys.path:
+        sys.path.insert(0, pythontk)
+    from pythontk import TempArtifacts
+
+    return TempArtifacts.scoped(f"check_layers_{name}")
+
+
+def _unity(root: Path, asmdefs: dict, files: dict = ()) -> None:
+    """Write each ``{folder/Name.asmdef: fields}`` (a ``guid`` field becomes its
+    ``.meta``) and each ``{path: text}`` under *root*."""
+    for rel, fields in asmdefs.items():
+        fields = dict(fields)
+        guid = fields.pop("guid", None)
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {"name": path.stem, "references": [], "autoReferenced": True}
+        data.update(fields)
+        path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+        if guid:
+            path.with_name(path.name + ".meta").write_text(
+                f"fileFormatVersion: 2\nguid: {guid}\n", encoding="utf-8"
+            )
+    for rel, text in dict(files).items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text, encoding="utf-8")
+
+
+def _door(*refs: str, **fields) -> dict:
+    door = {
+        "references": list(refs),
+        "autoReferenced": False,
+        "defineConstraints": ["PKG_XRI"],
+        "versionDefines": [
+            {
+                "name": "com.unity.xr.interaction.toolkit",
+                "expression": "3.0.0",
+                "define": "PKG_XRI",
+            }
+        ],
+    }
+    door.update(fields)
+    return door
+
+
+class TestCSharpAssemblies(unittest.TestCase):
+    """Rule 5: each asmdef's references point down the declared C# order, never
+    across peers, and outside the package only from a door or a test assembly."""
+
+    DECLARED = {
+        "root": "Pkg",
+        "order": [
+            "Features/*/Tests",
+            "Features/*/*",
+            "Features/*/Editor",
+            "Features/*/Runtime",
+            "Kernel",
+            "Core",
+        ],
+        "kernel": "Kernel",
+    }
+
+    def layout(self, root: Path, asmdefs: dict, files: dict = (), declared=None):
+        _unity(root, asmdefs, files)
+        return cl.CSharpLayout(root, dict(declared or self.DECLARED))
+
+    def test_references_point_down_and_never_across_peers(self):
+        asmdefs = {
+            "Pkg/Core/P.Core.asmdef": {"references": ["P.Kernel"], "guid": "c0" * 16},
+            "Pkg/Kernel/P.Kernel.asmdef": {"references": ["GUID:" + "C0" * 16]},
+            "Pkg/Features/A/Runtime/P.A.Runtime.asmdef": {
+                "references": ["P.Kernel", "P.A.Editor"]  # down; up its feature
+            },
+            "Pkg/Features/A/Editor/P.A.Editor.asmdef": {
+                "references": ["P.A.Runtime", "P.B.Runtime"],
+                "guid": "ae" * 16,
+            },
+            "Pkg/Features/B/Runtime/P.B.Runtime.asmdef": {
+                "references": ["GUID:" + "ae" * 16]  # another feature's, by GUID
+            },
+        }
+        with _scratch("refs") as tmp:
+            layout = self.layout(Path(tmp.dir_path()), asmdefs)
+            found = layout.violations()
+            problems = layout.problems
+        self.assertEqual(problems, [])
+        self.assertEqual(
+            found,
+            {
+                "P.Core.asmdef -> P.Kernel (up the order)",
+                "P.A.Runtime.asmdef -> P.A.Editor (up the order)",
+                "P.A.Editor.asmdef -> P.B.Runtime (a peer)",
+                "P.B.Runtime.asmdef -> P.A.Editor (a peer)",
+            },
+        )
+
+    def test_the_most_specific_pattern_wins(self):
+        """``Features/*/Editor`` beats ``Features/*/*`` (the doors), and a door
+        may reference its own feature's editor assembly, never another door."""
+        asmdefs = {
+            "Pkg/Features/A/Editor/P.A.Editor.asmdef": {},
+            "Pkg/Features/A/XRI/P.A.XRI.asmdef": _door("P.A.Editor", "P.A.Timeline"),
+            "Pkg/Features/A/Timeline/P.A.Timeline.asmdef": _door(),
+        }
+        with _scratch("specific") as tmp:
+            layout = self.layout(Path(tmp.dir_path()), asmdefs)
+            self.assertEqual(layout.part_of("Features/A/Editor"), "Features/*/Editor")
+            self.assertEqual(layout.part_of("Features/A/XRI/Sub"), "Features/*/*")
+            found = layout.violations()
+        self.assertEqual(found, {"P.A.XRI.asmdef -> P.A.Timeline (a peer)"})
+
+    def test_an_outside_reference_is_a_doors_alone(self):
+        asmdefs = {
+            "Pkg/Core/P.Core.asmdef": {},
+            "Pkg/Features/A/Runtime/P.A.Runtime.asmdef": {
+                "references": ["P.Core", "Unity.InputSystem"]
+            },
+            "Pkg/Features/A/XRI/P.A.XRI.asmdef": _door(
+                "P.A.Runtime", "Unity.XR.Interaction.Toolkit", "GUID:" + "ab" * 16
+            ),
+            # An almost-door: auto-referenced, so every assembly sees it.
+            "Pkg/Features/B/XRI/P.B.XRI.asmdef": _door(
+                "Unity.XR.CoreUtils", autoReferenced=True
+            ),
+            # Its define is not one of its constraints: it compiles without XRI.
+            "Pkg/Features/C/XRI/P.C.XRI.asmdef": _door(
+                "Unity.XR.Interaction.Toolkit", defineConstraints=[]
+            ),
+        }
+        with _scratch("outside") as tmp:
+            found = self.layout(Path(tmp.dir_path()), asmdefs).violations()
+        self.assertEqual(
+            found,
+            {
+                "P.A.Runtime.asmdef -> Unity.InputSystem (outside the package)",
+                "P.B.XRI.asmdef -> Unity.XR.CoreUtils (outside the package)",
+                "P.C.XRI.asmdef -> Unity.XR.Interaction.Toolkit (outside the package)",
+            },
+        )
+
+    def test_a_test_assembly_may_reference_the_test_framework(self):
+        tests = {
+            "references": [
+                "P.A.Runtime",
+                "UnityEngine.TestRunner",
+                "GUID:0acc523941302664db1f4e527237feb3",
+                "Unity.InputSystem",
+            ],
+            "overrideReferences": True,
+            "precompiledReferences": ["nunit.framework.dll"],
+            "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+        }
+        asmdefs = {
+            "Pkg/Features/A/Runtime/P.A.Runtime.asmdef": {
+                "references": ["UnityEngine.TestRunner"],
+                "precompiledReferences": ["nunit.framework.dll", "Vendor.dll"],
+            },
+            "Pkg/Features/A/Tests/P.A.Tests.asmdef": tests,
+        }
+        with _scratch("tests") as tmp:
+            layout = self.layout(Path(tmp.dir_path()), asmdefs)
+            found = layout.violations()
+            shapes = {a.name: a.is_test for a in layout.asmdefs}
+        self.assertEqual(shapes, {"P.A.Runtime": False, "P.A.Tests": True})
+        framework = "(the test framework outside a test assembly)"
+        self.assertEqual(
+            found,
+            {
+                f"P.A.Runtime.asmdef -> UnityEngine.TestRunner {framework}",
+                f"P.A.Runtime.asmdef -> nunit.framework.dll {framework}",
+                "P.A.Runtime.asmdef -> Vendor.dll (outside the package)",
+                "P.A.Tests.asmdef -> Unity.InputSystem (outside the package)",
+            },
+        )
+
+    def test_the_repos_own_assembly_is_never_referenced_a_door_included(self):
+        """The sandbox sits outside the package and nothing uses it; build
+        copies and the folders Unity skips are never read."""
+        asmdefs = {
+            "DevProject/Assets/Sandbox/Sandbox.asmdef": {"guid": "5a" * 16},
+            "build/lib/Pkg/Core/P.Core.asmdef": {"references": ["Nowhere"]},
+            "Pkg/Core/P.Core.asmdef": {},
+            "Pkg/Samples~/Demo/P.Demo.asmdef": {"references": ["Unity.Timeline"]},
+            "Pkg/Features/A/XRI/P.A.XRI.asmdef": _door("GUID:" + "5a" * 16),
+            "Pkg/Features/A/Runtime/P.A.Runtime.asmdef": {"references": ["Sandbox"]},
+        }
+        with _scratch("sandbox") as tmp:
+            layout = self.layout(Path(tmp.dir_path()), asmdefs)
+            found = layout.violations()
+            names = sorted(a.name for a in layout.asmdefs)
+        self.assertEqual(names, ["P.A.Runtime", "P.A.XRI", "P.Core"])
+        self.assertEqual(
+            found,
+            {
+                "P.A.XRI.asmdef -> Sandbox (the repo's own assembly)",
+                "P.A.Runtime.asmdef -> Sandbox (the repo's own assembly)",
+            },
+        )
+
+    def test_the_root_folder_is_a_part(self):
+        """Today's layout: a monolith at the root, its almost-door above it."""
+        declared = {
+            "root": "templates",
+            "order": ["Rig/XR", ".", "Kernel/Editor", "Kernel/Core"],
+            "kernel": "Kernel/Editor",
+        }
+        asmdefs = {
+            "templates/P.asmdef": {"references": ["P.Core", "Unity.InputSystem"]},
+            "templates/Rig/XR/P.XR.asmdef": _door("P", autoReferenced=True),
+            "templates/Kernel/Editor/P.Kernel.asmdef": {
+                "references": ["P.Core"],
+                "includePlatforms": ["Editor"],
+            },
+            "templates/Kernel/Core/P.Core.asmdef": {"references": ["P"]},
+        }
+        with _scratch("root") as tmp:
+            layout = self.layout(Path(tmp.dir_path()), asmdefs, declared=declared)
+            found = layout.violations()
+            problems = layout.problems
+            kernel = {a.name: layout.at_or_below_kernel(a) for a in layout.asmdefs}
+        self.assertEqual(problems, [])
+        self.assertEqual(
+            found,
+            {
+                "P.asmdef -> Unity.InputSystem (outside the package)",
+                "P.Core.asmdef -> P (up the order)",
+            },
+        )
+        self.assertEqual(
+            kernel, {"P": False, "P.Core": True, "P.Kernel": True, "P.XR": False}
+        )
+
+    def test_a_bad_declaration_or_asmdef_is_a_problem(self):
+        declared = {
+            "root": "Pkg",
+            "order": ["Kernel", "Kernel", "Gone"],
+            "kernel": "Core",
+        }
+        asmdefs = {
+            "Pkg/Kernel/P.Kernel.asmdef": {},
+            "Pkg/Kernel/Sub/P.Kernel.asmdef": {},
+            "Pkg/Loose/P.Loose.asmdef": {},
+        }
+        with _scratch("problems") as tmp:
+            root = Path(tmp.dir_path())
+            _unity(root, {}, {"Pkg/Kernel/Bad/P.Bad.asmdef": "{ not json"})
+            problems = self.layout(root, asmdefs, declared=declared).problems
+            missing = cl.CSharpLayout(root, {"root": "Nowhere", "order": ["."]}).problems
+        text = "\n".join(problems)
+        for expected in (
+            "P.Bad.asmdef does not parse",
+            "C# parts declared twice: ['Kernel']",
+            "declared C# part 'Gone' does not exist",
+            "csharp kernel 'Core' is not a declared part",
+            "two assemblies are named 'P.Kernel'",
+            "Loose/P.Loose.asmdef is in no declared C# part",
+        ):
+            self.assertIn(expected, text)
+        self.assertEqual(len(missing), 1)
+        self.assertIn("csharp root 'Nowhere' is not a folder", missing[0])
+
+    def test_the_package_rule_reads_the_declaration_and_names_each_fix(self):
+        """Through ``main``: the pyproject table is read, a C# violation fails
+        with its fix printed, and ``--update`` freezes it."""
+        with _scratch("main") as tmp:
+            root = Path(tmp.dir_path())
+            repo = root / "unitytk"
+            (repo / "unitytk").mkdir(parents=True)
+            (repo / "unitytk" / "__init__.py").write_text("")
+            (repo / "pyproject.toml").write_text(
+                '[project]\nname = "unitytk"\n\n'
+                "[tool.m3trik.layers.csharp]\n"
+                'root = "unitytk/templates"\n'
+                'order = [".", "Core"]\n',
+                encoding="utf-8",
+            )
+            _unity(
+                repo,
+                {
+                    "unitytk/templates/P.asmdef": {
+                        "references": ["P.Core", "Unity.InputSystem"]
+                    },
+                    "unitytk/templates/Core/P.Core.asmdef": {},
+                },
+            )
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                failed = cl.main(["--workspace", str(root), "unitytk"])
+                updated = cl.main(["--update", "--workspace", str(root)])
+                passed = cl.main(["--workspace", str(root), "unitytk"])
+            frozen = cl.load_baseline(cl.baseline_file(root))
+        self.assertEqual((failed, updated, passed), (1, 0, 0))
+        self.assertIn(
+            "[FAIL] unitytk: P.asmdef -> Unity.InputSystem (outside the package)"
+            " -- only a door references an outside package",
+            out.getvalue(),
+        )
+        self.assertEqual(
+            frozen,
+            {"unitytk": ["P.asmdef -> Unity.InputSystem (outside the package)"]},
+        )
 
 
 if __name__ == "__main__":

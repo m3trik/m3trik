@@ -13,10 +13,10 @@ records when measured 2026-09-18):
    ``<!-- scene-records:end -->``) rendered from ``SceneRecords.describe()``.
    Everything outside the markers is hand-written; a missing marker pair is
    refused rather than guessed.
-2. **The Unity importers' channel list.**  ``unitytk``'s
-   ``UnitytkSettings.cs`` declares each record it reads once, as a
+2. **The Unity importers' channel list.**  ``unitytk``'s core
+   ``UnitytkRecords.cs`` declares each record it reads once, as a
    ``UnitytkRecords`` constant on a line naming its importer
-   (``public const string Audio = "audio"; // channel -> AudioEventController``).  That
+   (``public const string Audio = "audio"; // channel -> AudioEventImporter``).  That
    set must equal the deliverable records declared with the ``"unity"``
    consumer -- a record Unity reads but pythontk does not declare (or the
    reverse) is a contract nobody owns -- and each must declare its shape, so
@@ -54,7 +54,7 @@ from pathlib import Path
 # This file: _scripts/m3trik/scripts/sync_scene_records.py -> repo root is parents[2].
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOC = REPO_ROOT / "mayatk" / "docs" / "data_nodes.md"
-UNITY_SETTINGS = REPO_ROOT / "unitytk" / "unitytk" / "templates" / "UnitytkSettings.cs"
+UNITYTK = REPO_ROOT / "unitytk"
 WEB_RECORDS = (
     REPO_ROOT
     / "pythontk"
@@ -197,12 +197,49 @@ def splice(text: str, body: str) -> str:
     return text[: start + len(BEGIN)] + "\n" + body + "\n" + text[end:]
 
 
+def unity_package() -> Path:
+    """unitytk's Unity package folder: the ``root`` its pyproject declares in
+    ``[tool.m3trik.layers.csharp]`` (the declaration check_layers.py and
+    check_csharp.py read), so moving the tree is one edit there."""
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover - Python < 3.11
+        import tomli as tomllib
+
+    data = tomllib.loads((UNITYTK / "pyproject.toml").read_text(encoding="utf-8"))
+    root = data.get("tool", {}).get("m3trik", {}).get("layers", {}).get("csharp", {})
+    if not root.get("root"):
+        raise ValueError(
+            "unitytk/pyproject.toml declares no [tool.m3trik.layers.csharp] root: "
+            "declare the Unity package's folder"
+        )
+    return UNITYTK / root["root"]
+
+
+def unity_file(name: str) -> Path:
+    """The one file named *name* under the Unity package: a hand-written
+    partner a generated file sits beside, wherever a move put it."""
+    package = unity_package()
+    found = sorted(package.rglob(name))
+    if len(found) != 1:
+        raise FileNotFoundError(
+            f"{len(found)} files named {name} under {package}: a generated file "
+            "sits beside exactly one -- declare the package's root, or rename"
+        )
+    return found[0]
+
+
+def unity_settings() -> Path:
+    """``UnitytkRecords.cs`` (the core's): the channel list Unity's importers read."""
+    return unity_file("UnitytkRecords.cs")
+
+
 def unity_reader(reader):
-    """The template file of the importer *reader* names -- ``<reader>.cs``
-    wherever it sits under ``templates/`` (a feature folder) -- or ``None``."""
+    """The file of the importer *reader* names -- ``<reader>.cs`` wherever it
+    sits in the Unity package (a feature folder) -- or ``None``."""
     if not reader:
         return None
-    found = sorted(UNITY_SETTINGS.parent.rglob(f"{reader}.cs"))
+    found = sorted(unity_package().rglob(f"{reader}.cs"))
     return found[0] if len(found) == 1 else None
 
 
@@ -215,7 +252,7 @@ def unity_mismatch(records=None) -> dict:
     records = records or _records()
     readers = {
         m["key"]: m["reader"]
-        for m in _UNITY_CHANNEL.finditer(UNITY_SETTINGS.read_text(encoding="utf-8"))
+        for m in _UNITY_CHANNEL.finditer(unity_settings().read_text(encoding="utf-8"))
     }
     specs = {s.key: s for s in records.deliverable() if "unity" in s.consumers}
     return {
@@ -791,7 +828,7 @@ def record_cs_targets(records=None) -> list:
     records = records or _records()
     readers = {
         m["key"]: m["reader"]
-        for m in _UNITY_CHANNEL.finditer(UNITY_SETTINGS.read_text(encoding="utf-8"))
+        for m in _UNITY_CHANNEL.finditer(unity_settings().read_text(encoding="utf-8"))
     }
     targets = []
     for spec in records.deliverable():
@@ -809,15 +846,10 @@ def record_cs_targets(records=None) -> list:
 #: (``HandoffRecord.RENDERING_POLICY``): the defaults its ``DeliverableRecipe``
 #: falls back to for a file that publishes none, and the handoff version its
 #: importer reads -- generated, so the Unity half cannot drift from the
-#: declaration the GLB, the FBX handoff and the WebXR viewer read.
-POLICY_CS = (
-    REPO_ROOT
-    / "unitytk"
-    / "unitytk"
-    / "templates"
-    / "LightmapMetadata"
-    / "RenderingPolicy.g.cs"
-)
+#: declaration the GLB, the FBX handoff and the WebXR viewer read. It sits
+#: beside its reader, ``DeliverableShading.cs``.
+def policy_cs() -> Path:
+    return unity_file("DeliverableShading.cs").with_name("RenderingPolicy.g.cs")
 
 
 def _policy() -> dict:
@@ -882,7 +914,8 @@ def render_policy_cs(policy=None) -> str:
 #: In the templates' core, beside the materials record's reader: every
 #: component that shades from the record reads it (the import-time writers,
 #: Apply's Deliverable Lit), and a component compiles against the core alone.
-ABSENCE_CS = POLICY_CS.parent.parent / "MapAbsence.g.cs"
+def absence_cs() -> Path:
+    return unity_file("MaterialRecord.cs").with_name("MapAbsence.g.cs")
 
 #: The record's scalar maps, by the C# name and the map type whose absent
 #: value a reader takes for one it cannot find.
@@ -942,18 +975,37 @@ def policy_cs_meta(name: str = "rendering_policy") -> str:
     )
 
 
-def sync_text(path: Path, wanted: str, check: bool, what: str) -> bool:
+def cs_targets(records=None) -> list:
+    """``[(path, text)]``: every C# file this script writes and its ``.meta``
+    -- the record types, the lighting recipe and the map absent values
+    (check_csharp.py holds each ``*.g.cs`` to it)."""
+    records = records or _records()
+    out = []
+    for spec, shape, path in record_cs_targets(records):
+        out.append((path, render_record_cs(spec, shape)))
+        out.append((path.with_name(path.name + ".meta"), record_cs_meta(spec)))
+    policy, absence = policy_cs(), absence_cs()
+    out.append((policy, render_policy_cs()))
+    out.append((policy.with_name(policy.name + ".meta"), policy_cs_meta()))
+    out.append((absence, render_absence_cs()))
+    out.append(
+        (absence.with_name(absence.name + ".meta"), policy_cs_meta("map_absence"))
+    )
+    return out
+
+
+def sync_text(
+    path: Path, wanted: str, check: bool, what: str, script: str = "sync_scene_records.py"
+) -> bool:
     """Hold *path* to *wanted* (LF text; the file's own newline style is
-    kept). Returns whether it drifted; writes the fix unless *check*."""
+    kept). Returns whether it drifted; writes the fix unless *check*. A drift
+    names *script*, the generator that writes *path*."""
     raw = path.read_bytes().decode("utf-8") if path.is_file() else ""
     nl = "\r\n" if "\r\n" in raw else "\n"
     if raw.replace("\r\n", "\n") == wanted:
         return False
     if check:
-        print(
-            f"DRIFT: {path.relative_to(REPO_ROOT)} {what} is stale;"
-            " run sync_scene_records.py"
-        )
+        print(f"DRIFT: {path.relative_to(REPO_ROOT)} {what} is stale; run {script}")
         return True
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(wanted.replace("\n", nl).encode("utf-8"))
@@ -1065,32 +1117,10 @@ def main(argv=None) -> int:
     failed |= sync_text(
         WEB_RECORDS, render_records_js(records), args.check, "web records module"
     )
-    for spec, shape, path in record_cs_targets(records):
-        failed |= sync_text(
-            path, render_record_cs(spec, shape), args.check, "C# record types"
-        )
-        meta = path.with_name(path.name + ".meta")
-        failed |= sync_text(
-            meta, record_cs_meta(spec), args.check, "record types' .meta"
-        )
+    for path, text in cs_targets(records):
+        failed |= sync_text(path, text, args.check, "generated C#")
     failed |= sync_text(
         FORMAT_MD, render_format_md(records), args.check, "deliverable format"
-    )
-    failed |= sync_text(POLICY_CS, render_policy_cs(), args.check, "lighting recipe")
-    failed |= sync_text(
-        POLICY_CS.with_name(POLICY_CS.name + ".meta"),
-        policy_cs_meta(),
-        args.check,
-        "lighting recipe's .meta",
-    )
-    failed |= sync_text(
-        ABSENCE_CS, render_absence_cs(), args.check, "map absent values"
-    )
-    failed |= sync_text(
-        ABSENCE_CS.with_name(ABSENCE_CS.name + ".meta"),
-        policy_cs_meta("map_absence"),
-        args.check,
-        "map absent values' .meta",
     )
     for problem in producer_parity():
         print(f"PRODUCERS: {problem}")

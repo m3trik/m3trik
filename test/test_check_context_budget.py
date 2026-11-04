@@ -112,6 +112,24 @@ class TestMemoryGuard(unittest.TestCase):
         self.assertTrue(any("not found" in w for w in rep.warns))
 
 
+class TestPipedConsole(unittest.TestCase):
+    def test_a_report_prints_through_a_cp1252_pipe(self):
+        """A piped Windows console is cp1252, and a broken link's FAIL line
+        quotes an arrow (``a → b``): printing it crashed the guard."""
+        report = guard.Report()
+        report.fail("AGENTS link broken: unitytk/AGENTS.md → gone.md")
+        out, err = io.BytesIO(), io.BytesIO()
+        stdout = io.TextIOWrapper(out, encoding="cp1252")
+        stderr = io.TextIOWrapper(err, encoding="cp1252")
+        with patch.object(guard, "run_checks", return_value=report), patch.object(
+            sys, "stdout", stdout
+        ), patch.object(sys, "stderr", stderr):
+            code = guard.main(["--no-runtime"])
+            stdout.flush()
+        self.assertEqual(code, 1)
+        self.assertIn("unitytk/AGENTS.md → gone.md", out.getvalue().decode("utf-8"))
+
+
 class TestLinkChecker(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()

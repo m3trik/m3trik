@@ -2074,5 +2074,136 @@ class TestDeprecationExpiryGate(unittest.TestCase):
         self.assertEqual(member.remove_in, "0.11.0")
 
 
+class TestCSharpDelta(unittest.TestCase):
+    """A package that declares C# is judged twice by one reader: its C#
+    against the same release, by the same rules (``ApiSurface.read_csharp``).
+    The fixture's C# moved, as unitytk's did: ``<pkg>/templates`` in the
+    release (whose ``__init__`` predates the declaration), the repository's
+    ``Packages/`` folder now."""
+
+    NAME = "pkgc"
+    DECLARED = 'CSHARP_SOURCES = ("../Packages/com.test.pkgc", "templates")\n'
+    RELEASED = """\
+namespace Test.Core
+{
+    /// <summary>JSON.</summary>
+    public static class Json
+    {
+        public static object Parse(string text) => null;
+        public static string Write(object value) => "";
+        public static void Old() { }
+        [System.Obsolete("Use Write; removed in 0.2.0.")]
+        public static string Dump(object value) => Write(value);
+    }
+}
+"""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name)
+        self.pkg = self.root / self.NAME
+
+    def _put(self, relpath: str, text: str) -> None:
+        path = self.pkg / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def _git(self, *args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(self.pkg), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            check=True,
+            capture_output=True,
+        )
+
+    def _released_then(self, now: str, init: str = "") -> None:
+        """v0.1.0 with :attr:`RELEASED` under ``pkgc/templates``; then *now*
+        under ``Packages/``, the declaration (and *init*) in ``__init__``."""
+        self._put(f"{self.NAME}/__init__.py", '__version__ = "0.1.0"\n')
+        self._put(f"{self.NAME}/templates/Core/Json.cs", self.RELEASED)
+        self._git("init")
+        self._git("add", "-A")
+        self._git("commit", "-m", "v0.1.0")
+        self._git("tag", "v0.1.0")
+        (self.pkg / self.NAME / "templates" / "Core" / "Json.cs").unlink()
+        self._put(
+            f"{self.NAME}/__init__.py", f'__version__ = "0.2.0"\n{self.DECLARED}{init}'
+        )
+        self._put("Packages/com.test.pkgc/Core/Json.cs", now)
+
+    def _verdict(self) -> dict:
+        with contextlib.redirect_stderr(io.StringIO()):
+            return g.semver_verdict(self.NAME, self.root)
+
+    def test_a_removed_member_is_a_break_and_an_added_overload_is_not(self):
+        self._released_then(
+            self.RELEASED.replace(
+                "        public static string Write(object value) => \"\";\n", ""
+            ).replace(
+                "public static void Old() { }",
+                "public static void Old() { }\n"
+                "        public static object Parse(string text, bool exact) => null;",
+            )
+        )
+        removed = ["Test.Core::Json.Write"]
+        self.assertEqual(
+            self._verdict(),
+            {
+                "package": self.NAME,
+                "bump": "minor",
+                "reasons": removed,
+                "unaccounted": removed,
+                "baseline": "the last release (v0.1.0)",
+            },
+        )
+        with contextlib.redirect_stderr(io.StringIO()):
+            md = g.changes_report(self.NAME, self.root)
+        self.assertIn("# pkgc (C#) — API Changes", md)
+        self.assertIn("- `Test.Core::Json.Write` — was `public static string Write(object value)`", md)
+        self.assertIn("- `Test.Core::Json.Parse`\n  - was: `public static object Parse(string text)`", md)
+
+    def test_an_obsolete_forwarder_or_a_moved_names_row_accounts_for_a_removal(self):
+        now = self.RELEASED.replace("        public static void Old() { }\n", "").replace(
+            '        [System.Obsolete("Use Write; removed in 0.2.0.")]\n'
+            "        public static string Dump(object value) => Write(value);\n",
+            "",
+        )
+        self._released_then(
+            now, 'MOVED_NAMES = {"Test.Core.Json.Old": ("Test.Core.Text.Old", "0.2.0")}\n'
+        )
+        verdict = self._verdict()
+        self.assertEqual(verdict["bump"], "minor")  # a removal all the same
+        self.assertEqual(verdict["unaccounted"], [])
+        self.assertEqual(
+            sorted(verdict["reasons"]), ["Test.Core::Json.Dump", "Test.Core::Json.Old"]
+        )
+
+    def test_check_holds_an_obsolete_to_its_window(self):
+        today = datetime.date.today()
+        for since, want in (
+            (today.isoformat(), 0),
+            ((today - datetime.timedelta(days=400)).isoformat(), 1),
+        ):
+            with self.subTest(since=since):
+                self._put(f"{self.NAME}/__init__.py", f'__version__ = "0.2.0"\n{self.DECLARED}')
+                self._put(
+                    "Packages/com.test.pkgc/Core/Json.cs",
+                    self.RELEASED.replace(
+                        "removed in 0.2.0.", f"this goes in pkgc 0.2.0 (deprecated {since})."
+                    ),
+                )
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = g.check([self.NAME], repo_root=self.root)
+                self.assertEqual(rc, want, out.getvalue() + err.getvalue())
+                if want:
+                    self.assertIn("pkgc/Test.Core::Json.Dump (was due in 0.2.0)", err.getvalue())
+
+    def test_a_package_declaring_no_csharp_is_judged_as_before(self):
+        self._put(f"{self.NAME}/__init__.py", '__version__ = "0.1.0"\n')
+        self._put("Packages/com.test.pkgc/Core/Json.cs", self.RELEASED)  # declared by none
+        self.assertIsNone(g.walk_csharp(self.pkg, self.root))
+
+
 if __name__ == "__main__":
     unittest.main()

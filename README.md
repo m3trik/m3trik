@@ -45,7 +45,8 @@ Tech-art tooling for game-art and DCC pipelines: one product of tools that behav
 
 | Check | What fails |
 |---|---|
-| `check_layers.py` | An import against the layer order, a role rule (a panel that imports a host), or an import of a product (tentacle, extapps) |
+| `check_layers.py` | An import against the layer order, a role rule (a panel that imports a host), an import of a product (tentacle, extapps), or a C# assembly reference against the order (an outside package referenced from anything but a door) |
+| `check_csharp.py` | C# editor code that bypasses the kernel (its own undo, progress bar or console call), an assembly with no prior art, or a hand-edited generated `*.g.cs` |
 | `check_dcc_twins.py` | A body written twice, a drifted copy, a host binding that overrides shared behavior |
 | `check_saved_names.py` | A saved widget or record name that disappeared |
 | `check_api_surface.py --semver` | A removed public name with no moved-names entry and no deprecation |

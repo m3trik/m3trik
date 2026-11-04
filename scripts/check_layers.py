@@ -50,6 +50,35 @@ package root (``from pythontk import X``) name no part and are not counted.
 Exec-templates (``templates/``) and in-app ``plugin_src/`` run inside another host
 and are exempt, as ruff already treats them.
 
+5. **C# assemblies.** A package that ships a Unity package declares its parts in
+   the same table, and each assembly definition's ``references`` are held to them::
+
+       [tool.m3trik.layers.csharp]
+       root = "Packages/com.m3trik.unitytk"   # the Unity package, repo-relative
+       order = [
+           "Features/*/Editor",                # top: each feature's editor half
+           "Features/*/Runtime",
+           ".",                                # the root folder's own assembly
+           "Contracts | Kernel/Editor",        # peers of one rank
+           "Core",                             # lowest
+       ]
+       kernel = "Kernel/Editor"                # check_csharp.py reads it
+
+   An asmdef's part is the most specific declared folder pattern its folder lies
+   in (most segments, then fewest ``*``); ``*`` is any one folder, and folders
+   bound to different names by one ``*`` of a shared pattern prefix are peers at
+   any rank (``Features/A/Editor`` may reference ``Features/A/Runtime``, never
+   ``Features/B/Runtime``). A reference, by name or ``GUID:``, points to its own
+   part or one ranked below; peers never. A reference outside the package (one
+   no asmdef under ``root`` declares) is a door's alone (``autoReferenced: false``,
+   compiled only when its package is present: a ``versionDefines`` define in its
+   ``defineConstraints``), plus the Unity Test Framework's from a test assembly
+   (``UNITY_INCLUDE_TESTS`` in its ``defineConstraints``); one to the repo's own
+   assembly outside the package (the sandbox) is never allowed. Folders Unity
+   skips (a ``.`` prefix, a ``~`` suffix) and build output are not read. Its
+   violations name the asmdef (``<name>.asmdef -> <reference> (<rule>)``), so a
+   move keeps them frozen; each rule's fix is printed with it (``CSHARP_FIXES``).
+
 A new check starts by freezing today's violations: ``check_layers_baseline.json``
 lists them, ``--check`` fails only on a violation it does not list, and reports
 listed ones that no longer occur so the baseline can shrink. ``--update``
@@ -66,11 +95,12 @@ Usage:
 import argparse
 import ast
 import json
+import os
 import re
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple
 
 try:
     import tomllib
@@ -396,6 +426,299 @@ def role_violations(repo: Path, package: str, declared: dict) -> Set[str]:
     return found
 
 
+# ---------------------------------------------------------------------- C#
+#: Folders no asmdef walk enters: build output, Unity's caches, tool state.
+#: Unity's own skip rule (a ``.`` prefix, a ``~`` suffix) is applied besides.
+CS_PRUNE = {
+    "Library", "Temp", "Logs", "obj", "UserSettings", "Build", "Builds",
+    "build", "dist", "node_modules", "__pycache__",
+}
+#: The Unity Test Framework's assemblies (by name, and by the GUID form Unity
+#: writes) and its precompiled NUnit: a test assembly's outside references.
+TEST_FRAMEWORK = {
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "GUID:27619889b8ba8c24980f49ee34dbb44a",
+    "GUID:0acc523941302664db1f4e527237feb3",
+    "nunit.framework.dll",
+}
+#: Each C# reference rule: the tag its violation ends with, and the fix it names.
+CSHARP_FIXES = {
+    "up the order": (
+        "reference only its own part or one below: move what it needs down, or "
+        "reach it through a contract"
+    ),
+    "a peer": (
+        "peers never reference each other: share the type through a contract, "
+        "never a reference"
+    ),
+    "outside the package": (
+        "only a door references an outside package: move the use into one "
+        "(autoReferenced false, a versionDefines define in its defineConstraints)"
+    ),
+    "the repo's own assembly": (
+        "nothing in the package references the repo's other assemblies (the "
+        "sandbox, a test project): move what it needs into the package"
+    ),
+    "the test framework outside a test assembly": (
+        "a test assembly carries UNITY_INCLUDE_TESTS in its defineConstraints: "
+        "add it, or drop the reference"
+    ),
+}
+
+
+def csharp(data: dict) -> Optional[dict]:
+    """The declared ``[tool.m3trik.layers.csharp]`` table, or None."""
+    return data.get("tool", {}).get("m3trik", {}).get("layers", {}).get("csharp")
+
+
+def _segments(folder: str) -> List[str]:
+    """A root-relative posix folder (or part pattern) as segments; ``.`` and
+    ``""`` are the root itself."""
+    return [] if folder in ("", ".") else folder.split("/")
+
+
+def unity_walk(top: Path, suffix: str, skip: Optional[Path] = None) -> Iterator[Path]:
+    """Every ``*<suffix>`` file under *top* that Unity would import, sorted:
+    hidden and ``~`` folders, :data:`CS_PRUNE` and *skip* are not entered."""
+    found = []
+    for folder, dirs, files in os.walk(top):
+        here = Path(folder)
+        dirs[:] = [
+            d for d in dirs
+            if d not in CS_PRUNE
+            and not d.startswith(".")
+            and not d.endswith("~")
+            and not d.endswith(".egg-info")
+            and (skip is None or here / d != skip)
+        ]
+        found += [here / f for f in files if f.endswith(suffix)]
+    return iter(sorted(found))
+
+
+class Asmdef:
+    """One assembly definition: its file, its folder under the C# root (posix,
+    ``""`` for the root), its ``.meta`` GUID and the fields the rules read."""
+
+    def __init__(self, path: Path, folder: str, data: dict, guid: Optional[str]):
+        self.path, self.folder, self.data, self.guid = path, folder, data, guid
+        self.name = str(data.get("name") or path.stem)
+
+    def _list(self, key: str) -> List[str]:
+        value = self.data.get(key) or []
+        return [str(v).strip() for v in value] if isinstance(value, list) else []
+
+    @property
+    def references(self) -> List[str]:
+        return self._list("references")
+
+    @property
+    def precompiled(self) -> List[str]:
+        return self._list("precompiledReferences")
+
+    @property
+    def is_test(self) -> bool:
+        """The Unity Test Framework's shape: ``UNITY_INCLUDE_TESTS`` keeps it out
+        of players (or the legacy ``optionalUnityReferences``)."""
+        return "UNITY_INCLUDE_TESTS" in self._list("defineConstraints") or (
+            "TestAssemblies" in self._list("optionalUnityReferences")
+        )
+
+    @property
+    def is_door(self) -> bool:
+        """Not auto-referenced, and compiled only when its package is present."""
+        if self.data.get("autoReferenced", True) is not False:
+            return False
+        constraints = set(self._list("defineConstraints"))
+        defines = self.data.get("versionDefines") or []
+        return any(
+            isinstance(d, dict) and str(d.get("define", "")).strip() in constraints
+            for d in defines
+        )
+
+    @property
+    def editor_only(self) -> bool:
+        return self._list("includePlatforms") == ["Editor"]
+
+
+def _read_asmdef(path: Path, root: Path) -> Tuple[Optional[Asmdef], Optional[str]]:
+    """``(asmdef, None)``, or ``(None, problem)`` for one that does not parse."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as error:
+        return None, f"{path.name} does not parse ({error}): fix its JSON"
+    guid = None
+    meta = path.with_name(path.name + ".meta")
+    if meta.is_file():
+        match = re.search(r"^guid:\s*([0-9a-fA-F]+)", meta.read_text(errors="ignore"), re.M)
+        guid = match.group(1).lower() if match else None
+    try:
+        folder = path.parent.relative_to(root).as_posix()
+    except ValueError:
+        folder = path.parent.as_posix()
+    return Asmdef(path, "" if folder == "." else folder, data, guid), None
+
+
+class CSharpLayout:
+    """A package's C# parts as ``[tool.m3trik.layers.csharp]`` declares them:
+    its assemblies, the part and rank of each, and the reference rules (module
+    docstring, rule 5). ``problems`` lists what is wrong with the declaration or
+    an asmdef itself; check_csharp.py reads the same layout."""
+
+    def __init__(self, repo: Path, declared: dict) -> None:
+        self.repo = repo
+        self.root = (repo / str(declared.get("root", "."))).resolve()
+        order = declared.get("order") or []
+        self.order = [[p.strip() for p in str(tier).split("|")] for tier in order]
+        self.rank = {p: i for i, tier in enumerate(self.order) for p in tier}
+        self.kernel = declared.get("kernel")
+        self.problems: List[str] = []
+        self.asmdefs: List[Asmdef] = []
+        if not self.root.is_dir():
+            self.problems.append(
+                f"csharp root {declared.get('root')!r} is not a folder: declare "
+                "the Unity package's folder, relative to pyproject.toml"
+            )
+            return
+        for path in unity_walk(self.root, ".asmdef"):
+            asmdef, problem = _read_asmdef(path, self.root)
+            if problem:
+                self.problems.append(problem)
+            else:
+                self.asmdefs.append(asmdef)
+        self.problems += self._declaration_problems()
+
+    def _declaration_problems(self) -> List[str]:
+        problems = []
+        flat = [p for tier in self.order for p in tier]
+        if not flat:
+            problems.append("csharp declares no order: list its parts, top first")
+        dupes = sorted({p for p in flat if flat.count(p) > 1})
+        if dupes:
+            problems.append(f"C# parts declared twice: {dupes}")
+        for part in flat:
+            if "*" not in part and not (self.root / part).is_dir():
+                problems.append(f"declared C# part {part!r} does not exist")
+        if self.kernel is not None and self.kernel not in self.rank:
+            problems.append(
+                f"csharp kernel {self.kernel!r} is not a declared part: name one of its order"
+            )
+        names = [a.name for a in self.asmdefs]
+        for name in sorted({n for n in names if names.count(n) > 1}):
+            problems.append(f"two assemblies are named {name!r}: Unity compiles one")
+        for asmdef in self.asmdefs:
+            if self.part_of(asmdef.folder) is None:
+                problems.append(
+                    f"{self.rel(asmdef.path)} is in no declared C# part: add its "
+                    "folder (or '.') to the order"
+                )
+        return problems
+
+    def rel(self, path: Path) -> str:
+        """*path* relative to the C# root (posix)."""
+        try:
+            return path.resolve().relative_to(self.root).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    def part_of(self, folder: str) -> Optional[str]:
+        """The most specific declared pattern *folder* lies in: most segments,
+        then fewest wildcards."""
+        segments = _segments(folder)
+        matches = [p for p in self.rank if _segments_match(segments, _segments(p))]
+        if not matches:
+            return None
+        return max(
+            matches, key=lambda p: (len(_segments(p)), -_segments(p).count("*"))
+        )
+
+    def assembly_of(self, path: Path) -> Optional[Asmdef]:
+        """The asmdef a ``.cs`` file compiles into: the nearest one above it."""
+        folder = _segments(self.rel(path.parent))
+        best = None
+        for asmdef in self.asmdefs:
+            own = _segments(asmdef.folder)
+            if own == folder[: len(own)] and (
+                best is None or len(own) > len(_segments(best.folder))
+            ):
+                best = asmdef
+        return best
+
+    def at_or_below_kernel(self, asmdef: Asmdef) -> bool:
+        """Whether *asmdef* is the kernel's or ranks below it."""
+        part = self.part_of(asmdef.folder)
+        if self.kernel not in self.rank or part is None:
+            return False
+        return self.rank[part] >= self.rank[self.kernel]
+
+    def reference_rule(self, source: Asmdef, target: Asmdef) -> Optional[str]:
+        """The rule a reference from *source* to *target* (both in the package)
+        breaks, or None."""
+        ps, pd = self.part_of(source.folder), self.part_of(target.folder)
+        if ps is None or pd is None:
+            return None  # a declaration problem, reported once
+        fs, fd = _segments(source.folder), _segments(target.folder)
+        for index, (mine, theirs) in enumerate(zip(_segments(ps), _segments(pd))):
+            if mine != theirs:
+                break
+            if mine == "*" and fs[index] != fd[index]:
+                return "a peer"
+        if ps == pd or self.rank[pd] > self.rank[ps]:
+            return None
+        return "a peer" if self.rank[pd] == self.rank[ps] else "up the order"
+
+    def _repo_own(self) -> Dict[str, str]:
+        """``{name or GUID: name}`` of the repo's asmdefs outside the package."""
+        own = {}
+        for path in unity_walk(self.repo, ".asmdef", skip=self.root):
+            asmdef, _ = _read_asmdef(path, self.repo)
+            if asmdef is not None:
+                own[asmdef.name] = asmdef.name
+                if asmdef.guid:
+                    own[f"GUID:{asmdef.guid}"] = asmdef.name
+        return own
+
+    def violations(self) -> Set[str]:
+        """``<name>.asmdef -> <reference> (<rule>)`` for every reference a rule
+        forbids (:data:`CSHARP_FIXES` names each rule's fix)."""
+        known = {a.name: a for a in self.asmdefs}
+        known.update({f"GUID:{a.guid}": a for a in self.asmdefs if a.guid})
+        own = self._repo_own()
+        found = set()
+        for source in self.asmdefs:
+            for ref in source.references + source.precompiled:
+                key = f"GUID:{ref[5:].lower()}" if ref.startswith("GUID:") else ref
+                target = known.get(key)
+                if target is source:
+                    continue
+                if target is not None:
+                    rule = self.reference_rule(source, target)
+                elif key in own:
+                    rule = "the repo's own assembly"
+                elif source.is_door:
+                    rule = None
+                elif key in TEST_FRAMEWORK:
+                    rule = None if source.is_test else (
+                        "the test framework outside a test assembly"
+                    )
+                else:
+                    rule = "outside the package"
+                if rule:
+                    label = target.name if target else own.get(key, ref)
+                    found.add(f"{source.name}.asmdef -> {label} ({rule})")
+        return found
+
+
+def csharp_fix(violation: str) -> str:
+    """The fix a C# reference violation names, or ``""`` for any other."""
+    for tag, fix in CSHARP_FIXES.items():
+        if violation.endswith(f"({tag})"):
+            return fix
+    return ""
+
+
 def _rel(repo: Path, package: str, path: Path, suffix: bool = True) -> str:
     rel = path.relative_to(repo / package)
     if not suffix:
@@ -437,6 +760,11 @@ def scan(
                 f"{package}: {p}" for p in order_problems(repo, package, order)
             ]
             found |= layer_violations(repo, package, order)
+        declared_cs = csharp(data)
+        if declared_cs is not None:
+            layout = CSharpLayout(repo, declared_cs)
+            problems += [f"{package}: {p}" for p in layout.problems]
+            found |= layout.violations()
         violations[package] = sorted(found)
         hard = product_violations(repo, package, products)
         declared = roles(data)
@@ -461,16 +789,45 @@ def load_baseline(path: Path = BASELINE) -> Dict[str, List[str]]:
     return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
-def write_baseline(violations: Dict[str, List[str]], path: Path = BASELINE) -> None:
-    data = {
-        "_doc": (
-            "Violations frozen when check_layers.py started holding the line "
-            "(CODE_STANDARD section 0, Parts). Shrink it; never grow it without "
-            "a reason in the commit. Rewrite: check_layers.py --update."
-        )
-    }
-    data.update({k: v for k, v in sorted(violations.items()) if v})
+BASELINE_DOC = (
+    "Violations frozen when check_layers.py started holding the line "
+    "(CODE_STANDARD section 0, Parts). Shrink it; never grow it without "
+    "a reason in the commit. Rewrite: check_layers.py --update."
+)
+
+
+def write_baseline(
+    violations: Dict[str, List[str]], path: Path = BASELINE, doc: str = BASELINE_DOC
+) -> None:
+    data = {"_doc": doc}
+    data.update({k: sorted(v) for k, v in sorted(violations.items()) if v})
     path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
+
+
+def compare(
+    violations: Dict[str, List[str]],
+    baseline: Dict[str, List[str]],
+    detail: Callable[[str, str], str] = lambda package, violation: "",
+) -> int:
+    """Print each package's new violations (with *detail*'s fix, when it names
+    one), the frozen ones that no longer occur, and a verdict line; return how
+    many are new. check_csharp.py reports through it too."""
+    new_total = 0
+    for package, found in violations.items():
+        frozen = set(baseline.get(package, []))
+        new = [v for v in found if v not in frozen]
+        paid = sorted(frozen - set(found))
+        for violation in new:
+            fix = detail(package, violation)
+            print(f"[FAIL] {package}: {violation}" + (f" -- {fix}" if fix else ""))
+        for violation in paid:
+            print(f"[PAID] {package}: {violation} no longer occurs (--update)")
+        new_total += len(new)
+        print(
+            f"[{'FAIL' if new else 'OK'}] {package}: {len(new)} new, "
+            f"{len(found) - len(new)} frozen"
+        )
+    return new_total
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -508,21 +865,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"[WROTE] {frozen_file}: {total} frozen violation(s)")
         return 1 if problems or strict_total else 0
 
-    baseline = load_baseline(frozen_file)
-    new_total = 0
-    for package, found in violations.items():
-        frozen = set(baseline.get(package, []))
-        new = [v for v in found if v not in frozen]
-        paid = sorted(frozen - set(found))
-        for violation in new:
-            print(f"[FAIL] {package}: {violation}")
-        for violation in paid:
-            print(f"[PAID] {package}: {violation} no longer occurs (--update)")
-        new_total += len(new)
-        print(
-            f"[{'FAIL' if new else 'OK'}] {package}: {len(new)} new, "
-            f"{len(found) - len(new)} frozen"
-        )
+    new_total = compare(
+        violations, load_baseline(frozen_file), lambda _, v: csharp_fix(v)
+    )
     return 1 if new_total or problems or strict_total else 0
 
 

@@ -172,9 +172,5 @@
   "switchboard/rules.py -> uitk.widgets.widgetComboBox",
   "switchboard/slots.py -> uitk.widgets.menuButton",
   "switchboard/widgets.py -> uitk.widgets.menuButton"
- ],
- "unitytk": [
-  "M3trik.Unitytk.asmdef -> Unity.RenderPipelines.Core.Runtime (outside the package)",
-  "M3trik.Unitytk.asmdef -> Unity.RenderPipelines.Universal.Runtime (outside the package)"
  ]
 }

@@ -1,7 +1,6 @@
 {
  "_doc": "C# violations frozen when check_csharp.py started holding the line (the kernel bypass and prior-art rules; generated files are never frozen). Shrink it; never grow it without a reason in the commit. Rewrite: check_csharp.py --update.",
  "unitytk": [
-  "bypass: ArticulatedRigController.cs: Debug.LogWarning",
   "bypass: DeliverableShading.cs: Debug.Log",
   "bypass: DeliverableShading.cs: Debug.LogWarning",
   "bypass: DeliverableShading.cs: Debug.LogWarning (2)",
@@ -89,7 +88,6 @@
   "bypass: UnitytkSettings.cs: Debug.LogWarning (4)",
   "bypass: UnitytkSettings.cs: Debug.LogWarning (5)",
   "bypass: UnitytkSettings.cs: Debug.LogWarning (6)",
-  "prior-art: M3trik.Unitytk.XR.asmdef",
   "prior-art: M3trik.Unitytk.asmdef"
  ]
 }

@@ -174,9 +174,6 @@
   "switchboard/widgets.py -> uitk.widgets.menuButton"
  ],
  "unitytk": [
-  "M3trik.Unitytk.XR.asmdef -> Unity.XR.CoreUtils (outside the package)",
-  "M3trik.Unitytk.XR.asmdef -> Unity.XR.Interaction.Toolkit (outside the package)",
-  "M3trik.Unitytk.asmdef -> Unity.InputSystem (outside the package)",
   "M3trik.Unitytk.asmdef -> Unity.RenderPipelines.Core.Runtime (outside the package)",
   "M3trik.Unitytk.asmdef -> Unity.RenderPipelines.Universal.Runtime (outside the package)"
  ]

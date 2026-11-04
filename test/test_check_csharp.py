@@ -251,6 +251,38 @@ class TestReviewEvasions(unittest.TestCase):
             ],
         )
 
+    def test_an_issue_only_a_context_hears_is_refused(self):
+        """2026-11-04 review: ``ctx?.Issue(...)`` drops a problem when an action
+        is called with no context (a script, ``unity.csharp.exec``); the kernel's
+        ``ctx.Raise`` writes the Console line then."""
+        files = {
+            "Pkg/Features/A/Editor/AFix.cs": """\
+                class AFix {
+                    void F(OpContext ctx) {
+                        ctx?.Issue("a", "dropped with no context");
+                        run.Ctx ?. Issue("b", "and through a member");
+                        Get(ctx)?.Issue("c", "and through a call");
+                        ctx.Raise("d", "said either way");
+                        ctx.Issue("e", "a context's own call");
+                        // ctx?.Issue("f", "a comment")
+                    }
+                }
+                """,
+        }
+        with _scratch("raise") as tmp:
+            root = Path(tmp.dir_path())
+            _tree(root, ASMDEFS, files)
+            found = cc.bypass(cl.CSharpLayout(root, DECLARED))
+        self.assertEqual(
+            sorted(found),
+            [
+                "bypass: AFix.cs: )?.Issue",
+                "bypass: AFix.cs: Ctx ?.Issue",
+                "bypass: AFix.cs: ctx?.Issue",
+            ],
+        )
+        self.assertIn("ctx.Raise", found["bypass: AFix.cs: ctx?.Issue"])
+
     def test_a_placeholder_is_no_prior_art(self):
         self.assertFalse(cc.declares_prior_art("/// <remarks>Prior art: TODO -- weigh it.</remarks>\nclass A { }\n"))
         self.assertTrue(cc.declares_prior_art("/// <remarks>Prior art: Unity's menus.</remarks>\nclass A { }\n"))

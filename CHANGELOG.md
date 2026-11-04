@@ -1,5 +1,7 @@
 # m3trik — Changelog
 
+- **2026-11-04 -- `check_csharp.py` refuses `ctx?.Issue(...)` (`scripts/check_csharp.py`).** An action called with no context (a script, `unity.csharp.exec`) dropped every problem it reported that way: the kernel-bypass rule now names the call (`bypass: <File>.cs: ctx?.Issue`, through a member or a call too) and its fix, unitytk's `ctx.Raise`, which records the issue on a context and writes the Console line without one. Never frozen: unitytk has none left.
+  - Test(s): `test_check_csharp.TestReviewEvasions.test_an_issue_only_a_context_hears_is_refused` (a bare, a member's and a call's are caught; `ctx.Raise`, a context's own `ctx.Issue` and a comment are not); the real workspace holds its baseline.
 - **2026-11-04 -- Fixed (review): the C# checks close four gaps (`scripts/check_csharp.py`, `check_layers.py`, `scaffold_unity_part.py`, `sync_shadow_shaders.py`).**
   - **The root part.** `"."` named every folder, so an assembly in an undeclared folder took the monolith's rank and a reference up the order passed. `"."` is now the root folder alone, and an undeclared folder is a declaration problem.
   - **Kernel bypass.** The rule now also catches `Debug.LogAssertion` and `Debug.unityLogger`, `UnityEditor.Progress`, and a `using static` of `Debug`, `Undo` or `EditorUtility`.

@@ -258,6 +258,7 @@ class TestReviewEvasions(unittest.TestCase):
         files = {
             "Pkg/Features/A/Editor/AFix.cs": """\
                 class AFix {
+                    static OpContext Get(OpContext c) => c;
                     void F(OpContext ctx) {
                         ctx?.Issue("a", "dropped with no context");
                         run.Ctx ?. Issue("b", "and through a member");
@@ -276,8 +277,8 @@ class TestReviewEvasions(unittest.TestCase):
         self.assertEqual(
             sorted(found),
             [
-                "bypass: AFix.cs: )?.Issue",
-                "bypass: AFix.cs: Ctx ?.Issue",
+                "bypass: AFix.cs: Ctx?.Issue",
+                "bypass: AFix.cs: Get()?.Issue",
                 "bypass: AFix.cs: ctx?.Issue",
             ],
         )
@@ -315,15 +316,78 @@ class TestReviewEvasions(unittest.TestCase):
             sorted(found),
             [
                 "bypass: AFix.cs: ctx != null ? ctx.Issue",
-                "bypass: AFix.cs: ctx ?.Destroy",
                 "bypass: AFix.cs: ctx?.AddComponent",
                 "bypass: AFix.cs: ctx?.Created",
+                "bypass: AFix.cs: ctx?.Destroy",
                 "bypass: AFix.cs: ctx?.Log",
                 "bypass: AFix.cs: ctx?.Raise",
             ],
         )
         self.assertIn("ctx.Raise", found["bypass: AFix.cs: ctx != null ? ctx.Issue"])
         self.assertIn("works with no context", found["bypass: AFix.cs: ctx?.AddComponent"])
+
+    def test_wrapped_inverted_and_guarded_forms_are_refused_and_other_receivers_are_not(self):
+        """2026-11-04 review: the rule read one line at a time and any receiver,
+        so a wrapped ternary or chain, the inverted ternary, an ``if`` guard
+        (braced or not, the call anywhere in its block) and an element of a
+        context array went unseen, while a logger's ``?.Log``, a call's
+        ``?.Log`` and a ternary that checks one name and calls another were
+        refused. A receiver counts when the file types it ``OpContext`` (a
+        field, parameter, local, element or method) or names it like a
+        context."""
+        files = {
+            "Pkg/Features/A/Editor/AWrap.cs": """\
+                class AWrap {
+                    OpContext[] arr;
+                    static ILogger Foo() => null;
+                    void F(OpContext ctx, ILogger _logger, object flag, Thing other) {
+                        var i = ctx != null
+                            ? ctx.Issue("a", "a wrapped ternary")
+                            : null;
+                        ctx
+                            ?.Raise("b", "a wrapped chain");
+                        var j = ctx == null ? null : ctx.Issue("c", "the inverted ternary");
+                        var p = (ctx != null) ? ctx.Issue("j", "a parenthesized check") : null;
+                        if (ctx != null) ctx.Issue("d", "an if");
+                        if (ctx != null) { ctx.Issue("e", "a braced if"); }
+                        if (ctx is not null)
+                        {
+                            Prepare();
+                            ctx.Destroy(go);
+                        }
+                        arr[0]?.Raise("f", "an element of a context array");
+                        _logger?.Log("a logger's line");
+                        Foo()?.Log("a call that is no context");
+                        var k = flag != null ? other.Issue("g", "another name") : null;
+                        if (flag != null) other.Issue("h", "another name");
+                        if (ctx != null) Prepare(); ctx.Issue("i", "after the guarded statement");
+                    }
+                }
+                """,
+        }
+        with _scratch("wrapped") as tmp:
+            root = Path(tmp.dir_path())
+            _tree(root, ASMDEFS, files)
+            found = cc.bypass(cl.CSharpLayout(root, DECLARED))
+        self.assertEqual(
+            sorted(found),
+            [
+                "bypass: AWrap.cs: arr[]?.Raise",
+                "bypass: AWrap.cs: ctx != null ? ctx.Issue",
+                "bypass: AWrap.cs: ctx != null ? ctx.Issue (2)",
+                "bypass: AWrap.cs: ctx == null ? ... : ctx.Issue",
+                "bypass: AWrap.cs: ctx?.Raise",
+                "bypass: AWrap.cs: if (ctx != null) ctx.Destroy",
+                "bypass: AWrap.cs: if (ctx != null) ctx.Issue",
+                "bypass: AWrap.cs: if (ctx != null) ctx.Issue (2)",
+            ],
+        )
+        self.assertTrue(
+            found["bypass: AWrap.cs: ctx != null ? ctx.Issue"].startswith("at Features/A/Editor/AWrap.cs:5: "),
+            "a wrapped form is placed at its first line",
+        )
+        self.assertIn("ctx.Raise", found["bypass: AWrap.cs: if (ctx != null) ctx.Issue (2)"])
+        self.assertIn("works with no context", found["bypass: AWrap.cs: if (ctx != null) ctx.Destroy"])
 
     def test_a_placeholder_is_no_prior_art(self):
         self.assertFalse(cc.declares_prior_art("/// <remarks>Prior art: TODO -- weigh it.</remarks>\nclass A { }\n"))

@@ -13,15 +13,20 @@ the nearest asmdef above it.
    ``ClearProgressBar`` or ``Debug.Log`` / ``LogWarning`` / ``LogError`` (and
    their ``Format`` forms) / ``LogException`` itself: an action asks its
    ``OpContext`` (which records the undo and shows the progress), an importer
-   writes to ``ImportLog``. Nor does it report a problem as ``ctx?.Issue(...)``
-   or ``ctx != null ? ctx.Issue(...) : ...``, which say nothing when no context
-   runs the action: ``ctx.Raise(...)`` writes the Console line then; nor call
-   the kernel's null-safe extensions through ``?.`` (``Raise``, ``Log``,
-   ``Created``, ``Destroy``, ``AddComponent``), which skips the edit or the
-   line with no context. Editor code is an editor-only assembly
+   writes to ``ImportLog``. Nor does it report a problem only when there is a
+   context (``ctx?.Issue(...)``, ``ctx != null ? ctx.Issue(...) : ...``, the
+   inverted ternary, ``if (ctx != null) ctx.Issue(...)`` with the call anywhere
+   in a braced block), which says nothing when no context runs the action:
+   ``ctx.Raise(...)`` writes the Console line then; nor call the kernel's
+   null-safe extensions (``Raise``, ``Log``, ``Created``, ``Destroy``,
+   ``AddComponent``) behind the same checks, which skip the edit or the line
+   with no context. A receiver counts when the file types it ``OpContext`` or
+   names it like a context, and a ternary or ``if`` only when it checks the
+   name it calls (:func:`null_checked_calls`). Editor code is an editor-only assembly
    (``includePlatforms: ["Editor"]``) or a ``#if UNITY_EDITOR`` region; the
    ``Undo`` and ``EditorUtility`` calls are editor API, so they count anywhere.
-   Comments and strings do not count. Exempt: the declared ``kernel`` part and
+   The whole file is read at once, so a call wrapped over lines counts, at its
+   first line. Comments and strings do not count. Exempt: the declared ``kernel`` part and
    every part ranked below it (they implement those seams), test assemblies
    (``UNITY_INCLUDE_TESTS``) and generated ``*.g.cs``. A violation is named by
    its file's name and call (``bypass: <File>.cs: Undo.RecordObject``, then
@@ -50,6 +55,7 @@ Usage:
 """
 
 import argparse
+import bisect
 import importlib
 import re
 import sys
@@ -190,7 +196,7 @@ def editor_lines(code: str) -> List[bool]:
     the ``#else`` of ``#if !UNITY_EDITOR``, any branch nested in one)."""
     stack: List[List[bool]] = []  # [this branch is editor, the #else would be]
     marks = []
-    for line in code.splitlines():
+    for line in code.split("\n"):  # as bypass numbers them: every '\n', nothing else
         match = _DIRECTIVE.match(line)
         if match:
             kind, expression = match.group(1), match.group(2).strip()
@@ -240,7 +246,7 @@ BYPASS: Tuple[Tuple["re.Pattern[str]", bool, str], ...] = (
         "ImportLog.Info / Warning / Error",
     ),
 )
-#: Calls a line-based rule cannot see by name: the editor's progress API, and a
+#: Calls the rules above miss by name: the editor's progress API, and a
 #: ``using static`` that turns the next call into a bare ``Log(...)``.
 BYPASS += (
     (
@@ -258,32 +264,159 @@ BYPASS += (
         "call the kernel's ctx / ImportLog by name; a using static hides the "
         "call from this rule",
     ),
-    # A problem reported only when a context runs the action: called with none
-    # (a script, unity.csharp.exec) it says nothing.
-    (
-        re.compile(r"((?:(?<!\w)[A-Za-z_]\w*|\))\s*\?)\s*\.\s*(Issue)\s*\("),
-        True,
-        "raise it with ctx.Raise(code, message, ...): an issue on the context, "
-        "the Console line when there is none",
-    ),
-    (
-        re.compile(r"((?<!\w)[A-Za-z_]\w*\s*!=\s*null\s*\?\s*[A-Za-z_]\w*)\s*\.\s*(Issue)\s*\("),
-        True,
-        "raise it with ctx.Raise(code, message, ...): an issue on the context, "
-        "the Console line when there is none",
-    ),
-    # The kernel's edits and reports are extensions that work on a null context
-    # (OpContextEdits): '?.' skips the edit or the line when there is none.
-    (
-        re.compile(
-            r"((?:(?<!\w)[A-Za-z_]\w*|\))\s*\?)\s*\.\s*"
-            r"(Raise|Log|Created|Destroy|AddComponent)\s*(?:<[^<>()]*>)?\s*\("
-        ),
-        True,
-        "call it as ctx.Raise / Log / Created / Destroy / AddComponent: each "
-        "works with no context, and '?.' skips it then",
-    ),
 )
+
+# A call made only when there is a context. ``Issue`` reports a problem only to a
+# context, so a script or unity.csharp.exec calling the action with none hears
+# nothing; the kernel's edits and reports (OpContextEdits: Raise, Log, Created,
+# Destroy, AddComponent) are extensions that work on a null context, so a null
+# check skips the edit or the line then. Each is refused through ``?.``, a
+# ternary (either way round) and an ``if`` guard, wrapped or not.
+ISSUE_FIX = (
+    "raise it with ctx.Raise(code, message, ...): an issue on the context, "
+    "the Console line when there is none"
+)
+EXTENSION_FIX = (
+    "call it as ctx.Raise / Log / Created / Destroy / AddComponent: each "
+    "works with no context, and a null check skips it then"
+)
+_METHOD = r"(Issue|Raise|Log|Created|Destroy|AddComponent)\s*(?:<[^<>()]*>)?\s*\("
+_CHAIN = r"[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*"
+_NOT_NULL = r"\s*(?:!=\s*null|is\s+not\s+null)"
+_NULL_CONDITIONAL = re.compile(r"\?\s*\.\s*" + _METHOD)
+_TERNARY = re.compile(_OWN + rf"({_CHAIN}){_NOT_NULL}\s*\)?\s*\?\s*\1\s*\.\s*{_METHOD}")
+_INVERTED = re.compile(
+    _OWN + rf"({_CHAIN})\s*(?:==\s*null|is\s+null)\s*\?[^;?:]*:\s*\1\s*\.\s*{_METHOD}"
+)
+_GUARD = re.compile(rf"\bif\s*\(\s*({_CHAIN}){_NOT_NULL}\s*\)\s*")
+# What makes a receiver a context. The file's own declarations type it: a field,
+# parameter, local or property, an array or a collection's element, a method's
+# return. Otherwise its name says it (``ctx``, ``Ctx``, ``context``, ``runCtx``):
+# a lambda's parameter or another file's member has no type here. Residual: a
+# receiver named like a context that is no OpContext (a ``SynchronizationContext
+# context``) is refused, and an OpContext under another name that this file does
+# not type (another type's ``Run``) is not.
+_TYPED = (
+    re.compile(r"\bOpContext\s*(?:\[\s*\]\s*)?\??\s+([A-Za-z_]\w*)"),
+    re.compile(r"[<,]\s*OpContext\s*>\s*(?:\[\s*\]\s*)?([A-Za-z_]\w*)"),
+    re.compile(r"\bvar\s+([A-Za-z_]\w*)\s*=\s*new\s+OpContext\b"),
+)
+_CONTEXT_NAME = re.compile(r"(?:ctx|context)$", re.I)
+
+
+def context_names(code: str) -> set:
+    """The names *code* (comments and strings blanked) declares as an
+    ``OpContext``, its array or collection, or a method returning one."""
+    return {match.group(1) for pattern in _TYPED for match in pattern.finditer(code)}
+
+
+def _is_context(name: str, typed: set) -> bool:
+    return name in typed or bool(_CONTEXT_NAME.search(name))
+
+
+def _receiver(code: str, end: int) -> Optional[Tuple[str, str]]:
+    """The receiver of the member access whose ``?`` sits at *end*: ``(its
+    name, its key)``, an identifier's own, a call's method name (``Get()``)
+    or an indexed collection's (``arr[]``); None for anything else."""
+    i = end - 1
+    while i >= 0 and code[i].isspace():
+        i -= 1
+    suffix = ""
+    if i >= 0 and code[i] in ")]":
+        close = code[i]
+        opener = "(" if close == ")" else "["
+        depth = 0
+        while i >= 0:
+            if code[i] == close:
+                depth += 1
+            elif code[i] == opener:
+                depth -= 1
+                if depth == 0:
+                    break
+            i -= 1
+        if i < 0:
+            return None
+        suffix = opener + close
+        i -= 1
+        while i >= 0 and code[i].isspace():
+            i -= 1
+        if close == ")" and i >= 0 and code[i] == ">":  # a generic call: Get<T>()
+            depth = 0
+            while i >= 0:
+                depth += {">": 1, "<": -1}.get(code[i], 0)
+                if depth == 0:
+                    break
+                i -= 1
+            i -= 1
+            while i >= 0 and code[i].isspace():
+                i -= 1
+    last = i
+    while i >= 0 and (code[i].isalnum() or code[i] == "_"):
+        i -= 1
+    name = code[i + 1 : last + 1]
+    if not name or name[0].isdigit():
+        return None
+    return name, name + suffix
+
+
+def _flat(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
+def _spaced(text: str) -> str:
+    return re.sub(r"\s+", " ", text)
+
+
+def _call_on(chain: str) -> "re.Pattern[str]":
+    """A call of one of the guarded methods on *chain* (its spacing free)."""
+    parts = [re.escape(part) for part in re.split(r"\s*\.\s*", chain.strip())]
+    return re.compile(_OWN + r"\s*\.\s*".join(parts) + r"\s*\.\s*" + _METHOD)
+
+
+def _block_end(code: str, start: int) -> int:
+    """The offset of the brace closing the block opened at *start*."""
+    depth = 0
+    for k in range(start, len(code)):
+        if code[k] == "{":
+            depth += 1
+        elif code[k] == "}":
+            depth -= 1
+            if depth == 0:
+                return k
+    return len(code)
+
+
+def null_checked_calls(code: str) -> List[Tuple[int, str, str]]:
+    """``[(offset, call, fix)]``: each call in *code* (comments and strings
+    blanked) made only when there is a context."""
+    typed = context_names(code)
+    fix = lambda method: ISSUE_FIX if method == "Issue" else EXTENSION_FIX  # noqa: E731
+    found = []
+    for match in _NULL_CONDITIONAL.finditer(code):
+        receiver = _receiver(code, match.start())
+        if receiver and _is_context(receiver[0], typed):
+            found.append((match.start(), f"{receiver[1]}?.{match.group(1)}", fix(match.group(1))))
+    for pattern, shape in (
+        (_TERNARY, "{0} != null ? {0}.{1}"),
+        (_INVERTED, "{0} == null ? ... : {0}.{1}"),
+    ):
+        for match in pattern.finditer(code):
+            chain = _flat(match.group(1))
+            if _is_context(chain.split(".")[-1], typed):
+                found.append((match.start(), shape.format(chain, match.group(2)), fix(match.group(2))))
+    for match in _GUARD.finditer(code):
+        chain = _flat(match.group(1))
+        if not _is_context(chain.split(".")[-1], typed):
+            continue
+        call = _call_on(match.group(1))
+        body = match.end()
+        if code.startswith("{", body):
+            calls = call.finditer(code, body, _block_end(code, body))
+        else:
+            calls = filter(None, [call.match(code, body)])
+        for hit in calls:
+            found.append((match.start(), f"if ({chain} != null) {chain}.{hit.group(1)}", fix(hit.group(1))))
+    return found
 #: What a test assembly needs besides UNITY_INCLUDE_TESTS: a define only the
 #: Test Framework's presence sets, so a project without it (an embedded
 #: deploy) never compiles the tests.
@@ -311,7 +444,9 @@ def _exempt(layout: "cl.CSharpLayout", path: Path, asmdef) -> bool:
 
 
 def bypass(layout: "cl.CSharpLayout") -> Dict[str, str]:
-    """``{key: where and the fix}`` for each call rule 1 forbids."""
+    """``{key: where and the fix}`` for each call rule 1 forbids. The whole
+    file is read at once, so a call wrapped over lines counts, placed at its
+    first line."""
     found: Dict[str, str] = {}
     counts: Dict[str, int] = {}
     for path, asmdef in _sources(layout):
@@ -319,17 +454,22 @@ def bypass(layout: "cl.CSharpLayout") -> Dict[str, str]:
             continue
         code = code_only(path.read_text(encoding="utf-8-sig", errors="replace"))
         editor = editor_lines(code)
-        for number, line in enumerate(code.splitlines(), 1):
-            in_editor = asmdef.editor_only or editor[number - 1]
-            for pattern, editor_api, fix in BYPASS:
-                if not (editor_api or in_editor):
-                    continue
-                for match in pattern.finditer(line):
-                    call = f"{path.name}: {match.group(1)}.{match.group(2)}"
-                    counts[call] = counts.get(call, 0) + 1
-                    nth = counts[call]
-                    key = f"bypass: {call}" + (f" ({nth})" if nth > 1 else "")
-                    found[key] = f"at {layout.rel(path)}:{number}: {fix}"
+        starts = [0] + [k + 1 for k, c in enumerate(code) if c == "\n"]
+        hits = [
+            (match.start(), editor_api, f"{_spaced(match.group(1))}.{match.group(2)}", fix)
+            for pattern, editor_api, fix in BYPASS
+            for match in pattern.finditer(code)
+        ]
+        hits += [(offset, True, call, fix) for offset, call, fix in null_checked_calls(code)]
+        for offset, editor_api, call, fix in sorted(hits, key=lambda hit: hit[0]):
+            number = bisect.bisect_right(starts, offset)
+            if not (editor_api or asmdef.editor_only or editor[number - 1]):
+                continue
+            call = f"{path.name}: {call}"
+            counts[call] = counts.get(call, 0) + 1
+            nth = counts[call]
+            key = f"bypass: {call}" + (f" ({nth})" if nth > 1 else "")
+            found[key] = f"at {layout.rel(path)}:{number}: {fix}"
     return found
 
 

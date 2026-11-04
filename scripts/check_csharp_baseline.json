@@ -1,17 +1,6 @@
 {
  "_doc": "C# violations frozen when check_csharp.py started holding the line (the kernel bypass and prior-art rules; generated files are never frozen). Shrink it; never grow it without a reason in the commit. Rewrite: check_csharp.py --update.",
  "unitytk": [
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.Log",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (10)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (2)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (3)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (4)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (5)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (6)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (7)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (8)",
-  "bypass: MayaSurfaceMaterialImporter.cs: Debug.LogWarning (9)",
   "bypass: UnitytkSettings.cs: Debug.Log",
   "bypass: UnitytkSettings.cs: Debug.LogWarning",
   "bypass: UnitytkSettings.cs: Debug.LogWarning (2)",

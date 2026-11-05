@@ -396,5 +396,75 @@ class TestGeneratedTypes(unittest.TestCase):
         self.assertEqual(s._cs_name("Other", "ArticulationRecord"), "Other")
 
 
+class TestPublishedContract(unittest.TestCase):
+    """The contract a reader in any language is handed: one JSON Schema
+    document, and each reader's generated types holding its own fields alone.
+    Added: 2026-11-04"""
+
+    def test_the_published_schema_is_current(self):
+        self.assertEqual(_text(s.SCHEMA_JSON), s.render_schema_json())
+
+    def test_unitys_types_leave_out_an_extension_only_the_glb_reads(self):
+        from dataclasses import dataclass
+        from typing import Optional
+
+        from pythontk.core_utils.schema_spec import SchemaSpec
+
+        @dataclass
+        class Extended(SchemaSpec):
+            """A payload with a field only the GLB reads."""
+
+            TYPED = True
+            version: int = SchemaSpec.spec_field(help="Its version.", required=True)
+            name: str = SchemaSpec.spec_field(help="Its node.", required=True)
+            silhouette: Optional[str] = SchemaSpec.spec_field(
+                help="The viewer's map.", readers=("glb",)
+            )
+
+        text = s.render_record_cs(s._records().SHADOWS, Extended)
+        self.assertIn("name", text)
+        self.assertNotIn("silhouette", text)
+
+    def test_the_viewers_types_hold_its_own_extensions_and_leave_out_unitys(self):
+        from dataclasses import dataclass
+        from typing import Optional
+
+        from pythontk.core_utils.schema_spec import SchemaSpec
+
+        @dataclass
+        class Viewed(SchemaSpec):
+            """A block with one field for each reader."""
+
+            TYPED = True
+            version: int = SchemaSpec.spec_field(help="Its version.", required=True)
+            silhouette: Optional[str] = SchemaSpec.spec_field(
+                help="The viewer's map.", readers=("glb",)
+            )
+            bindingOnly: Optional[str] = SchemaSpec.spec_field(
+                help="Unity's alone.", readers=("unity",)
+            )
+
+        from unittest import mock
+
+        records = s._records()
+        real = records.glb_shape.__func__
+
+        def glb_shape(cls, item):
+            if cls.resolve(item).key == records.SHADOWS.key:
+                return Viewed
+            return real(cls, item)
+
+        with mock.patch.object(records, "glb_shape", classmethod(glb_shape)):
+            text = s.render_records_js(records)
+        self.assertIn("silhouette", text)
+        self.assertNotIn("bindingOnly", text)
+
+    def test_the_format_reference_states_the_frame_and_the_transport(self):
+        text = s.render_format_md()
+        self.assertIn("**One frame.**", text)
+        self.assertIn("**One transport.**", text)
+        self.assertIn("**Extensions name their readers.**", text)
+
+
 if __name__ == "__main__":
     unittest.main()

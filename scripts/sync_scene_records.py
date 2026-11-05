@@ -39,6 +39,14 @@ records when measured 2026-09-18):
    deliverable carries -- its key and versions in each file, what it makes of
    the scene there, and each declared shape's fields -- the reference an
    outside reader is handed, which cannot drift from what the readers enforce.
+6. **The published contract.**  ``scene_records.schema.json`` beside it
+   (:data:`SCHEMA_JSON`) is ``SceneRecords.json_schema()`` whole: every
+   record's and block's shape, version and readers, the frame and the
+   transport, as one JSON Schema a reader in any language validates against.
+
+Each reader's generated types are its own view of a shape
+(``SchemaSpec.json_schema(reader=)``): a field another reader's extension
+holds is left out, so a reader's types hold nothing it is not meant to read.
 
 Usage:
     python sync_scene_records.py            # rewrite the derived files (idempotent)
@@ -73,6 +81,11 @@ FORMAT_MD = (
     / "scene_export"
     / "DELIVERABLE_FORMAT.md"
 )
+#: The published contract: ``SceneRecords.json_schema()``, beside the format.
+SCHEMA_JSON = FORMAT_MD.with_name("scene_records.schema.json")
+#: The reader each generated surface is the view of (``RecordSpec.consumers``).
+UNITY_READER = "unity"
+GLB_READER = "glb"
 BEGIN = "<!-- scene-records:begin -->"
 END = "<!-- scene-records:end -->"
 #: What every generated file opens with -- the reader's cue not to edit it.
@@ -254,7 +267,7 @@ def unity_mismatch(records=None) -> dict:
         m["key"]: m["reader"]
         for m in _UNITY_CHANNEL.finditer(unity_settings().read_text(encoding="utf-8"))
     }
-    specs = {s.key: s for s in records.deliverable() if "unity" in s.consumers}
+    specs = {s.key: s for s in records.deliverable() if UNITY_READER in s.consumers}
     return {
         "undeclared": sorted(readers.keys() - specs.keys()),
         "unread": sorted(specs.keys() - readers.keys()),
@@ -445,7 +458,7 @@ def render_records_js(records=None) -> str:
     shapes.append(records.shape(records.HANDOFF))
     shapes = [shape for shape in shapes if shape is not None]
     for shape in shapes:
-        schema = shape.json_schema()
+        schema = shape.json_schema(reader=GLB_READER)
         lines += [
             "",
             f"/* {'-' * 12} the `{shape.__name__}` block, declared in pythontk {'-' * 12} */",
@@ -713,7 +726,7 @@ def render_record_cs(spec, shape) -> str:
     *spec*'s declared one -- no importer spells it). The other half -- the
     reader's policy: its channel, what a null means -- is hand-written beside
     it."""
-    schema = shape.json_schema()
+    schema = shape.json_schema(reader=UNITY_READER)
     root = shape.__name__
     objects = [(root, schema)] + list(schema.get("$defs", {}).items())
     about = (
@@ -833,7 +846,7 @@ def record_cs_targets(records=None) -> list:
     targets = []
     for spec in records.deliverable():
         shape = records.shape(spec)
-        if shape is None or "unity" not in spec.consumers:
+        if shape is None or UNITY_READER not in spec.consumers:
             continue
         reader = unity_reader(readers.get(spec.key))
         if reader is not None:
@@ -1052,6 +1065,16 @@ def render_format_md(records=None) -> str:
         "- **One version a reader reads.** A record or block of another "
         "version is refused, with a warning, and the file is re-exported; no "
         "reader keeps a branch for an older shape.",
+        f"- **One frame.** A record whose version is in the frame (`x-in-frame` "
+        f"in the schema) states its values in {records.FRAME.text}; any other "
+        "states its units in its assembly.",
+        f"- **One transport.** {records.TRANSPORT.text}.",
+        "- **Extensions name their readers.** A field only some readers use "
+        "is optional and names them (\"Read only by ...\"; `x-readers` in "
+        "the schema); every other reader ignores it, and its generated types "
+        "leave it out.",
+        "- **One published schema.** `scene_records.schema.json`, beside "
+        "this file, states all of it as JSON Schema (draft 2020-12).",
         "",
         "| Record | In the FBX | In the GLB | Read by | Holds |",
         "|---|---|---|---|---|",
@@ -1104,6 +1127,13 @@ def render_format_md(records=None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_schema_json(records=None) -> str:
+    """``scene_records.schema.json`` (:data:`SCHEMA_JSON`): the contract as
+    one JSON Schema document (``SceneRecords.json_schema``)."""
+    records = records or _records()
+    return json.dumps(records.json_schema(), indent=2, ensure_ascii=False) + "\n"
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--check", action="store_true", help="exit 1 on drift")
@@ -1121,6 +1151,9 @@ def main(argv=None) -> int:
         failed |= sync_text(path, text, args.check, "generated C#")
     failed |= sync_text(
         FORMAT_MD, render_format_md(records), args.check, "deliverable format"
+    )
+    failed |= sync_text(
+        SCHEMA_JSON, render_schema_json(records), args.check, "published schema"
     )
     for problem in producer_parity():
         print(f"PRODUCERS: {problem}")

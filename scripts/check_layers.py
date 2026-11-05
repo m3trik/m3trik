@@ -54,7 +54,7 @@ and are exempt, as ruff already treats them.
    the same table, and each assembly definition's ``references`` are held to them::
 
        [tool.m3trik.layers.csharp]
-       root = "Packages/com.m3trik.unitytk"   # the Unity package, repo-relative
+       root = "com.m3trik.unitytk"   # the Unity package, repo-relative
        order = [
            "Features/*/Editor",                # top: each feature's editor half
            "Features/*/Runtime",

@@ -1,8 +1,8 @@
 # Codebase Manifest
 
-**Nav**: [← m3trik](../AGENTS.md) · [README: goals and rules in brief](../README.md) · [Code standard](CODE_STANDARD.md) · [Docs standard](DOCS_STANDARD.md)
+**Nav**: [← m3trik](../AGENTS.md) · [README](../README.md) · [Code standard](CODE_STANDARD.md) · [Docs standard](DOCS_STANDARD.md)
 
-The architecture of record for the m3trik ecosystem: what each package is for, where each kind of code goes, how a tool is put together, which check holds each part of the shape, and the decisions behind it. The rules themselves live in [CODE_STANDARD.md](CODE_STANDARD.md) (in brief in the [README](../README.md)); the public surface of each package is read from its source (`api.search`). This file replaces the 2026-10 restructure plan: what the plan decided is recorded here, what it scheduled is done.
+The architecture of record for the m3trik ecosystem: what each package is for, where each kind of code goes, how a tool is put together, which check holds each part of the shape, and the decisions behind it. The rules themselves live in [CODE_STANDARD.md](CODE_STANDARD.md); the public surface of each package is read from its source (`api.search`). This file replaces the 2026-10 restructure plan: what the plan decided is recorded here, what it scheduled is done.
 
 ## What we are building
 
@@ -60,7 +60,7 @@ A `_`-prefixed module is internal; other packages reach a package only through i
 
 ## How the shape is held
 
-Each part of the shape has a check, so the rule it holds is stated once, in the check and the [README's check table](../README.md). The checks run in m3trik's CI and in `push.ps1` before a release.
+Each part of the shape has a check, so the rule it holds is stated once, in the check and the table below; every gate, with what fails it, is mapped in [`scripts/AGENTS.md`](../scripts/AGENTS.md). The checks run in CI and in `push.ps1` before a release.
 
 | Part of the shape | Check |
 |:--|:--|

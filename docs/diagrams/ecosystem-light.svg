@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1108" height="428" viewBox="0 0 1108 428" role="img" aria-labelledby="t d">
+<title id="t">The m3trik ecosystem</title><desc id="d">The m3trik ecosystem: uitk requires pythontk; unitytk requires pythontk; mayatk requires uitk; blendertk requires uitk; tentacle requires uitk; extapps requires uitk; tentacle installs mayatk as its [maya] extra; tentacle installs blendertk as its [blender] extra; tentacle opens extapps by name (its [apps] extra) and never imports it; mayatk and blendertk share a mirrored API. tentacle and extapps are products, which nothing imports.</desc>
+<style>.card{fill:#f6f8fa;stroke:#d1d9e0}.title{font:600 12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;letter-spacing:.08em;fill:#59636e}.nb{fill:#ffffff;stroke:#d1d9e0}.product .nb{stroke:#59636e}.focus .nb{fill:#ddf4ff;stroke:#0969da;stroke-width:1.75}.name{font:600 16px -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;fill:#1f2328}.cap{font:12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.ic{fill:none;stroke:#59636e;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.focus .ic{stroke:#0969da}.w{fill:none;stroke:#818b98;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.extra{stroke-dasharray:6 4}.opens,.pair{stroke-dasharray:.5 4.5;stroke-width:2}.pill rect{fill:#f6f8fa;stroke:#d1d9e0}.pill text{font:11px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.chip rect{fill:#ffffff;stroke:#59636e}.chip text{font:600 10px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;letter-spacing:.06em;fill:#59636e}.chip.here rect{fill:#0969da;stroke:#0969da}.chip.here text{fill:#ffffff}.rule{stroke:#d1d9e0}.legend text{font:12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.dim{opacity:.3}.pkt{fill:#0969da}.pkt.ring{fill:#f6f8fa;stroke:#0969da;stroke-width:1.5}.pulse{fill:none;stroke:#0969da;stroke-width:1.5}@media (prefers-reduced-motion:reduce){.pkt,.pulse{display:none}}</style>
+<rect class="card" x=".5" y=".5" width="1107" height="427" rx="14"/>
+<text class="title" x="24" y="34">THE M3TRIK ECOSYSTEM</text>
+<g><path class="w" d="M220 201.5C265 201.5 265 152 310 152"/><path class="w" d="M304 148L310 152L304 156"/></g>
+<g><path class="w" d="M220 214.5C265 214.5 265 264 310 264"/><path class="w" d="M304 260L310 264L304 268"/></g>
+<g><path class="w" d="M508 132.5C553 132.5 553 96 598 96"/><path class="w" d="M592 92L598 96L592 100"/></g>
+<g><path class="w" d="M508 145.5C553 145.5 553 208 598 208"/><path class="w" d="M592 204L598 208L592 212"/></g>
+<g><path class="w" d="M508 158.5C554 158.5 554 264 600 264H796C841 264 841 214.5 886 214.5"/><path class="w" d="M880 210.5L886 214.5L880 218.5"/></g>
+<g><path class="w" d="M508 171.5C553 171.5 553 320 598 320"/><path class="w" d="M592 316L598 320L592 324"/></g>
+<g><path class="w extra" d="M796 96C841 96 841 188.5 886 188.5"/><path class="w" d="M880 184.5L886 188.5L880 192.5"/></g>
+<g><path class="w extra" d="M796 208C841 208 841 201.5 886 201.5"/><path class="w" d="M880 197.5L886 201.5L880 205.5"/></g>
+<g><path class="w opens" d="M796 320C841 320 841 227.5 886 227.5"/><path class="w" d="M880 223.5L886 227.5L880 231.5"/></g>
+<g><path class="w pair" d="M698 131V173"/><g class="pill"><rect x="652.4" y="143" width="91.2" height="18" rx="9"/><text x="698" y="155.8" text-anchor="middle">mirrored API</text></g></g>
+<g><g class="pill"><rect x="802" y="108.53" width="51.6" height="18" rx="9"/><text x="827.8" y="121.33" text-anchor="middle">[maya]</text></g></g>
+<g><g class="pill"><rect x="802" y="196.22" width="71.4" height="18" rx="9"/><text x="837.7" y="209.02" text-anchor="middle">[blender]</text></g></g>
+<g><g class="pill"><rect x="802" y="289.47" width="51.6" height="18" rx="9"/><text x="827.8" y="302.27" text-anchor="middle">[apps]</text></g></g>
+<g class="node">
+<rect class="nb" x="24.5" y="176.5" width="195" height="63" rx="10"/>
+<g class="ic" transform="translate(40 196)"><path d="M12 3 3 7.5l9 4.5 9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></g>
+<text class="name" x="76" y="204">pythontk</text>
+<text class="cap" x="76" y="223">Pure-Python core</text>
+</g>
+<g class="node">
+<rect class="nb" x="312.5" y="120.5" width="195" height="63" rx="10"/>
+<g class="ic" transform="translate(328 140)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></g>
+<text class="name" x="364" y="148">uitk</text>
+<text class="cap" x="364" y="167">Qt UI framework</text>
+</g>
+<g class="node">
+<rect class="nb" x="600.5" y="64.5" width="195" height="63" rx="10"/>
+<g class="ic" transform="translate(616 84)"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="m4 7.4 8 4.6 8-4.6M12 12v9.2"/></g>
+<text class="name" x="652" y="92">mayatk</text>
+<text class="cap" x="652" y="111">Maya library</text>
+</g>
+<g class="node">
+<rect class="nb" x="600.5" y="176.5" width="195" height="63" rx="10"/>
+<g class="ic" transform="translate(616 196)"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="m4 7.4 8 4.6 8-4.6M12 12v9.2"/></g>
+<text class="name" x="652" y="204">blendertk</text>
+<text class="cap" x="652" y="223">Blender library</text>
+</g>
+<g class="node product">
+<rect class="nb" x="888.5" y="176.5" width="195" height="63" rx="10"/>
+<g class="ic" transform="translate(904 196)"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.4"/><path d="m13.7 10.3 4.3-4.3M10.3 10.3 6 6m4.3 7.7L6 18m7.7-4.3L18 18"/></g>
+<text class="name" x="940" y="204">tentacle</text>
+<text class="cap" x="940" y="223">Marking-menu tools</text>
+<g class="chip"><rect x="1011.8" y="167" width="60.2" height="18" rx="9"/><text x="1041.9" y="179.5" text-anchor="middle">PRODUCT</text></g>
+</g>
+<g class="node">
+<rect class="nb" x="312.5" y="232.5" width="195" height="63" rx="10"/>
+<g class="ic" transform="translate(328 252)"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="m4 7.4 8 4.6 8-4.6M12 12v9.2"/></g>
+<text class="name" x="364" y="260">unitytk</text>
+<text class="cap" x="364" y="279">Unity integration</text>
+</g>
+<g class="node product">
+<rect class="nb" x="600.5" y="288.5" width="195" height="63" rx="10"/>
+<g class="ic" transform="translate(616 308)"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></g>
+<text class="name" x="652" y="316">extapps</text>
+<text class="cap" x="652" y="335">Standalone apps</text>
+<g class="chip"><rect x="723.8" y="279" width="60.2" height="18" rx="9"/><text x="753.9" y="291.5" text-anchor="middle">PRODUCT</text></g>
+</g>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M220 201.5C265 201.5 265 152 310 152" dur="5s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="0s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M220 214.5C265 214.5 265 264 310 264" dur="5s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="0s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M508 132.5C553 132.5 553 96 598 96" dur="5s" begin="1.2s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M508 145.5C553 145.5 553 208 598 208" dur="5s" begin="1.2s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M508 158.5C554 158.5 554 264 600 264H796C841 264 841 214.5 886 214.5" dur="5s" begin="1.2s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.48;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.072;0.408;0.48;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M508 171.5C553 171.5 553 320 598 320" dur="5s" begin="1.2s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M796 96C841 96 841 188.5 886 188.5" dur="5s" begin="2.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M796 208C841 208 841 201.5 886 201.5" dur="5s" begin="2.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt ring" r="3.2" opacity="0"><animateMotion path="M796 320C841 320 841 227.5 886 227.5" dur="5s" begin="2.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<rect class="pulse" x="312.5" y="120.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="600.5" y="64.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="600.5" y="176.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="888.5" y="176.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="3.6s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="312.5" y="232.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="600.5" y="288.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<path class="rule" d="M24 376H1084"/>
+<g class="legend">
+<path class="w" d="M24 402H50"/><path class="w" d="M46 398L52 402L46 406"/>
+<text x="62" y="406">required by</text>
+<path class="w extra" d="M171.2 402H197.2"/><path class="w" d="M193.2 398L199.2 402L193.2 406"/>
+<text x="209.2" y="406">install extra of</text>
+<path class="w opens" d="M354.4 402H380.4"/><path class="w" d="M376.4 398L382.4 402L376.4 406"/>
+<text x="392.4" y="406">opened by name, never imported</text>
+<g class="chip"><rect x="638.4" y="393" width="60.2" height="18" rx="9"/><text x="668.5" y="405.5" text-anchor="middle">PRODUCT</text></g>
+<text x="708.6" y="406">imported by nothing</text>
+<text x="875.4" y="406">implied links omitted</text>
+</g>
+</svg>

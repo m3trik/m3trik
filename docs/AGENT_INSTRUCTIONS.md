@@ -140,7 +140,7 @@ A panel calls the library function itself, never through an operation.
 
 ### Change a rule
 
-Edit its pack in [`m3trik/agents/packs/`](../agents/packs/) (a rule every repo shares) or the `AGENTS.md` it belongs to, plus CODE_STANDARD and the [README](../README.md) summary where the rule appears there, then run `python m3trik/scripts/sync_workspace.py` ([Keeping it in line](#keeping-it-in-line)).
+Edit its pack in [`m3trik/agents/packs/`](../agents/packs/) (a rule every repo shares) or the `AGENTS.md` it belongs to, plus CODE_STANDARD and the [README](../README.md)'s pitch where it describes the rule, then run `python m3trik/scripts/sync_workspace.py` ([Keeping it in line](#keeping-it-in-line)).
 
 ### Troubleshooting
 

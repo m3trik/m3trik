@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-08T21:06:54.071633+00:00",
+  "generated_at": "2026-11-09T02:10:23.252390+00:00",
   "workspace_root": "../..",
   "repo_count": 12,
   "repos": [
@@ -90,17 +90,17 @@
           "immediate_modules": [
             "operations"
           ],
-          "recursive_module_count": 187
+          "recursive_module_count": 194
         }
       ],
       "code_roots": [
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 142,
+          "code_file_count": 144,
           "dominant_suffixes": [
             ".py (134)",
-            ".json (7)",
+            ".json (9)",
             ".ps1 (1)"
           ]
         }
@@ -108,9 +108,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 400,
-      "tracked_total_lines": 234594,
-      "tracked_nonempty_lines": 212407
+      "tracked_code_files": 409,
+      "tracked_total_lines": 236502,
+      "tracked_nonempty_lines": 214104
     },
     {
       "name": "comfyui",
@@ -215,34 +215,37 @@
           "path": "extapps",
           "immediate_subpackages": [
             "look_match",
+            "marmoset_scripts",
             "mesh_convert",
             "photogrammetry",
+            "substance_scripts",
             "texture_maps",
+            "unity_scripts",
             "webxr_preview"
           ],
           "immediate_modules": [
             "__main__",
             "_panel_launcher"
           ],
-          "recursive_module_count": 50
+          "recursive_module_count": 84
         }
       ],
       "code_roots": [
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 49,
+          "code_file_count": 44,
           "dominant_suffixes": [
-            ".py (49)"
+            ".py (44)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 128,
-      "tracked_total_lines": 38117,
-      "tracked_nonempty_lines": 33707
+      "tracked_code_files": 179,
+      "tracked_total_lines": 50384,
+      "tracked_nonempty_lines": 44320
     },
     {
       "name": "m3trik",
@@ -279,9 +282,9 @@
         {
           "name": "scripts",
           "path": "scripts",
-          "code_file_count": 37,
+          "code_file_count": 49,
           "dominant_suffixes": [
-            ".py (30)",
+            ".py (42)",
             ".json (4)",
             ".ps1 (3)"
           ]
@@ -289,18 +292,18 @@
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 30,
+          "code_file_count": 42,
           "dominant_suffixes": [
-            ".py (30)"
+            ".py (42)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 76,
-      "tracked_total_lines": 46945,
-      "tracked_nonempty_lines": 42288
+      "tracked_code_files": 100,
+      "tracked_total_lines": 52903,
+      "tracked_nonempty_lines": 47402
     },
     {
       "name": "mayatk",
@@ -337,7 +340,7 @@
           "immediate_modules": [
             "operations"
           ],
-          "recursive_module_count": 234
+          "recursive_module_count": 241
         },
         {
           "name": "test",
@@ -495,6 +498,7 @@
             "test_stagger_keys",
             "test_static_analysis",
             "test_style_setter",
+            "test_substance_bake_ops",
             "test_substance_bridge",
             "test_substance_bridge_scene",
             "test_substance_connection",
@@ -524,16 +528,16 @@
             "test_xform_utils",
             "tube_rig_export_live_check"
           ],
-          "recursive_module_count": 201
+          "recursive_module_count": 202
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 528,
-      "tracked_total_lines": 416110,
-      "tracked_nonempty_lines": 363227
+      "tracked_code_files": 538,
+      "tracked_total_lines": 418603,
+      "tracked_nonempty_lines": 365392
     },
     {
       "name": "pythontk",
@@ -565,7 +569,7 @@
             "__main__",
             "operations"
           ],
-          "recursive_module_count": 267
+          "recursive_module_count": 273
         },
         {
           "name": "test",
@@ -615,6 +619,7 @@
             "test_file_dependencies",
             "test_file_naming",
             "test_file_transfer",
+            "test_folder_delivery",
             "test_frame_extractor",
             "test_fuzzy_matcher",
             "test_glb_key_reduction",
@@ -771,7 +776,7 @@
             "test_workspace_map",
             "test_x11"
           ],
-          "recursive_module_count": 199
+          "recursive_module_count": 200
         }
       ],
       "code_roots": [
@@ -795,9 +800,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": true,
-      "tracked_code_files": 566,
-      "tracked_total_lines": 365151,
-      "tracked_nonempty_lines": 322722
+      "tracked_code_files": 574,
+      "tracked_total_lines": 367119,
+      "tracked_nonempty_lines": 324462
     },
     {
       "name": "server",
@@ -1086,6 +1091,7 @@
             "test_value_option",
             "test_visibility_policy",
             "test_widget_combobox",
+            "test_widget_spec",
             "test_widgets",
             "test_window_auto_hide",
             "test_window_blur",
@@ -1093,7 +1099,7 @@
             "test_window_panel",
             "test_window_shadow"
           ],
-          "recursive_module_count": 161
+          "recursive_module_count": 162
         },
         {
           "name": "uitk",
@@ -1118,16 +1124,16 @@
             "events",
             "testing"
           ],
-          "recursive_module_count": 215
+          "recursive_module_count": 216
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 407,
-      "tracked_total_lines": 218247,
-      "tracked_nonempty_lines": 185280
+      "tracked_code_files": 409,
+      "tracked_total_lines": 218349,
+      "tracked_nonempty_lines": 185367
     },
     {
       "name": "unitytk",
@@ -1154,14 +1160,16 @@
             "test_generated_files_hook",
             "test_keyed_visibility",
             "test_package",
+            "test_project_builder",
             "test_run_tests",
             "test_shadow_plane_runtime_integration",
             "test_temp_projects",
+            "test_unity_cli",
             "test_unity_compile",
             "test_unity_host",
             "test_unity_kernel_live"
           ],
-          "recursive_module_count": 15
+          "recursive_module_count": 17
         },
         {
           "name": "unitytk",
@@ -1169,10 +1177,13 @@
           "immediate_subpackages": [],
           "immediate_modules": [
             "operations",
+            "project_builder",
+            "unity_cli",
             "unity_compile",
-            "unity_host"
+            "unity_host",
+            "unity_project"
           ],
-          "recursive_module_count": 3
+          "recursive_module_count": 6
         }
       ],
       "code_roots": [
@@ -1188,9 +1199,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 24,
-      "tracked_total_lines": 10034,
-      "tracked_nonempty_lines": 8878
+      "tracked_code_files": 29,
+      "tracked_total_lines": 12141,
+      "tracked_nonempty_lines": 10745
     },
     {
       "name": "www",

@@ -113,6 +113,9 @@ jobs:
           # Without these the job is red on arrival, which is the one thing a
           # new gate must not be.
           pip install pytest pytest-subtests numpy Pillow
+          # The workflow-reading semver tests parse YAML; the Lightmaps sample's
+          # texel test reads its maps through OpenCV, as the sample's recipe does.
+          pip install pyyaml opencv-python-headless
           # PySide6 pinned <6.11 for the reason every sibling workflow pins it:
           # 6.11 segfaults during pytest cleanup on the offscreen QPA.
           pip install qtpy "PySide6<6.11"

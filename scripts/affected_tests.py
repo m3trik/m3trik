@@ -35,6 +35,19 @@ What a changed file selects, in its own package:
   entry is its function's signature and docstring, which no import reaches;
 - the test harness (``conftest.py``, ``base_test.py``, ``run_tests.py``,
   ``_suite_driver.py``, ``_host.py``): the runner's own tests;
+- a file a whole suite checks and no import reaches (a :class:`Runner` with
+  ``selects``): that suite, run whole -- the Unity package's C#, assets and
+  samples select its Edit Mode tests in the owned project (``ProjectBuilder.test``,
+  through unitytk's runner), a sample's recipe or its exporter the samples check
+  (``sync_unity_samples.py --check``, an owned headless mayapy), and a file of the
+  end-to-end suite (``m3trik/test/unity_e2e/``) that suite; a file an MSBuild
+  project compiles or copies (``Runner.project``), or the Python reference its
+  golden cases come from (``ptk.Conformance.PROVIDERS``, by the case names its
+  C# asks for), its ``dotnet test`` run: the C# ports' conformance suites
+  (unitytk ``test/core_dotnet``, ``test/models_dotnet``);
+- a source module such a suite's readers import or name (``Runner.reads``: the
+  samples' recipes and the twins name the producer API they export through), or
+  one its few importers do: that suite, run whole, too;
 - docs, changelogs and generated sidecars: nothing (``check_docs.py`` is their gate).
 
 A relative path resolves as the shell would (the current directory, then the
@@ -149,6 +162,32 @@ class Runner:
     #: host probes, or imports one of these modules (or a module below one).
     host_probes: Tuple[str, ...] = ()
     host_modules: Tuple[str, ...] = ()
+    #: A suite run whole, never by module: the files that select it (``fnmatch``
+    #: on the workspace-relative path; ``*`` crosses ``/``), what it is, and the
+    #: unit whose ``test/temp_tests`` keeps its log. Empty: a package's runner.
+    selects: Tuple[str, ...] = ()
+    label: str = ""
+    unit: str = ""
+    #: With *selects*: the files (``glob`` patterns, workspace-relative) whose
+    #: names reach the suite as a test's reach its package: a source module one
+    #: of them imports or names, or that its few importers do, selects the suite
+    #: whole -- a sample's recipe names the producer API it exports through.
+    reads: Tuple[str, ...] = ()
+    #: The program *argv* runs under (found on the PATH); empty: this Python.
+    executable: str = ""
+    #: An MSBuild project (workspace-relative) the suite builds: what it
+    #: compiles or copies, and its own folder, select it whole, and so do the
+    #: Python references of the golden cases its C# asks for, which also read
+    #: as *reads* (:func:`project_inputs`).
+    project: str = ""
+    #: An environment variable naming the Python the suite runs (its golden
+    #: cases' generator): this interpreter, unless the caller set it.
+    python_env: str = ""
+
+    @property
+    def whole(self) -> bool:
+        """Whether the suite runs whole, never by module."""
+        return bool(self.selects or self.project)
 
 
 #: Each runner's subset contract. A package missing here runs its test files
@@ -165,6 +204,48 @@ RUNNERS: Dict[str, Runner] = {
                        host_probes=("MAYA_AVAILABLE",)),
     "unitytk": Runner(("unitytk/test/run_tests.py",)),
     "extapps": Runner(("extapps/test/run_tests.py",)),
+    # No Python test reads the package's C#, assets or samples: its Edit Mode
+    # tests do, in a batch editor on the owned project (refused while an editor
+    # has it open). ``-k`` is Unity's ``-testFilter``.
+    "unity_edit_mode": Runner(
+        ("unitytk/test/run_tests.py", "--edit-mode"), extra=(), unit="unitytk",
+        selects=("unitytk/com.m3trik.unitytk/*",),
+        label="the package's Edit Mode tests, in the owned project",
+    ),
+    # What a sample export holds is its recipe's, exported by this script.
+    "unity_samples": Runner(
+        ("m3trik/scripts/sync_unity_samples.py", "--check"), k_flag=None, extra=(),
+        unit="m3trik",
+        selects=("m3trik/scripts/unity_samples/*", "m3trik/scripts/sync_unity_samples.py"),
+        label="the samples against their recipes, in an owned headless mayapy",
+        reads=("m3trik/scripts/unity_samples/*.py",),
+    ),
+    # The C# ports held to their Python references on plain .NET: what each
+    # project compiles (its csproj), and the pythontk modules its golden cases
+    # come from, select it. ``-k`` is ``dotnet test --filter`` (a bare value
+    # matches inside the test's full name).
+    "unity_core_dotnet": Runner(
+        ("test", "unitytk/test/core_dotnet"), k_flag="--filter", extra=("--nologo",),
+        unit="unitytk", executable="dotnet", python_env="UNITYTK_PYTHON",
+        project="unitytk/test/core_dotnet/Unitytk.Core.Tests.csproj",
+        label="the engine-free core under dotnet test, held to its Python references",
+    ),
+    "unity_models_dotnet": Runner(
+        ("test", "unitytk/test/models_dotnet"), k_flag="--filter", extra=("--nologo",),
+        unit="unitytk", executable="dotnet", python_env="UNITYTK_PYTHON",
+        project="unitytk/test/models_dotnet/Unitytk.Models.Tests.csproj",
+        label="the features' engine-free models under dotnet test, held to their Python references",
+    ),
+    # The DCC-to-Unity suite: each twin a sample delivered again by another
+    # producer, checked by the sample's own Edit Mode tests in the e2e project.
+    # m3trik's module runner and the CI gate suite leave it out (it launches
+    # Maya, Blender and Unity where they are installed): only this row runs it.
+    "unity_e2e": Runner(
+        ("-m", "pytest", "-q", "m3trik/test/unity_e2e"), extra=(), unit="m3trik",
+        selects=("m3trik/test/unity_e2e/*",),
+        label="the samples' twins, delivered by Maya and Blender, in the e2e Unity project",
+        reads=("m3trik/scripts/unity_samples/*.py", "m3trik/test/unity_e2e/twins/*.py"),
+    ),
 }
 
 
@@ -205,6 +286,83 @@ GATES: Tuple[Gate, ...] = (
 #: The suite that rebuilds every committed operation catalog from its
 #: declarations and holds it to the rules (``OperationProvider.check``).
 CATALOG_SUITE = ("m3trik", "test_sync_workspace")
+
+#: pythontk's registry of golden-case providers (``ptk.Conformance.PROVIDERS``):
+#: the Python reference a port's suite is held to, by case name.
+CONFORMANCE_REGISTRY = "pythontk/pythontk/core_utils/conformance.py"
+#: What an MSBuild project builds or copies: each item's ``Include``.
+_PROJECT_ITEM = re.compile(
+    r"<(?:Compile|None|Content|EmbeddedResource)\b[^>]*?\bInclude=\"([^\"]+)\""
+)
+#: A port's test asking for its golden cases: ``Conformance.Cases("shadow_horizon", ...)``.
+_CASES_CALL = re.compile(r"\bConformance\.Cases\(\s*\"([^\"]+)\"")
+
+
+@lru_cache(maxsize=None)
+def conformance_providers(workspace: Path = WORKSPACE) -> Dict[str, str]:
+    """``{case name: provider module}`` (workspace-relative paths) of the
+    registry (:data:`CONFORMANCE_REGISTRY`), read statically: ``{}`` without it."""
+    try:
+        tree = ast.parse((workspace / CONFORMANCE_REGISTRY).read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return {}
+    found: Dict[str, str] = {}
+    for node in ast.walk(tree):
+        targets = getattr(node, "targets", None) or [getattr(node, "target", None)]
+        value = getattr(node, "value", None)
+        if not (any(getattr(t, "id", None) == "PROVIDERS" for t in targets) and isinstance(value, ast.Dict)):
+            continue
+        for key, row in zip(value.keys, value.values):
+            module = row.elts[0] if isinstance(row, (ast.Tuple, ast.List)) and row.elts else None
+            if not (isinstance(key, ast.Constant) and isinstance(module, ast.Constant)):
+                continue
+            parts = str(module.value).split(".")
+            for path in (Path(*parts).with_suffix(".py"), Path(*parts) / "__init__.py"):
+                if (workspace / parts[0] / path).is_file():
+                    found[str(key.value)] = (Path(parts[0]) / path).as_posix()
+                    break
+    return found
+
+
+@lru_cache(maxsize=None)
+def project_inputs(project: str, workspace: Path = WORKSPACE) -> Tuple[Tuple[str, ...], Tuple[str, ...]]:
+    """``(patterns, references)`` of the MSBuild *project* (workspace-relative):
+    ``fnmatch`` patterns of what it builds (its own folder, and each item it
+    compiles or copies, as its ``Include`` names it), and the Python
+    references its golden cases come from -- the provider of each
+    ``Conformance.Cases("<name>"`` in a file it compiles, and the registry.
+    ``((), ())`` without the project."""
+    path = workspace / project
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return (), ()
+    base = path.parent.relative_to(workspace).as_posix()
+    patterns = [f"{base}/*"]
+    for item in _PROJECT_ITEM.findall(text):
+        for include in filter(None, (i.strip() for i in item.split(";"))):
+            rel = os.path.normpath(os.path.join(base, include.replace("\\", "/"))).replace(os.sep, "/")
+            if not rel.startswith(".."):
+                patterns.append(rel)
+    names: Set[str] = set()
+    for pattern in patterns:
+        for source in workspace.glob(pattern):
+            if source.suffix == ".cs" and source.is_file():
+                names.update(_CASES_CALL.findall(source.read_text(encoding="utf-8", errors="ignore")))
+    providers = conformance_providers(workspace)
+    references = sorted({providers[n] for n in names if n in providers})
+    if references:
+        references.append(CONFORMANCE_REGISTRY)
+    return tuple(dict.fromkeys(patterns)), tuple(references)
+
+
+def runner_inputs(runner: Runner, workspace: Path = WORKSPACE) -> Tuple[Tuple[str, ...], Tuple[str, ...]]:
+    """``(patterns, references)`` that select *runner* whole: its
+    :attr:`Runner.selects` and its project's (:func:`project_inputs`)."""
+    if not runner.project:
+        return runner.selects, ()
+    patterns, references = project_inputs(runner.project, workspace)
+    return runner.selects + patterns, references
 
 
 @lru_cache(maxsize=None)
@@ -521,9 +679,22 @@ class Selection:
     harness: Dict[str, List[str]] = field(default_factory=dict)  # pkg -> changed harness files
     #: (host, check path) -> the changed files it reaches: manual checks no runner runs.
     host_only: Dict[Tuple[str, str], Set[str]] = field(default_factory=dict)
+    #: Changed files a whole suite took (``Runner.selects``): no asset note for them.
+    whole: Set[str] = field(default_factory=set)
 
     def add(self, pkg: str, module: str, reason: str) -> None:
         self.picks.setdefault(pkg, {}).setdefault(module, set()).add(reason)
+
+
+def _reason(reader: FileInfo, module: str, names: Set[str], marks: Set[str]) -> Optional[str]:
+    """Why *reader* reaches *module* (dotted): an import, or one of its
+    distinctive *marks* named; else None."""
+    why = _reaches(reader, module, names)
+    if why is None:
+        # A name the reader defines itself (its own ``HARNESS``) is not ours.
+        named = sorted((marks & reader.refs) - reader.defines - reader.literals)
+        why = "names " + ", ".join(named[:3]) if named else None
+    return why
 
 
 def _hits(pkg: str, module: str, names: Set[str], workspace: Path) -> Dict[str, str]:
@@ -531,14 +702,43 @@ def _hits(pkg: str, module: str, names: Set[str], workspace: Path) -> Dict[str, 
     marks = distinctive(names, workspace)
     found: Dict[str, str] = {}
     for test in test_files(pkg, workspace):
-        why = _reaches(test, module, names)
-        if why is None:
-            # A name the test defines itself (its own ``HARNESS``) is not ours.
-            named = sorted((marks & test.refs) - test.defines - test.literals)
-            why = "names " + ", ".join(named[:3]) if named else None
+        why = _reason(test, module, names, marks)
         if why:
             found[test.path.stem] = why
     return found
+
+
+def readers(runner: Runner, workspace: Path = WORKSPACE) -> Tuple[FileInfo, ...]:
+    """The files *runner* reads names from (:attr:`Runner.reads`), parsed as
+    their unit parses them."""
+    infos = []
+    references = [r for r in runner_inputs(runner, workspace)[1] if r != CONFORMANCE_REGISTRY]
+    for pattern in (*runner.reads, *references):
+        for path in sorted(workspace.glob(pattern)):
+            pkg = package_of(path, workspace)
+            info = _parse(path.resolve(), pkg.import_root if pkg else path.parent)
+            if info is not None:
+                infos.append(info)
+    return tuple(infos)
+
+
+def _select_readers(sel: Selection, info: FileInfo, importers: Sequence[FileInfo],
+                    workspace: Path, prefix: str = "") -> None:
+    """The suites run whole whose readers (:attr:`Runner.reads`) reach *info*'s
+    module, or one of its few importers' (as for tests, at most
+    :data:`IMPORTER_FANOUT`)."""
+    reached = [info] + (list(importers) if len(importers) <= IMPORTER_FANOUT else [])
+    for name, runner in RUNNERS.items():
+        for reader in readers(runner, workspace):
+            if reader.path == info.path:
+                continue
+            for module in reached:
+                why = _reason(reader, module.module, module.defines,
+                              distinctive(module.defines, workspace))
+                if why:
+                    via = "" if module is info else f"via {module.module}: "
+                    sel.add(name, runner.label, f"{prefix}{via}{reader.path.name} {why}")
+                    break
 
 
 def _convention(pkg: str, path: Path, workspace: Path, folder: bool = False) -> List[str]:
@@ -605,12 +805,13 @@ def select(paths: Sequence[Path], workspace: Path = WORKSPACE, downstream: bool 
         if pkg is None:
             sel.notes.append(f"outside every tested unit: {raw}")
             continue
+        _select_whole(sel, path, workspace)
         _select_gates(sel, pkg, path, workspace)
         _select_operations(sel, pkg, path, workspace)
         if not path.exists():  # deleted: its repo knew it at HEAD
             if path.suffix == ".py" and pkg.test_dir.resolve() not in path.parents:
                 _select_source(sel, pkg, path, workspace, downstream, info=_vanished(pkg, path))
-            else:
+            elif path.relative_to(workspace.resolve()).as_posix() not in sel.whole:
                 sel.notes.append(f"deleted, nothing to map: {raw}")
             continue
         _select_one(sel, pkg, path, workspace, downstream)
@@ -624,6 +825,22 @@ def _family(path: Path) -> str:
     ``materials``."""
     stem = path.name.split("#")[0].split(".")[0].lstrip("_")
     return stem[: -len("_ui")] if stem.endswith("_ui") else stem
+
+
+def _select_whole(sel: Selection, path: Path, workspace: Path) -> None:
+    """The suites run whole (:attr:`Runner.selects`) a change under one of their
+    patterns selects; a doc selects none."""
+    rel = path.relative_to(workspace.resolve()).as_posix()
+    if path.suffix in DOC_SUFFIXES or GENERATED.search(rel):
+        return
+    for name, runner in RUNNERS.items():
+        patterns, references = runner_inputs(runner, workspace)
+        if any(fnmatch.fnmatchcase(rel, p) for p in patterns):
+            sel.add(name, runner.label, f"changed {rel}")
+            sel.whole.add(rel)
+        elif rel in references:
+            sel.add(name, runner.label, f"changed {rel}, a Python reference of its golden cases")
+            sel.whole.add(rel)
 
 
 def _select_gates(sel: Selection, pkg: Package, path: Path, workspace: Path) -> None:
@@ -710,6 +927,8 @@ def _select_one(sel: Selection, pkg: Package, path: Path, workspace: Path, downs
         if not picked:
             sel.notes.append(f"packaging metadata, no packaging suite: {rel}")
         return
+    if in_tests and rel in sel.whole:
+        return  # a test-dir file a suite run whole took (``Runner.selects``): no stem to map
     if in_tests and path.name in HARNESS:
         stems = {t.path.stem for t in test_files(name, workspace)}
         for stem in (s for s in HARNESS_TESTS if s in stems):
@@ -718,7 +937,13 @@ def _select_one(sel: Selection, pkg: Package, path: Path, workspace: Path, downs
         return
     if in_tests:
         if path.name.startswith("test_") and path.suffix == ".py":
-            sel.add(name, path.stem, "changed test")
+            # Only a suite the runner collects runs by its stem; one parked in a
+            # folder outside the roots (``test/unity_e2e/``) would resolve to a
+            # file that is not there.
+            if any(t.path.resolve() == path for t in test_files(name, workspace)):
+                sel.add(name, path.stem, "changed test")
+            else:
+                sel.notes.append(f"test no runner collects: {rel}")
             return
         # A helper beside the tests (``slots/_helpers.py``): the tests that import
         # it, flat, as their siblings do.
@@ -739,7 +964,7 @@ def _select_one(sel: Selection, pkg: Package, path: Path, workspace: Path, downs
         stems = [t.path.stem for t in test_files(name, workspace) if path.stem.lower() in t.path.stem.lower()]
         for stem in stems:
             sel.add(name, stem, f"named after asset {path.name}")
-        if not stems:
+        if not stems and rel not in sel.whole:
             sel.notes.append(f"asset no test names: {rel}")
         return
     _select_source(sel, pkg, path, workspace, downstream)
@@ -818,6 +1043,7 @@ def _select_source(sel: Selection, pkg: Package, path: Path, workspace: Path,
     # name the base. Cheap at a small fan-out; a core module's hundred
     # importers are the full suite's job.
     importers = _importers(name, info.module, info.defines, workspace)
+    _select_readers(sel, info, importers, workspace, prefix)
     if found and len(importers) <= IMPORTER_FANOUT:
         for importer in importers:
             for stem, why in _hits(name, importer.module, importer.defines, workspace).items():
@@ -840,7 +1066,7 @@ def _select_source(sel: Selection, pkg: Package, path: Path, workspace: Path,
             found[stem] = "naming convention (folder)"
     for stem, why in found.items():
         sel.add(name, stem, prefix + why)
-    if not found:
+    if not found and path.relative_to(workspace.resolve()).as_posix() not in sel.whole:
         sel.notes.append(f"{name}: no test reaches {info.module} (untested?)")
     for other in packages(workspace).values():
         if name not in other.deps:
@@ -920,6 +1146,12 @@ def commands(sel: Selection, k: Optional[str] = None, gui: bool = True,
     for name in names:
         modules = sorted(sel.picks[name])
         runner = RUNNERS.get(name)
+        if runner is not None and runner.whole:
+            argv = [runner.executable or sys.executable, *runner.argv]
+            if k and runner.k_flag:
+                argv += [runner.k_flag, k]
+            out.append((name, argv + list(runner.extra), modules))
+            continue
         if runner is None:
             pkg = packages(workspace)[name]
             argv = [sys.executable, "-m", "pytest", "-q"]
@@ -1019,6 +1251,13 @@ def report(sel: Selection, cmds, explain: bool, workspace: Path = WORKSPACE,
     secs = last_seconds(workspace)
     gui = gui_required(workspace)
     for name, argv, modules in cmds:
+        runner = RUNNERS.get(name)
+        if runner and runner.whole:
+            lines.append(f"{name}: {runner.label}, run whole")
+            if explain:
+                lines += [f"    {why}" for why in sorted(sel.picks[name][runner.label])]
+            lines.append("    $ " + _display(argv))
+            continue
         tests = {t.path.stem: t.tests for t in test_files(name, workspace)}
         count = sum(tests.get(m, 0) for m in modules)
         flags = []
@@ -1029,7 +1268,6 @@ def report(sel: Selection, cmds, explain: bool, workspace: Path = WORKSPACE,
             heavy = [m for m in modules if m in gui]
             if heavy:
                 flags.append("GUI pass: " + ", ".join(heavy))
-        runner = RUNNERS.get(name)
         if runner and runner.maya_flag and runner.maya_flag in argv:
             flags.append("Maya-hosted: runs in a fresh GUI Maya")
         if k and runner and not runner.k_flag:
@@ -1067,7 +1305,8 @@ def report(sel: Selection, cmds, explain: bool, workspace: Path = WORKSPACE,
 #: for a module that produced only skips (pythontk, uitk).
 _TALLY = re.compile(
     r"^\s*(Ran \d+ tests?|Total:|PASSED|FAILED|OK\b|NOT RUN|\[INCOMPLETE\]|=+ .*(passed|failed)|"
-    r"\d+ (passed|failed)|Passed:|Failed:|Errors:)|contributed only skips",
+    r"\d+ (passed|failed)|Passed[:!]|Failed[:!]|Errors:|Test summary:|No test matches)"
+    r"|contributed only skips",
 )
 
 
@@ -1093,6 +1332,14 @@ _PYTEST = re.compile(
     re.M,
 )
 _COUNT = re.compile(r"(\d+) (passed|failed|errors?|xfailed|xpassed)\b")
+#: ``dotnet test``'s per-project line, ``Passed!  - Failed: 0, Passed: 31,
+#: Skipped: 0, Total: 31, ...``; its newer ``Test summary: total: 12, failed:
+#: 1, succeeded: 10, skipped: 1``; and a ``--filter`` that matched nothing.
+_DOTNET = re.compile(r"^\s*(?:Passed|Failed)!\s+-\s+Failed:\s+(\d+),\s+Passed:\s+(\d+)\b", re.M)
+_DOTNET_SUMMARY = re.compile(
+    r"^\s*Test summary:.*?\bfailed:\s*(\d+)[,;]\s*succeeded:\s*(\d+)", re.M | re.I
+)
+_DOTNET_NONE = re.compile(r"^\s*No test matches the given testcase filter", re.M)
 
 
 def executed(text: str) -> Optional[int]:
@@ -1113,6 +1360,10 @@ def executed(text: str) -> Optional[int]:
             counts.append(sum(int(n) for n, _ in _COUNT.findall(body)))
     for match in _PYTEST.finditer(text):
         counts.append(sum(int(n) for n, _ in _COUNT.findall(match.group(1))))
+    for match in (*_DOTNET.finditer(text), *_DOTNET_SUMMARY.finditer(text)):
+        counts.append(int(match.group(1)) + int(match.group(2)))
+    if not counts and _DOTNET_NONE.search(text):
+        counts.append(0)
     return max(counts) if counts else None
 
 
@@ -1125,7 +1376,7 @@ def run(cmds, workspace: Path = WORKSPACE) -> int:
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     failed, idle = [], []
     for index, (name, argv, modules) in enumerate(cmds):
-        pkg = packages(workspace)[name]
+        pkg = packages(workspace)[RUNNERS[name].unit if name in RUNNERS and RUNNERS[name].unit else name]
         log_dir = pkg.test_dir / "temp_tests"
         log_dir.mkdir(exist_ok=True)
         for old in log_dir.glob("affected_*.log"):  # its own, after mayatk's 7-day sweep age
@@ -1138,7 +1389,15 @@ def run(cmds, workspace: Path = WORKSPACE) -> int:
         log = log_dir / f"affected_{stamp}_{index}_{name}.log"
         print(f"\n=== {name}: {len(modules)} module(s) ===\n$ {_display(argv)}", flush=True)
         start = time.monotonic()
-        code = _run_one(argv, workspace, env, log)
+        own = dict(env)
+        runner = RUNNERS.get(name)
+        if runner is not None and runner.python_env:
+            own.setdefault(runner.python_env, sys.executable)
+        try:
+            code = _run_one(argv, workspace, own, log)
+        except OSError as exc:  # its program is not installed (FileNotFoundError)
+            log.write_text(f"cannot start {argv[0]}: {exc}\n", encoding="utf-8")
+            code = 127
         elapsed = time.monotonic() - start
         text = log.read_text(encoding="utf-8", errors="replace")
         tail = digest(text, failed=bool(code))

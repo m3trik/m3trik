@@ -66,10 +66,10 @@ class TestSceneRecordsDerivedSurfaces(unittest.TestCase):
         """A carrier key's one spelling in unitytk is its ``UnitytkRecords``
         constant; the line's comment names only the importer that reads it.
         Added: 2026-10-20"""
-        line = 'public const string Shadows = "shadows";  // channel → ShadowPlaneController'
+        line = 'public const string Shadows = "shadows";  // channel → ShadowPlaneImporter'
         found = s._UNITY_CHANNEL.search(line)
         self.assertEqual(
-            (found["key"], found["reader"]), ("shadows", "ShadowPlaneController")
+            (found["key"], found["reader"]), ("shadows", "ShadowPlaneImporter")
         )
         unread = s._UNITY_CHANNEL.search('public const string Handoff = "handoff";')
         self.assertIsNone(unread, "a constant with no channel comment is no channel")
@@ -143,14 +143,15 @@ class TestGeneratedTypes(unittest.TestCase):
         )
 
     def test_every_glb_block_is_in_it(self):
-        """Each block a GLB carries -- every record's (``RecordSpec.glb``) and
-        the handoff -- under its record's key, at the version the page reads,
-        and every one in ``BLOCKS``. Added: 2026-10-20"""
+        """Each block a GLB carries -- every record it carries as it stands
+        (``RecordSpec.glb_verbatim``) and the handoff -- under its record's
+        key, at the record's version, the one the page reads, and every one in
+        ``BLOCKS``. Added: 2026-10-20"""
         records, handoff = s._records(), s._handoff()
         names = s._spec_names(records)
         text = s.render_records_js()
         blocks = [
-            (names[id(spec)], spec.key, spec.glb.version)
+            (names[id(spec)], spec.key, spec.version)
             for spec in records.glb_records()
         ]
         blocks.append(("HANDOFF", handoff.KEY, handoff.VERSION))
@@ -191,11 +192,16 @@ class TestGeneratedTypes(unittest.TestCase):
             s.render_records_js(),
         )
 
-    def test_the_policy_states_its_settings_alone(self):
-        """The handoff's version is its shape's (``HandoffBlock.CurrentVersion``,
-        generated with it), so the policy repeats no number of it.
-        Added: 2026-10-20"""
-        self.assertNotIn("HandoffVersion", s.render_policy_cs())
+    def test_only_what_unity_reads_is_generated_for_it(self):
+        """Every C# file the script writes is a record type an importer's channel
+        line names, or the map absent values beside their reader: the lighting
+        recipe and the handoff, which no part of unitytk reads, get none.
+        Added: 2026-11-07"""
+        names = {path.name for path, _ in s.cs_targets()}
+        self.assertNotIn("RenderingPolicy.g.cs", names)
+        self.assertNotIn("HandoffBlock.g.cs", names)
+        self.assertIn("MapAbsence.g.cs", names)
+        self.assertEqual(s.absence_cs().parent, s.unity_file("GltfSurfaces.cs").parent)
 
     def test_the_csharp_record_types_are_current(self):
         targets = s.record_cs_targets()
@@ -245,7 +251,7 @@ class TestGeneratedTypes(unittest.TestCase):
         records = s._records()
         rendered = {
             spec.key: s.render_record_cs(spec, records.shape(spec))
-            for spec in (records.HANDOFF, records.EMISSIVE_GROUPS)
+            for spec in (records.HANDOFF, records.MATERIALS)
         }
         for key, line in (
             (
@@ -262,12 +268,12 @@ class TestGeneratedTypes(unittest.TestCase):
                 'extras = Wire.Obj(o, "extras", HandoffExtras.Read),',
             ),
             (
-                records.EMISSIVE_GROUPS.key,
-                'Wire.Choice(o, "encoding", "vertex-color", "channels");',
+                records.MATERIALS.key,
+                'Wire.Choice(o, "alphaMode", "OPAQUE", "MASK", "BLEND");',
             ),
             (
-                records.EMISSIVE_GROUPS.key,
-                'Wire.Choice(o, "slot", "0", "1", "2", "3");',
+                records.MATERIALS.key,
+                'Wire.Choice(o, "magFilter", "9728", "9729");',
             ),
         ):
             with self.subTest(record=key, line=line):
@@ -306,7 +312,7 @@ class TestGeneratedTypes(unittest.TestCase):
             (records.SHOTS, 'shots = Wire.Objs(o, "shots", Shot.Read),'),
             (records.LIGHTMAPS, 'scaleOffset = Wire.Nums(o, "scaleOffset", 4),'),
             (records.LIGHTMAPS, 'hierarchy = Wire.Strs(o, "hierarchy"),'),
-            (records.SHADOWS, 'canvas = Wire.Nums(o, "canvas", 4),'),
+            (records.SHADOWS, 'bounds = Wire.Nums(o, "bounds", 4),'),
             (records.HANDOFF, 'rendering = Wire.Dict(o, "rendering", objectValues: true),'),
         ):
             with self.subTest(record=spec.key, line=line):
@@ -359,8 +365,8 @@ class TestGeneratedTypes(unittest.TestCase):
             with self.subTest(record=spec.key):
                 self.assertIn(f"\n## {spec.key}\n", text)
                 self.assertIn(f"`data_export.{spec.key}` v{spec.version}", text)
-                if spec.glb:
-                    self.assertIn(f"`extras.{spec.key}` v{spec.glb.version}", text)
+                if spec.glb_verbatim:
+                    self.assertIn(f"`extras.{spec.key}` v{spec.version}", text)
         self.assertEqual(
             _text(s.FORMAT_MD),
             text,
@@ -394,6 +400,86 @@ class TestGeneratedTypes(unittest.TestCase):
         )
         self.assertEqual(s._cs_name("ArticulationJoint", "ArticulationRecord"), "Joint")
         self.assertEqual(s._cs_name("Other", "ArticulationRecord"), "Other")
+
+
+class TestPublishedContract(unittest.TestCase):
+    """The contract a reader in any language is handed: one JSON Schema
+    document, and each reader's generated types holding its own fields alone.
+    Added: 2026-11-04"""
+
+    def test_the_published_schema_is_current(self):
+        self.assertEqual(_text(s.SCHEMA_JSON), s.render_schema_json())
+
+    def test_unitys_types_leave_out_an_extension_only_the_glb_reads(self):
+        from dataclasses import dataclass
+        from typing import Optional
+
+        from pythontk.core_utils.schema_spec import SchemaSpec
+
+        @dataclass
+        class Extended(SchemaSpec):
+            """A payload with a field only the GLB reads."""
+
+            TYPED = True
+            version: int = SchemaSpec.spec_field(help="Its version.", required=True)
+            name: str = SchemaSpec.spec_field(help="Its node.", required=True)
+            silhouette: Optional[str] = SchemaSpec.spec_field(
+                help="The viewer's map.", readers=("glb",)
+            )
+
+        text = s.render_record_cs(s._records().SHADOWS, Extended)
+        self.assertIn("name", text)
+        self.assertNotIn("silhouette", text)
+
+    def test_the_viewers_types_hold_its_own_extensions_and_leave_out_unitys(self):
+        from dataclasses import dataclass
+        from typing import Optional
+
+        from pythontk.core_utils.schema_spec import SchemaSpec
+
+        @dataclass
+        class Viewed(SchemaSpec):
+            """A block with one field for each reader."""
+
+            TYPED = True
+            version: int = SchemaSpec.spec_field(help="Its version.", required=True)
+            silhouette: Optional[str] = SchemaSpec.spec_field(
+                help="The viewer's map.", readers=("glb",)
+            )
+            bindingOnly: Optional[str] = SchemaSpec.spec_field(
+                help="Unity's alone.", readers=("unity",)
+            )
+
+        from unittest import mock
+
+        records = s._records()
+        real = records.shape.__func__
+
+        def shape(cls, item):
+            if cls.resolve(item).key == records.SHADOWS.key:
+                return Viewed
+            return real(cls, item)
+
+        with mock.patch.object(records, "shape", classmethod(shape)):
+            text = s.render_records_js(records)
+        self.assertIn("silhouette", text)
+        self.assertNotIn("bindingOnly", text)
+
+    def test_the_format_reference_states_the_frame_and_the_transport(self):
+        text = s.render_format_md()
+        self.assertIn("**One frame.**", text)
+        self.assertIn("**One transport.**", text)
+        self.assertIn("**Extensions name their readers.**", text)
+
+    def test_the_format_reference_states_the_glb_media_transport(self):
+        """Every file a record a GLB carries itself names rides that GLB as
+        the bufferView of its name (``SceneRecords.GLB_MEDIA``): the reference
+        states the rule once, as the declaration words it. Added: 2026-11-07"""
+        records = s._records()
+        self.assertIn(
+            f"- **One media transport.** {records.GLB_MEDIA.text}.",
+            s.render_format_md(),
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-01T03:21:34.734131+00:00",
-  "workspace_root": "O:/Cloud/Code/_scripts",
+  "generated_at": "2026-11-08T21:06:54.071633+00:00",
+  "workspace_root": "../..",
   "repo_count": 12,
   "repos": [
     {
@@ -87,7 +87,9 @@
             "uv_utils",
             "xform_utils"
           ],
-          "immediate_modules": [],
+          "immediate_modules": [
+            "operations"
+          ],
           "recursive_module_count": 187
         }
       ],
@@ -95,9 +97,9 @@
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 140,
+          "code_file_count": 142,
           "dominant_suffixes": [
-            ".py (132)",
+            ".py (134)",
             ".json (7)",
             ".ps1 (1)"
           ]
@@ -106,9 +108,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 398,
-      "tracked_total_lines": 254707,
-      "tracked_nonempty_lines": 232899
+      "tracked_code_files": 400,
+      "tracked_total_lines": 234594,
+      "tracked_nonempty_lines": 212407
     },
     {
       "name": "comfyui",
@@ -213,19 +215,16 @@
           "path": "extapps",
           "immediate_subpackages": [
             "look_match",
-            "marmoset_workflow",
             "mesh_convert",
             "photogrammetry",
-            "substance_workflow",
             "texture_maps",
-            "unity_workflow",
             "webxr_preview"
           ],
           "immediate_modules": [
             "__main__",
             "_panel_launcher"
           ],
-          "recursive_module_count": 77
+          "recursive_module_count": 50
         }
       ],
       "code_roots": [
@@ -241,15 +240,15 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 177,
-      "tracked_total_lines": 53360,
-      "tracked_nonempty_lines": 47566
+      "tracked_code_files": 128,
+      "tracked_total_lines": 38117,
+      "tracked_nonempty_lines": 33707
     },
     {
       "name": "m3trik",
       "path": "m3trik",
       "domain": "PowerShell DevOps, release automation",
-      "summary": "Tech-art tooling for game-art and DCC pipelines: one product of tools that behaves the same in Maya and Blender, built on general libraries that are each useful on their own.",
+      "summary": "**Tech-art tooling for game-art and DCC pipelines.** Two products and the libraries beneath them, built as one architecture: one toolset that works the same way in Maya and Blender, standalone apps for the work around them, and one public API that artists, scripts, tests and AI agents all share.",
       "repo_kind": "Operations / scripts",
       "manifests": [],
       "root_scripts": [
@@ -261,6 +260,15 @@
       "package_roots": [],
       "code_roots": [
         {
+          "name": "claude",
+          "path": "claude",
+          "code_file_count": 3,
+          "dominant_suffixes": [
+            ".json (2)",
+            ".py (1)"
+          ]
+        },
+        {
           "name": "docs",
           "path": "docs",
           "code_file_count": 1,
@@ -271,28 +279,28 @@
         {
           "name": "scripts",
           "path": "scripts",
-          "code_file_count": 33,
+          "code_file_count": 37,
           "dominant_suffixes": [
-            ".py (27)",
-            ".ps1 (3)",
-            ".json (3)"
+            ".py (30)",
+            ".json (4)",
+            ".ps1 (3)"
           ]
         },
         {
           "name": "test",
           "path": "test",
-          "code_file_count": 26,
+          "code_file_count": 30,
           "dominant_suffixes": [
-            ".py (26)"
+            ".py (30)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 65,
-      "tracked_total_lines": 39308,
-      "tracked_nonempty_lines": 35251
+      "tracked_code_files": 76,
+      "tracked_total_lines": 46945,
+      "tracked_nonempty_lines": 42288
     },
     {
       "name": "mayatk",
@@ -326,7 +334,9 @@
             "uv_utils",
             "xform_utils"
           ],
-          "immediate_modules": [],
+          "immediate_modules": [
+            "operations"
+          ],
           "recursive_module_count": 234
         },
         {
@@ -428,6 +438,7 @@
             "test_maya_connection",
             "test_maya_marking_menu_host",
             "test_maya_menu_handler",
+            "test_maya_scene_files",
             "test_maya_ui_handler",
             "test_mayapy_package_manager",
             "test_msao_fbx_export",
@@ -513,16 +524,16 @@
             "test_xform_utils",
             "tube_rig_export_live_check"
           ],
-          "recursive_module_count": 199
+          "recursive_module_count": 201
         }
       ],
       "code_roots": [],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 526,
-      "tracked_total_lines": 441885,
-      "tracked_nonempty_lines": 389451
+      "tracked_code_files": 528,
+      "tracked_total_lines": 416110,
+      "tracked_nonempty_lines": 363227
     },
     {
       "name": "pythontk",
@@ -551,9 +562,10 @@
             "vid_utils"
           ],
           "immediate_modules": [
-            "__main__"
+            "__main__",
+            "operations"
           ],
-          "recursive_module_count": 250
+          "recursive_module_count": 267
         },
         {
           "name": "test",
@@ -563,8 +575,10 @@
             "conftest",
             "run_tests",
             "test_affix_hardening",
+            "test_agent_instructions",
             "test_all_packages_namespace_aliases",
             "test_animation_record_shape",
+            "test_api_surface",
             "test_app_installer",
             "test_app_launcher",
             "test_articulated_rig_web",
@@ -619,6 +633,7 @@
             "test_hierarchy_matching",
             "test_hierarchy_path",
             "test_hierarchy_utils",
+            "test_host_seams",
             "test_hotkey_utils",
             "test_html_presets",
             "test_img",
@@ -671,6 +686,7 @@
             "test_naming_convention",
             "test_net_utils",
             "test_noise",
+            "test_operations",
             "test_output_template",
             "test_package_manager",
             "test_package_requirement",
@@ -691,11 +707,11 @@
             "test_process_stream",
             "test_progression",
             "test_py39_compat",
+            "test_python_console",
             "test_quaternion",
             "test_rail_surface",
             "test_ramp_keys",
             "test_rect_packer",
-            "test_region_masks",
             "test_remote_file",
             "test_render_effects_record",
             "test_report_doc",
@@ -711,6 +727,7 @@
             "test_schema_spec",
             "test_script_run",
             "test_sequence_exporter",
+            "test_session_operation_host",
             "test_shadow_atlas",
             "test_shadow_horizon",
             "test_shadow_projection",
@@ -746,6 +763,7 @@
             "test_uv_combine",
             "test_uv_pack",
             "test_uv_transfer",
+            "test_uv_transfer_run",
             "test_uv_unwrap",
             "test_vid",
             "test_weights",
@@ -753,7 +771,7 @@
             "test_workspace_map",
             "test_x11"
           ],
-          "recursive_module_count": 193
+          "recursive_module_count": 199
         }
       ],
       "code_roots": [
@@ -777,9 +795,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": true,
-      "tracked_code_files": 540,
-      "tracked_total_lines": 369986,
-      "tracked_nonempty_lines": 329910
+      "tracked_code_files": 566,
+      "tracked_total_lines": 365151,
+      "tracked_nonempty_lines": 322722
     },
     {
       "name": "server",
@@ -897,9 +915,9 @@
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 483,
-      "tracked_total_lines": 232173,
-      "tracked_nonempty_lines": 212666
+      "tracked_code_files": 482,
+      "tracked_total_lines": 216217,
+      "tracked_nonempty_lines": 196575
     },
     {
       "name": "uitk",
@@ -1100,7 +1118,7 @@
             "events",
             "testing"
           ],
-          "recursive_module_count": 214
+          "recursive_module_count": 215
         }
       ],
       "code_roots": [],
@@ -1108,14 +1126,14 @@
       "has_tests": true,
       "has_examples": false,
       "tracked_code_files": 407,
-      "tracked_total_lines": 240768,
-      "tracked_nonempty_lines": 208016
+      "tracked_total_lines": 218247,
+      "tracked_nonempty_lines": 185280
     },
     {
       "name": "unitytk",
       "path": "unitytk",
       "domain": "Unity integration",
-      "summary": "A modular Python toolkit for Unity interaction.",
+      "summary": "The automation beside the unitytk Unity package: an owned editor for agents, the test and demo project, a compile check.",
       "repo_kind": "Python package",
       "manifests": [
         "pyproject.toml"
@@ -1131,63 +1149,48 @@
             "conftest",
             "run_tests",
             "test_articulated_rig_runtime",
-            "test_asset_delivery",
-            "test_audio_events_integration",
             "test_base_test",
-            "test_blender_render_effects_e2e",
-            "test_blender_shadow_plane_integration",
-            "test_blender_shot_metadata_integration",
-            "test_bool_to_fade_curve",
-            "test_clip_name_contract_integration",
-            "test_controller_runtime_integration",
-            "test_deploy_templates",
-            "test_embedded_dependencies_integration",
-            "test_emissive_groups_integration",
-            "test_fade_window_preservation",
+            "test_editor_catalog",
+            "test_generated_files_hook",
             "test_keyed_visibility",
-            "test_launcher",
-            "test_lightmap_metadata_integration",
-            "test_maya_surface_materials_integration",
-            "test_multi_section_audio_integration",
             "test_package",
-            "test_render_effects_e2e",
-            "test_render_opacity_controller",
-            "test_render_opacity_e2e",
-            "test_render_opacity_integration",
             "test_run_tests",
-            "test_scene_builder",
-            "test_shadow_plane_integration",
             "test_shadow_plane_runtime_integration",
-            "test_shared_material_standalone",
-            "test_shot_metadata_integration",
-            "test_shots_audio_sidebyside_integration",
-            "test_standalone_enduser",
-            "test_temp_projects"
+            "test_temp_projects",
+            "test_unity_compile",
+            "test_unity_host",
+            "test_unity_kernel_live"
           ],
-          "recursive_module_count": 36
+          "recursive_module_count": 15
         },
         {
           "name": "unitytk",
           "path": "unitytk",
-          "immediate_subpackages": [
-            "templates"
-          ],
+          "immediate_subpackages": [],
           "immediate_modules": [
-            "asset_delivery",
-            "launcher",
-            "scene_builder",
-            "template_deployer"
+            "operations",
+            "unity_compile",
+            "unity_host"
           ],
-          "recursive_module_count": 4
+          "recursive_module_count": 3
         }
       ],
-      "code_roots": [],
+      "code_roots": [
+        {
+          "name": "com.m3trik.unitytk",
+          "path": "com.m3trik.unitytk",
+          "code_file_count": 1,
+          "dominant_suffixes": [
+            ".json (1)"
+          ]
+        }
+      ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 45,
-      "tracked_total_lines": 32131,
-      "tracked_nonempty_lines": 28383
+      "tracked_code_files": 24,
+      "tracked_total_lines": 10034,
+      "tracked_nonempty_lines": 8878
     },
     {
       "name": "www",
@@ -1213,20 +1216,20 @@
         {
           "name": "www",
           "path": "www",
-          "code_file_count": 23,
+          "code_file_count": 26,
           "dominant_suffixes": [
-            ".js (18)",
-            ".html (3)",
-            ".css (2)"
+            ".js (19)",
+            ".html (4)",
+            ".css (3)"
           ]
         }
       ],
       "has_docs": true,
       "has_tests": true,
       "has_examples": false,
-      "tracked_code_files": 29,
-      "tracked_total_lines": 61937,
-      "tracked_nonempty_lines": 56744
+      "tracked_code_files": 32,
+      "tracked_total_lines": 63535,
+      "tracked_nonempty_lines": 58165
     }
   ],
   "non_repo_code_folders": []

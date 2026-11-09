@@ -45,6 +45,21 @@ def version_in(text):
     return match.group(1) if match else None
 
 
+def _end_tree(proc):
+    """End *proc* (this suite's own child) and every process it started."""
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+            capture_output=True,
+            timeout=60,
+        )
+    proc.kill()
+    try:
+        proc.communicate(timeout=30)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 class TestSemverGate(unittest.TestCase):
     """A release that REMOVES public API may not ship as a patch.
 
@@ -110,6 +125,11 @@ $AllowBreakingPatch = $true
 $AllowBreakingPatch = $false
 $global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unaccounted = @() }}
 "RESULT:moved_out_as_minor=$([bool](Test-SemverGate 'p' '0.17.0' '0.18.0'))"
+$global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unaccounted = @(); held = @(@{{ key = 'mod.py::Widget.spin'; remove_in = '0.18.0'; since = '2026-11-01'; not_before = '2026-12-01' }}) }}
+"RESULT:held_as_minor=$([bool](Test-SemverGate 'p' '0.17.0' '0.18.0'))"
+$AllowBreakingPatch = $true
+"RESULT:held_override=$([bool](Test-SemverGate 'p' '0.17.0' '0.18.0'))"
+$AllowBreakingPatch = $false
 """
 
     @classmethod
@@ -132,6 +152,7 @@ $global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unacco
         )
         if result.returncode != 0:
             raise unittest.SkipTest(f"harness failed: {result.stdout}\n{result.stderr}")
+        cls.stdout = result.stdout
         cls.answers = dict(
             line[len("RESULT:") :].split("=", 1)
             for line in result.stdout.splitlines()
@@ -158,6 +179,18 @@ $global:verdict = @{{ bump = 'minor'; reasons = @('mod.py::Widget.spin'); unacco
 
     def test_a_name_that_moved_out_ships_as_a_minor(self):
         self._assert("moved_out_as_minor", True)
+
+    def test_a_removal_its_notice_still_holds_is_refused_naming_it_and_its_date(self):
+        """``--semver`` lists a removal inside its notice's window under
+        ``held``; push.ps1 refused it only as "no semver verdict", with a
+        fetch-the-tags hint. Added: 2026-11-08"""
+        self._assert("held_as_minor", False)
+        self._assert("held_override", True)
+        refusal = self.stdout.split("RESULT:moved_out_as_minor", 1)[1].split("RESULT:held_as_minor", 1)[0]
+        self.assertIn("mod.py::Widget.spin", refusal)
+        self.assertIn("2026-12-01", refusal)
+        self.assertIn("still hold", refusal)
+        self.assertNotIn("no semver verdict", refusal)
 
     def test_a_removal_ships_as_a_minor_or_major(self):
         self._assert("removal_as_minor", True)
@@ -201,6 +234,11 @@ class TestRequiredBumpAsksTheScript(unittest.TestCase):
         "row = {'package': sys.argv[1], 'reasons': [], 'unaccounted': []}\n"
         "if mode == 'ok':\n"
         "    print(json.dumps([dict(row, bump='minor', reasons=['m.py::X'], baseline='the last release (v0.17.0)')]))\n"
+        "elif mode == 'held':\n"
+        "    held = [{'key': 'm.py::X', 'remove_in': '0.18.0', 'since': '2026-11-01', 'not_before': '2026-12-01'}]\n"
+        "    print(json.dumps([dict(row, bump='minor', reasons=['m.py::X'], held=held, baseline='the last release (v0.17.0)')]))\n"
+        "    print('pkg removes 1 name(s) their notices still hold', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
         "elif mode == 'crash':\n"
         "    print('Traceback: boom', file=sys.stderr)\n"
         "    sys.exit(1)\n"
@@ -220,10 +258,11 @@ $f = $ast.FindAll({{ param($x) $x -is [System.Management.Automation.Language.Fun
 Invoke-Expression $f.Extent.Text
 $PYTHON = '{python}'
 $M3TRIK_SCRIPTS = '{scripts}'
-foreach ($mode in 'ok', 'crash', 'none', 'garbage') {{
+foreach ($mode in 'ok', 'held', 'crash', 'none', 'garbage') {{
     Set-Content -Path (Join-Path $M3TRIK_SCRIPTS 'mode.txt') -Value $mode
     $r = Get-RequiredBump 'pkg' '0.17.0'
-    "RESULT:$mode=bump:$($r.bump)|failed:$($r.failed)|detail:$((@($r.detail)) -join ' / ')"
+    $held = (@($r.held | Where-Object {{ $_ }} | ForEach-Object {{ "$($_.key)@$($_.not_before)" }})) -join ','
+    "RESULT:$mode=bump:$($r.bump)|failed:$($r.failed)|detail:$((@($r.detail)) -join ' / ')|held:$held"
 }}
 $M3TRIK_SCRIPTS = '{empty}'
 $r = Get-RequiredBump 'pkg' '0.17.0'
@@ -269,6 +308,12 @@ $r = Get-RequiredBump 'pkg' '0.17.0'
         argv = json.loads((self.scripts / "argv_ok.json").read_text(encoding="utf-8"))
         self.assertEqual(argv, ["pkg", "--semver", "--since", "v0.17.0"])
         self.assertTrue(self.answers["ok"].startswith("bump:minor|failed:|"), self.answers)
+
+    def test_a_held_removal_is_a_verdict_not_a_failure(self):
+        """The script exits 1 for a held removal, with its JSON: that is the
+        verdict (``held``), never "exited 1". Added: 2026-11-08"""
+        self.assertTrue(self.answers["held"].startswith("bump:minor|failed:|"), self.answers)
+        self.assertTrue(self.answers["held"].strip().endswith("held:m.py::X@2026-12-01"), self.answers)
 
     def test_a_script_that_fails_is_a_failed_verdict_with_its_stderr(self):
         self.assertIn("failed:check_api_surface.py exited 1", self.answers["crash"])
@@ -433,14 +478,26 @@ class TestPushScriptRegressions(unittest.TestCase):
             return False
 
     def _run(self, args, cwd: Path, timeout=120, env=None):
-        return subprocess.run(
+        """*args* run in *cwd*; past *timeout* its whole tree is ended and
+        ``subprocess.TimeoutExpired`` raised. ``subprocess.run`` ends only the
+        child, then waits for its pipes, which a grandchild still holds: a
+        stubbed release that reached a real export (mayapy) stalled the suite
+        with no summary instead of failing this test (2026-11-08)."""
+        proc = subprocess.Popen(
             args,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             text=True,
             cwd=str(cwd),
-            timeout=timeout,
             env=env,
         )
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _end_tree(proc)
+            raise
+        return subprocess.CompletedProcess(args, proc.returncode, out, err)
 
     def _git(self, repo: Path, *args):
         r = self._run(["git", *args], cwd=repo)
@@ -2974,7 +3031,7 @@ else:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
-            private, _ = self._init_dummy_repo(root, "unitytk", "0.1.0", [])
+            private, _ = self._init_dummy_repo(root, "server", "0.1.0", [])
             (private / "notes.md").write_text(
                 "see Zork_Widget here\n", encoding="utf-8"
             )
@@ -2983,7 +3040,7 @@ else:
             script = M3TRIK_DIR / "scripts" / "check_public_hygiene.py"
             result = self._run_push_functions(
                 root,
-                f"$ok = Test-PublicHygiene '{root}' @('pythontk', 'unitytk') "
+                f"$ok = Test-PublicHygiene '{root}' @('pythontk', 'server') "
                 f"-Script '{script}' -Denylist '{denylist}'\n"
                 'Write-Output "RESULT=$ok"\n',
             )
@@ -3183,6 +3240,118 @@ else:
             out = result.stdout + result.stderr
             self.assertIn("RESULT=True", result.stdout, out)
             self.assertIn(f"LINES: {named:,} of", out)
+
+    def test_the_unity_samples_gate_passes_in_sync_and_fails_on_drift_or_no_maya(self):
+        """``Test-UnitySamples`` runs ``sync_unity_samples.py --check`` and is True
+        only on its exit 0: a drifted sample (exit 1) and a machine without Maya
+        (exit 2) both stop the release, printing the script's report. Stand-in
+        scripts: the real one launches mayapy."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stand_ins = {
+                "pass": ("print('[OK] 7 sample(s) in sync')", 0),
+                "drift": ("print('DRIFT: Shots Shots.fbx: records.animation: 1 -> 2')", 1),
+                "no_maya": ("print('[SKIP] no mayapy: Maya is not installed')", 2),
+            }
+            results = {}
+            for name, (line, code) in stand_ins.items():
+                script = root / f"sync_{name}.py"
+                script.write_text(
+                    "import sys\n"
+                    f"open(r'{root / (name + '.argv')}', 'w').write(' '.join(sys.argv[1:]))\n"
+                    f"{line}\nsys.exit({code})\n",
+                    encoding="utf-8",
+                )
+                result = self._run_push_functions(
+                    root,
+                    f"$ok = Test-UnitySamples -Script '{script}'\n"
+                    'Write-Output "RESULT=$ok"\n',
+                )
+                results[name] = result.stdout + result.stderr
+                self.assertEqual((root / f"{name}.argv").read_text(), "--check", name)
+        self.assertIn("RESULT=True", results["pass"], results["pass"])
+        self.assertIn("in sync", results["pass"])
+        self.assertIn("RESULT=False", results["drift"], results["drift"])
+        self.assertIn("DRIFT: Shots Shots.fbx", results["drift"])
+        self.assertIn("(exit 1)", results["drift"])
+        self.assertIn("RESULT=False", results["no_maya"], results["no_maya"])
+        self.assertIn("(exit 2)", results["no_maya"])
+
+    def test_the_unity_samples_gate_runs_the_scripts_of_the_runs_root(self):
+        """Its script is the run's own (``$M3TRIK_SCRIPTS``, from ``-Root``), as
+        every maintenance script a release shells out to is: a hermetic run
+        (``-Root <temp>``) has none and skips the gate. Bug: it took the real
+        workspace's script, so every stubbed ``-Merge`` release of pythontk in
+        this suite launched a real mayapy export of unitytk's samples, and the
+        suite stalled with no summary (the 300 s timeout kills PowerShell, while
+        the export holds the output pipes open). Fixed: 2026-11-08"""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            empty = root / "empty"
+            empty.mkdir()
+            own = root / "own"
+            own.mkdir()
+            (own / "sync_unity_samples.py").write_text(
+                "import sys\n"
+                f"open(r'{root / 'own.argv'}', 'w').write(' '.join(sys.argv[1:]))\n"
+                "print('[OK] 7 sample(s) in sync')\n",
+                encoding="utf-8",
+            )
+            results = {}
+            for name, folder in (("hermetic", empty), ("own", own)):
+                results[name] = self._run_push_functions(
+                    root,
+                    f"$M3TRIK_SCRIPTS = '{folder}'\n"
+                    "$ok = Test-UnitySamples\n"
+                    'Write-Output "RESULT=$ok"\n',
+                )
+            ran_own = (root / "own.argv").is_file() and (root / "own.argv").read_text()
+        hermetic = results["hermetic"].stdout + results["hermetic"].stderr
+        self.assertIn("RESULT=True", results["hermetic"].stdout, hermetic)
+        self.assertIn("nothing to check", hermetic)
+        own_out = results["own"].stdout + results["own"].stderr
+        self.assertIn("RESULT=True", results["own"].stdout, own_out)
+        self.assertEqual(ran_own, "--check", own_out)
+
+    def test_the_unity_samples_gate_runs_on_a_merged_release_of_a_producer(self):
+        """``Get-UnitySampleProducers``: the sample producers among a run's
+        packages (pythontk, mayatk), and none unless the run merges for real
+        (``-Merge``, not ``-DryRun``)."""
+        cases = {
+            "@('pythontk', 'uitk', 'mayatk') $true $false": "pythontk,mayatk",
+            "@('mayatk') $true $false": "mayatk",
+            "@('uitk', 'blendertk', 'tentacle') $true $false": "",
+            "@('pythontk', 'mayatk') $false $false": "",
+            "@('pythontk', 'mayatk') $true $true": "",
+        }
+        with tempfile.TemporaryDirectory() as td:
+            body = "".join(
+                f'Write-Output "CASE{i}=$((Get-UnitySampleProducers {args}) -join \',\')"\n'
+                for i, args in enumerate(cases)
+            )
+            result = self._run_push_functions(Path(td), body)
+        out = result.stdout + result.stderr
+        for i, (args, want) in enumerate(cases.items()):
+            with self.subTest(args=args):
+                self.assertIn(f"CASE{i}={want}\n", result.stdout.replace("\r\n", "\n"), out)
+
+    def test_the_unity_samples_gate_runs_after_the_cheap_pre_passes(self):
+        """The sample export takes minutes: it runs after the pre-passes that fail
+        in seconds (behind origin/dev, m3trik-first, the receipts) and before the
+        first package is processed, so nothing has mutated when it fails."""
+        source = (M3TRIK_DIR / "push.ps1").read_text(encoding="utf-8")
+        body = source[source.index("# Public-hygiene and English-only gates (every run)"):]
+        call = body.index("if (-not (Test-UnitySamples)) { exit 1 }")
+        for before in (
+            "if (-not (Test-EnglishOnly $ROOT $hygieneNames)) { exit 1 }",
+            'Write-Success "m3trik-first guard: m3trik/scripts matches origin/main"',
+            'Write-Header "Behind origin/dev"',
+            "Release preflight (see m3trik/AGENTS.md), for each package listed:",
+        ):
+            with self.subTest(before=before):
+                self.assertLess(body.index(before), call)
+        self.assertLess(call, body.index("\nforeach ($repo in $reposToProcess) {\n"))
+        self.assertIn("Get-UnitySampleProducers ", body[:call])
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_the_layout_gate_stops_a_library_that_imports_the_product(self):

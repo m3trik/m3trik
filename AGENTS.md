@@ -38,6 +38,8 @@ Two pre-passes run **before any mutation**, so a failure costs nothing:
 - **Behind `origin/dev`** (any `-Merge`; deliberately *not* waivable by `-SkipReview`, which waives only the review receipt). Releasing behind rewrites every tree and *then* fails at push. Pull first, **then** record receipts: a pull that brings in *source* changes the tree and voids anything recorded before it.
 - **Concurrent writer.** A receipt-gate failure also lists changed files whose mtime is under 15 min. Fresh mtimes mean another session is editing that tree: **wait for it to settle**. Re-recording pins a receipt to a moving tree, and `-Merge` does `git add -A` — it would publish their in-progress work to PyPI, unrecallably.
 
+**Unity samples** (a real `-Merge` of pythontk or mayatk, after the pre-passes): `sync_unity_samples.py --check` in a headless mayapy; no Maya fails it.
+
 **Checkpoint to `dev` as work lands**: never let `push.ps1`'s `git add .` be a change's first commit (between releases the only copy is a cloud-synced drive).
 
 Bypasses: `-SkipTestsReceipt` waives the `tests` half alone (with a banner); `-SkipReview` the whole pre-pass (emergency; also to DryRun past it).

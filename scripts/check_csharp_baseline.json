@@ -1,0 +1,3 @@
+{
+ "_doc": "C# violations frozen when check_csharp.py started holding the line (the kernel bypass and prior-art rules; generated files are never frozen). Shrink it; never grow it without a reason in the commit. Rewrite: check_csharp.py --update."
+}

@@ -5,9 +5,10 @@ once, as ``SchemaSpec`` dataclasses: ``OpRequest`` (a call), ``Outcome``
 (``Change``, ``Issue``, ``OpCall``: what it hands back), and ``OperationEntry``
 / ``OperationCatalogDocument`` (a catalog). The Unity kernel speaks the same
 contract in C#, so its types are generated here, one ``<Type>.g.cs`` per
-payload in ``unitytk/unitytk/templates/Kernel/Core/`` (``M3trik.Unitytk.Core``,
-no engine references), each reading a parsed JSON tree as pythontk validates
-and writing one back, plus their shared conversions (``Wire.g.cs``) -- the
+payload in the folder of unitytk's core assembly (``M3trik.Unitytk.Core``,
+no engine references; found under the package root unitytk's pyproject
+declares), each reading a parsed JSON tree as pythontk validates and
+writing one back, plus their shared conversions (``Wire.g.cs``) -- the
 readers' half is ``sync_scene_records.py``'s, so a record and a contract read
 alike. Each file ships with a ``.meta`` whose GUID is derived from its type's
 name, so regenerating never mints a new one.
@@ -33,7 +34,6 @@ if str(SCRIPTS) not in sys.path:
 import sync_scene_records as records  # noqa: E402  (its readers, wrapping and sync)
 
 REPO_ROOT = records.REPO_ROOT
-CORE_DIR = REPO_ROOT / "unitytk" / "unitytk" / "templates" / "Kernel" / "Core"
 NAMESPACE = "M3trik.Unitytk.Core"
 #: The namespace each generated type's ``.meta`` GUID is derived in.
 GUID_NAMESPACE = "https://github.com/m3trik/unitytk/contract/"
@@ -236,15 +236,21 @@ def meta(name: str) -> str:
     )
 
 
+def core_dir() -> Path:
+    """The folder of the core assembly's asmdef, wherever the package keeps it."""
+    return records.unity_file(f"{NAMESPACE}.asmdef").parent
+
+
 def targets() -> list:
     """``[(path, text)]``: every generated file and its ``.meta``."""
     payloads = _payloads()
     out = []
+    core = core_dir()
     for name, payload in payloads.items():
-        out.append((CORE_DIR / f"{name}.g.cs", render_type(name, payload, payloads)))
-        out.append((CORE_DIR / f"{name}.g.cs.meta", meta(name)))
-    out.append((CORE_DIR / "Wire.g.cs", render_wire()))
-    out.append((CORE_DIR / "Wire.g.cs.meta", meta("Wire")))
+        out.append((core / f"{name}.g.cs", render_type(name, payload, payloads)))
+        out.append((core / f"{name}.g.cs.meta", meta(name)))
+    out.append((core / "Wire.g.cs", render_wire()))
+    out.append((core / "Wire.g.cs.meta", meta("Wire")))
     return out
 
 
@@ -254,7 +260,9 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     failed = False
     for path, text in targets():
-        failed |= records.sync_text(path, text, args.check, "operation contract")
+        failed |= records.sync_text(
+            path, text, args.check, "operation contract", "sync_operation_contract.py"
+        )
     if not failed:
         print(f"in sync: {len(targets()) // 2} generated contract files")
     return 1 if failed else 0

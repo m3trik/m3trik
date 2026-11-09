@@ -463,8 +463,19 @@ def _table_cell(items: list[str]) -> str:
     return "<br>".join(items) if items else "-"
 
 
+def _root_label(workspace_root: Path, output_dir: Path) -> str:
+    """The workspace root as the inventory names it: relative to the folder
+    the inventory is written in (``../..`` for ``m3trik/docs``), never the
+    machine's absolute path -- the inventory is published with m3trik, and a
+    drive layout is the machine's (CODE_STANDARD section 11)."""
+    try:
+        return Path(os.path.relpath(workspace_root, output_dir.resolve())).as_posix()
+    except ValueError:  # another drive: no relative path
+        return "the workspace root"
+
+
 def _render_markdown(
-    workspace_root: Path,
+    workspace_root: str,
     repos: list[RepoInventory],
     non_repo_entries: list[NonRepoInventory],
 ) -> str:
@@ -476,7 +487,7 @@ def _render_markdown(
     lines = [
         "# Workspace Repository Inventory",
         "",
-        f"Generated from `{workspace_root.as_posix()}` on {generated_at}.",
+        f"Generated from `{workspace_root}` (the workspace root, from this folder) on {generated_at}.",
         "",
         "Scope: direct child git repositories under the workspace root. Line counts cover tracked code/config files and exclude common generated folders such as `.venv`, `build`, `dist`, `output`, `node_modules`, and `__pycache__`.",
         "",
@@ -646,11 +657,12 @@ def generate_inventory(workspace_root: Path, output_dir: Path) -> tuple[Path, Pa
     json_path = output_dir / "workspace_repo_inventory.json"
 
     markdown_path.write_text(
-        _render_markdown(workspace_root, repos, non_repo_entries), encoding="utf-8"
+        _render_markdown(_root_label(workspace_root, output_dir), repos, non_repo_entries),
+        encoding="utf-8",
     )
     json_payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "workspace_root": workspace_root.as_posix(),
+        "workspace_root": _root_label(workspace_root, output_dir),
         "repo_count": len(repos),
         "repos": [asdict(repo) for repo in repos],
         "non_repo_code_folders": [asdict(entry) for entry in non_repo_entries],

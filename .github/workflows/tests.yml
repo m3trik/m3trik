@@ -126,9 +126,11 @@ jobs:
           # test_push.py is excluded here and runs in its own Windows job: it
           # makes 16 unguarded `subprocess.run(["powershell", ...])` calls with
           # no platform skip, so on ubuntu it fails for the wrong reason.
+          # test/unity_e2e is excluded too: its twins launch Maya, Blender and
+          # Unity on a machine that has them (affected_tests.py runs it, alone).
           # Stream via tee, not a capture: a buffered capture shows nothing in
           # the log while a suite is hung.
-          pytest --tb=short -v test/ --ignore=test/test_push.py 2>&1 | tee pytest_out.txt
+          pytest --tb=short -v test/ --ignore=test/test_push.py --ignore=test/unity_e2e 2>&1 | tee pytest_out.txt
           # PIPESTATUS, not $?: tee always exits 0 and would turn every failure
           # green.
           RC=${PIPESTATUS[0]}
@@ -259,10 +261,16 @@ jobs:
 
       # The operation contract: pythontk's payloads (OpRequest, Outcome,
       # Change, Issue, OpCall, the catalog document) restated as unitytk's
-      # generated C# types in templates/Kernel/Core. Needs pythontk and
+      # generated C# types in its core assembly. Needs pythontk and
       # unitytk side by side, as the step above does.
       - name: Operation contract C# types in sync
         run: python m3trik/scripts/sync_operation_contract.py --check
+
+      # The job-queue layout: pythontk's JobQueue file names restated as the
+      # C# constants of extapps' Unity Scripts editor package (QueueLayout.g.cs),
+      # which serves that queue in a person's open Unity editor.
+      - name: Job-queue layout C# constants in sync
+        run: python m3trik/scripts/sync_job_queue.py --check
 
       # The workspace manifest: ONE declaration (m3trik/workspace.json) of the
       # cascade, the ecosystem set and every unit's domain line, read directly by
@@ -272,6 +280,17 @@ jobs:
       # Dispatch table is checked too where a workspace root exists (SKIP here).
       - name: Workspace manifest and its restatements in sync
         run: python m3trik/scripts/sync_workspace.py --check
+
+      # The READMEs' relationship diagrams restate the same manifest and each
+      # package's pyproject dependencies as SVGs (m3trik/docs/diagrams) and the
+      # <picture> blocks that embed them. A new package, link or caption fails
+      # here until the generator is re-run. EXPECT A RED WINDOW: the graph and
+      # the README blocks are read from the siblings' dev branches, so a
+      # sibling's pyproject or README change lands on dev BEFORE m3trik's
+      # regenerated SVGs reach main. An SVG no README asks for only warns (a
+      # released PyPI page may embed it).
+      - name: README diagrams match the declared packages
+        run: python m3trik/scripts/generate_readme_diagrams.py --check
 
       # GitHub About boxes: ONE declaration (each package's pyproject
       # description + keywords) restated as the repo's About text, topics and
@@ -289,9 +308,20 @@ jobs:
       # [tool.m3trik.layers] imports only downward. Today's exceptions are frozen
       # in check_layers_baseline.json; this fails only on a new one. The product
       # and role rules (section 3) are strict: no other package imports tentacle,
-      # and each part of a tool imports only what its role allows.
+      # and each part of a tool imports only what its role allows. A package that
+      # ships a Unity package (unitytk) has its asmdef references held to the
+      # [tool.m3trik.layers.csharp] order the same way.
       - name: Declared layer order and dependencies hold
         run: python m3trik/scripts/check_layers.py --check
+
+      # The same C# parts' code: editor code above the kernel goes through its
+      # OpContext and import log (no Undo, progress bar or Debug.Log of its
+      # own), each part assembly records its prior art, and every *.g.cs is
+      # exactly what its generator writes. The first two are frozen in
+      # check_csharp_baseline.json; the generated files are strict. Needs
+      # pythontk beside unitytk (the generators' declarations).
+      - name: C# kernel seams, prior art and generated files
+        run: python m3trik/scripts/check_csharp.py --check
 
       # Saved names (CODE_STANDARD section 5): each .ui stem's widget names and
       # the SceneRecords keys, frozen by name so a panel or tool may move between

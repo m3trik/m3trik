@@ -2,7 +2,7 @@
 
 **Nav**: [← m3trik](../AGENTS.md) · [README](../README.md) · [Code standard](CODE_STANDARD.md) · [Docs standard](DOCS_STANDARD.md)
 
-The architecture of record for the m3trik ecosystem: what each package is for, where each kind of code goes, how a tool is put together, which check holds each part of the shape, and the decisions behind it. The rules themselves live in [CODE_STANDARD.md](CODE_STANDARD.md); the public surface of each package is read from its source (`api.search`). This file replaces the 2026-10 restructure plan: what the plan decided is recorded here, what it scheduled is done.
+The architecture of record for the ecosystem: what each package is for, where each kind of code goes, how a tool is put together, which check holds each part of the shape, and the decisions behind it. The rules themselves live in [CODE_STANDARD.md](CODE_STANDARD.md); the public surface of each package is read from its source (`api.search`). This file replaces the 2026-10 restructure plan: what the plan decided is recorded here, what it scheduled is done.
 
 ## What we are building
 
@@ -27,7 +27,7 @@ Three properties follow from that and every placement decision serves them:
 | blendertk | library | The Blender mirror of mayatk, by name and behavior (signature too where a shared panel calls it); no UI | pythontk, uitk | GPL-3.0+ | cascade |
 | tentacle | product | The marking-menu launcher, and every DCC tool's panel (`.ui`) and Slots class | the four libraries (mayatk / blendertk as extras) | GPL-3.0+ | cascade |
 | extapps | product | Standalone apps: each app's engine, panel and Slots in one package; the vendored Toolbag engine | pythontk, uitk | LGPL-3.0+ | standalone |
-| unitytk | library | Unity integration: project creation, the deliverer, the C# importers (`templates/` stay MIT: they compile into player builds) | pythontk | LGPL-3.0+ / MIT | standalone |
+| unitytk | library | Unity integration: the Unity package `com.m3trik.unitytk/` (installed by one manifest line; MIT, it compiles into player builds) and the Python that drives Unity from outside (the agent host, the on-demand project builder, the compile check) | pythontk | LGPL-3.0+ / MIT | standalone |
 
 The dependency chain is `pythontk → uitk → {mayatk, blendertk} → tentacle`, with `pythontk → unitytk` and `{pythontk, uitk} → extapps` beside it. Nothing depends on a product. tentacle reaches extapps only by app name through uitk's external-app handler, which installs a missing app within the version range tentacle declares (`tentacletk[apps]`: the floor and the next-minor cap).
 

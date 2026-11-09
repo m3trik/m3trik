@@ -203,6 +203,7 @@
   "calculator": [
    "QtUi",
    "btn_convert",
+   "btn_swap_units",
    "calc_container",
    "central_widget",
    "cmb_unit_from",
@@ -210,7 +211,6 @@
    "footer",
    "grp_units",
    "header",
-   "label",
    "maya_container",
    "txt_display"
   ],

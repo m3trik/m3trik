@@ -493,8 +493,16 @@ def _shipped_globs(package_dir: str) -> List[Tuple[str, str]]:
             package_data = (
                 data.get("tool", {}).get("setuptools", {}).get("package-data", {})
             )
-            for globs in package_data.values():
-                pairs += [("", g) for g in globs]
+            # A key names the package its globs are relative to ("*": every
+            # one); a subpackage's data sits under its folder.
+            for key, globs in package_data.items():
+                if key in ("", "*", pkg_name):
+                    subtree = ""
+                elif key.startswith(pkg_name + "."):
+                    subtree = key[len(pkg_name) + 1 :].replace(".", "/")
+                else:
+                    continue  # another package's data
+                pairs += [(subtree, g) for g in globs]
         except (OSError, ImportError, ValueError):
             pass  # unreadable/old interpreter: fall back to the manifest alone
 
@@ -523,11 +531,23 @@ def _shipped_globs(package_dir: str) -> List[Tuple[str, str]]:
 
 
 def _is_declared(rel_to_pkg: str, pairs: List[Tuple[str, str]]) -> bool:
+    """Whether a declared glob ships *rel_to_pkg*: one naming a folder
+    (``data/*.json``) matches the path under its subtree, as setuptools reads
+    it (under any package, for a subtree-less one); a bare one (``*.json``) the
+    file's name anywhere under its subtree."""
     name = os.path.basename(rel_to_pkg)
     for subtree, glob in pairs:
-        if subtree and not rel_to_pkg.startswith(subtree + "/"):
-            continue
-        if fnmatch.fnmatch(name, glob):
+        rel = rel_to_pkg
+        if subtree:
+            if not rel_to_pkg.startswith(subtree + "/"):
+                continue
+            rel = rel_to_pkg[len(subtree) + 1 :]
+        if "/" in glob:
+            if fnmatch.fnmatch(rel, glob) or (
+                not subtree and fnmatch.fnmatch(rel, "*/" + glob)
+            ):
+                return True
+        elif fnmatch.fnmatch(name, glob):
             return True
     return False
 

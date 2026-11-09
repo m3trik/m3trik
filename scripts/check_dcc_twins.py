@@ -1087,10 +1087,24 @@ def _vendored_layout_files(workspace: str) -> Set[str]:
             target = node.targets[0]
             if isinstance(target, ast.Name):
                 consts[target.id] = _guard_literal(node.value)
+    found: Set[str] = set()
     folder, files = consts.get("MARMOSET_PANEL_DIR"), consts.get("MARMOSET_PANEL_VENDORED")
-    if not isinstance(folder, str) or not isinstance(files, tuple):
-        return set()
-    return {f"extapps/extapps/{folder}/{rel}" for rel in files if isinstance(rel, str)}
+    if isinstance(folder, str) and isinstance(files, tuple):
+        found |= {f"extapps/extapps/{folder}/{rel}" for rel in files if isinstance(rel, str)}
+    # The Substance slice is vendored whole: its top files and every file under
+    # its folders (``SUBSTANCE_ENGINE_TOP`` / ``SUBSTANCE_ENGINE_DIRS``).
+    folder = consts.get("SUBSTANCE_PANEL_DIR")
+    tops, dirs = consts.get("SUBSTANCE_ENGINE_TOP"), consts.get("SUBSTANCE_ENGINE_DIRS")
+    if isinstance(folder, str) and isinstance(tops, tuple) and isinstance(dirs, tuple):
+        base = f"extapps/extapps/{folder}"
+        found |= {f"{base}/{rel}" for rel in tops if isinstance(rel, str)}
+        for sub in (d for d in dirs if isinstance(d, str)):
+            root = os.path.join(workspace, *base.split("/"), sub)
+            for dirpath, _dirs, names in os.walk(root):
+                for name in names:
+                    rel = os.path.relpath(os.path.join(dirpath, name), workspace)
+                    found.add(rel.replace(os.sep, "/"))
+    return found
 
 
 def _guarded_place(rel: str, vendored: Set[str]) -> bool:

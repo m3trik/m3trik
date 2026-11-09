@@ -7,7 +7,7 @@
     {
       "name": "m3trik",
       "source": "./claude",
-      "description": "Agents, skills, hooks and the operations MCP servers for the m3trik ecosystem."
+      "description": "Agents, skills, hooks and the operations MCP servers for this workspace's packages."
     }
   ]
 }

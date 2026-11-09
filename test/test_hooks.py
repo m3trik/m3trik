@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # coding=utf-8
-"""Tests for the m3trik plugin's hooks (claude/hooks/hooks.py), run as Claude Code
+"""Tests for the workspace plugin's hooks (claude/hooks/hooks.py), run as Claude Code
 runs them: the event's JSON on stdin, the project and the plugin's data folder in
 the environment, a fresh interpreter in isolated mode.
 """

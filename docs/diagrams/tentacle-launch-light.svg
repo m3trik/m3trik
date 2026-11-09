@@ -1,53 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1108" height="316" viewBox="0 0 1108 316" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="638" height="574" viewBox="0 0 638 574" role="img" aria-labelledby="t d">
 <title id="t">How tentacle starts</title><desc id="d">How tentacle starts: Tcl.launch resolves the host&#x27;s adapter and defers to Tcl.build, which makes one uitk MarkingMenu with that adapter as its host; the menu&#x27;s Switchboard pairs a ui/&lt;name&gt;.ui file with the slots/&lt;name&gt;.py Slots class of the same basename, and a widget&#x27;s objectName calls the Slots method of the same name.</desc>
-<style>.card{fill:#f6f8fa;stroke:#d1d9e0}.title{font:600 12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;letter-spacing:.08em;fill:#59636e}.nb{fill:#ffffff;stroke:#d1d9e0}.product .nb{stroke:#59636e}.focus .nb{fill:#ddf4ff;stroke:#0969da;stroke-width:1.75}.name{font:600 16px -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;fill:#1f2328}.cap{font:12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.ic{fill:none;stroke:#59636e;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.focus .ic{stroke:#0969da}.w{fill:none;stroke:#818b98;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.extra{stroke-dasharray:6 4}.opens,.pair{stroke-dasharray:.5 4.5;stroke-width:2}.pill rect{fill:#f6f8fa;stroke:#d1d9e0}.pill text{font:11px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.chip rect{fill:#ffffff;stroke:#59636e}.chip text{font:600 10px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;letter-spacing:.06em;fill:#59636e}.chip.here rect{fill:#0969da;stroke:#0969da}.chip.here text{fill:#ffffff}.rule{stroke:#d1d9e0}.legend text{font:12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.dim{opacity:.3}.pkt{fill:#0969da}.pkt.ring{fill:#f6f8fa;stroke:#0969da;stroke-width:1.5}.pulse{fill:none;stroke:#0969da;stroke-width:1.5}@media (prefers-reduced-motion:reduce){.pkt,.pulse{display:none}}</style>
-<rect class="card" x=".5" y=".5" width="1107" height="315" rx="14"/>
+<style>.card{fill:#f6f8fa;stroke:#d1d9e0}.title{font:600 12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;letter-spacing:.08em;fill:#59636e}.nb{fill:#ffffff;stroke:#d1d9e0}.product .nb{stroke:#59636e}.focus .nb{fill:#ddf4ff;stroke:#0969da;stroke-width:1.75}.name{font:600 16px -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;fill:#1f2328}.cap{font:12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.blurb{font:12.5px -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;fill:#424a53}.ic{fill:none;stroke:#59636e;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.focus .ic{stroke:#0969da}.go{fill:none;stroke:#818b98;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.w{fill:none;stroke:#818b98;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.extra{stroke-dasharray:6 4}.opens,.pair{stroke-dasharray:.5 4.5;stroke-width:2}.hl{fill:none;stroke:#0969da;stroke-width:2.25;stroke-linecap:round}.pill rect{fill:#f6f8fa;stroke:#d1d9e0}.pill text{font:11px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.msg rect{fill:#ddf4ff;stroke:#0969da}.msg text{font:11px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#1f2328}.chip rect{fill:#ffffff;stroke:#59636e}.chip text{font:600 10px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;letter-spacing:.06em;fill:#59636e}.chip.here rect{fill:#0969da;stroke:#0969da}.chip.here text{fill:#ffffff}.rule{stroke:#d1d9e0}.legend text{font:12px ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;fill:#59636e}.say{font:13px -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;fill:#1f2328}.dot{fill:#d1d9e0}.dot.on{fill:#0969da}.dim{opacity:.3}.pkt{fill:#0969da}.pkt.ring{fill:#f6f8fa;stroke:#0969da;stroke-width:1.5}.pulse{fill:none;stroke:#0969da;stroke-width:1.5}@media (prefers-reduced-motion:reduce){.pkt,.pulse{display:none}.st{display:none}.s0{display:inline;opacity:1!important}}</style>
+<rect class="card" x="0.5" y="0.5" width="637" height="573" rx="14"/>
 <text class="title" x="24" y="34">HOW TENTACLE STARTS</text>
-<g><path class="w" d="M220 152C265 152 265 152 310 152"/><path class="w" d="M304 148L310 152L304 156"/></g>
-<g><path class="w" d="M508 152C553 152 553 152 598 152"/><path class="w" d="M592 148L598 152L592 156"/></g>
-<g><path class="w" d="M796 145.5C841 145.5 841 96 886 96"/><path class="w" d="M880 92L886 96L880 100"/></g>
-<g><path class="w" d="M796 158.5C841 158.5 841 208 886 208"/><path class="w" d="M880 204L886 208L880 212"/></g>
-<g><path class="w pair" d="M986 131V173"/><g class="pill"><rect x="937.1" y="143" width="97.8" height="18" rx="9"/><text x="986" y="155.8" text-anchor="middle">same basename</text></g></g>
-<g class="node">
-<rect class="nb" x="24.5" y="120.5" width="195" height="63" rx="10"/>
-<g class="ic" transform="translate(40 140)"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></g>
-<text class="name" x="76" y="148">Tcl.launch</text>
-<text class="cap" x="76" y="167">then Tcl.build</text>
-</g>
-<g class="node">
-<rect class="nb" x="312.5" y="120.5" width="195" height="63" rx="10"/>
-<g class="ic" transform="translate(328 140)"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.4"/><path d="m13.7 10.3 4.3-4.3M10.3 10.3 6 6m4.3 7.7L6 18m7.7-4.3L18 18"/></g>
-<text class="name" x="364" y="148">MarkingMenu</text>
-<text class="cap" x="364" y="167">uitk, host=adapter</text>
-</g>
-<g class="node">
-<rect class="nb" x="600.5" y="120.5" width="195" height="63" rx="10"/>
-<g class="ic" transform="translate(616 140)"><circle cx="6" cy="12" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="m8 11 8-4m-8 6 8 4"/></g>
-<text class="name" x="652" y="148">Switchboard</text>
-<text class="cap" x="652" y="167">uitk, name wiring</text>
-</g>
-<g class="node">
-<rect class="nb" x="888.5" y="64.5" width="195" height="63" rx="10"/>
-<g class="ic" transform="translate(904 84)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></g>
-<text class="name" x="940" y="92">ui/&lt;name&gt;.ui</text>
-<text class="cap" x="940" y="111">Designer layout</text>
-</g>
-<g class="node">
-<rect class="nb" x="888.5" y="176.5" width="195" height="63" rx="10"/>
-<g class="ic" transform="translate(904 196)"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-2.5-12-3 14"/></g>
-<text class="name" x="940" y="204">slots/&lt;name&gt;.py</text>
-<text class="cap" x="940" y="223">Slots class</text>
-</g>
-<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M220 152C265 152 265 152 310 152" dur="5s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="0s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
-<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M508 152C553 152 553 152 598 152" dur="5s" begin="1.2s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
-<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M796 145.5C841 145.5 841 96 886 96" dur="5s" begin="2.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
-<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M796 158.5C841 158.5 841 208 886 208" dur="5s" begin="2.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
-<rect class="pulse" x="312.5" y="120.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
-<rect class="pulse" x="600.5" y="120.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
-<rect class="pulse" x="888.5" y="64.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="3.6s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
-<rect class="pulse" x="888.5" y="176.5" width="195" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="3.6s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
-<path class="rule" d="M24 264H1084"/>
-<g class="legend">
-<text x="24" y="294">a widget&#x27;s objectName calls the Slots method of the same name</text>
-</g>
+<g><path class="w" d="M318.9 120C318.9 154 318.9 154 318.9 188"/><path class="w" d="M314.9 182L318.9 188L322.9 182"/></g>
+<g><path class="w" d="M318.9 252C318.9 286 318.9 286 318.9 320"/><path class="w" d="M314.9 314L318.9 320L322.9 314"/></g>
+<g><path class="w" d="M309.9 384C309.9 418 140 418 140 452"/><path class="w" d="M136 446L140 452L144 446"/></g>
+<g><path class="w" d="M327.9 384C327.9 418 497.8 418 497.8 452"/><path class="w" d="M493.8 446L497.8 452L501.8 446"/></g>
+<g><path class="w pair" d="M256 484H381.8"/><g class="pill"><rect x="270" y="475" width="97.8" height="18" rx="9"/><text x="318.9" y="487.8" text-anchor="middle">same basename</text></g></g>
+<g class="node"><rect class="nb" x="203.4" y="56.5" width="231" height="63" rx="10"/><g class="ic" transform="translate(218.9 76)"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></g><text class="name" x="254.9" y="84">Tcl.launch</text><text class="cap" x="254.9" y="103">then Tcl.build</text></g>
+<g class="node"><rect class="nb" x="203.4" y="188.5" width="231" height="63" rx="10"/><g class="ic" transform="translate(218.9 208)"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.4"/><path d="m13.7 10.3 4.3-4.3M10.3 10.3 6 6m4.3 7.7L6 18m7.7-4.3L18 18"/></g><text class="name" x="254.9" y="216">MarkingMenu</text><text class="cap" x="254.9" y="235">uitk, host=adapter</text></g>
+<g class="node"><rect class="nb" x="203.4" y="320.5" width="231" height="63" rx="10"/><g class="ic" transform="translate(218.9 340)"><circle cx="6" cy="12" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="m8 11 8-4m-8 6 8 4"/></g><text class="name" x="254.9" y="348">Switchboard</text><text class="cap" x="254.9" y="367">uitk, name wiring</text></g>
+<g class="node"><rect class="nb" x="24.5" y="452.5" width="231" height="63" rx="10"/><g class="ic" transform="translate(40 472)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></g><text class="name" x="76" y="480">ui/&lt;name&gt;.ui</text><text class="cap" x="76" y="499">Designer layout</text></g>
+<g class="node"><rect class="nb" x="382.3" y="452.5" width="231" height="63" rx="10"/><g class="ic" transform="translate(397.8 472)"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-2.5-12-3 14"/></g><text class="name" x="433.8" y="480">slots/&lt;name&gt;.py</text><text class="cap" x="433.8" y="499">Slots class</text></g>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M318.9 120C318.9 154 318.9 154 318.9 188" dur="5s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="0s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M318.9 252C318.9 286 318.9 286 318.9 320" dur="5s" begin="1.2s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M309.9 384C309.9 418 140 418 140 452" dur="5s" begin="2.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<circle class="pkt" r="3.2" opacity="0"><animateMotion path="M327.9 384C327.9 418 497.8 418 497.8 452" dur="5s" begin="2.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.24;1"/><animate attributeName="opacity" values="0;1;1;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.036;0.204;0.24;1"/></circle>
+<rect class="pulse" x="203.4" y="188.5" width="231" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="203.4" y="320.5" width="231" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="2.4s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="24.5" y="452.5" width="231" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="3.6s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<rect class="pulse" x="382.3" y="452.5" width="231" height="63" rx="10" opacity="0"><animate attributeName="opacity" values="0;.9;0;0" dur="5s" begin="3.6s" repeatCount="indefinite" keyTimes="0;0.03;0.18;1"/></rect>
+<path class="rule" d="M24 530H614"/><g class="legend"><text x="24" y="553">a widget&#x27;s objectName calls the Slots method of the same name</text></g>
 </svg>

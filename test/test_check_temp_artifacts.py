@@ -301,6 +301,35 @@ class StrayArtifactTest(_ScanCase):
         self.write("config.json", "{}")
         self.assertEqual(self.strays(), [])
 
+    def test_a_subpackage_glob_with_a_folder_declares_its_files(self):
+        """setuptools reads ``"pkg.sub" = ["data/*.cs"]`` as files under
+        ``pkg/sub/data/``: matching the glob against a basename never could
+        (extapps' Unity Scripts package: its ``templates/*.cs``)."""
+        self.declare(
+            pyproject="""
+[tool.setuptools.package-data]
+"fakepkg.app" = ["templates/*.cs", "unity_package/Editor/*.asmdef"]
+"""
+        )
+        self.write("app/templates/Send.cs", "class Send {}")
+        self.write("app/unity_package/Editor/A.asmdef", "{}")
+        self.assertEqual(self.strays(), [])
+
+    def test_a_subpackage_glob_declares_nothing_elsewhere(self):
+        self.declare(
+            pyproject="""
+[tool.setuptools.package-data]
+"fakepkg.app" = ["templates/*.cs"]
+"""
+        )
+        self.write("app/templates/Send.cs", "class Send {}")
+        self.write("other/templates/Stray.cs", "class Stray {}")
+        self.write("app/Loose.cs", "class Loose {}")
+        found = self.strays()
+        self.assertEqual(len(found), 2, found)
+        self.assertTrue(any("other/templates/Stray.cs" in f for f in found), found)
+        self.assertTrue(any("app/Loose.cs" in f for f in found), found)
+
     def test_manifest_only_declaration_passes(self):
         """uitk's icons ship via the manifest alone -- reading pyproject only lies."""
         self.declare(manifest="recursive-include fakepkg *.svg")

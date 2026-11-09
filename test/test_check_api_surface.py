@@ -516,6 +516,61 @@ class TestSemverVerdict(unittest.TestCase):
             (src / "__init__.py").write_text("MOVED_NAMES = dict(build())\n", encoding="utf-8")
             self.assertEqual(g.moved_names(src), {})
 
+    FN = '"""Mod."""\n\n\ndef add_layer():\n    """A."""\n\n\nPARAMS = {}\n'
+
+    def test_a_renamed_subpackage_row_accounts_for_every_name_under_it(self):
+        """extapps 0.9.0 renamed ``substance_workflow`` to ``substance_scripts``:
+        one row naming the old subpackage owes nothing more for its modules'
+        functions, constants and class members; a namesake prefix
+        (``substance_workflow_extra``) is no part of it."""
+        before = {
+            "old_sub/__init__.py": "",
+            "old_sub/mod.py": self.WIDGET_2,
+            "old_sub/util.py": self.FN,
+            "old_sub_extra/util.py": self.FN,
+        }
+        data, prior = self._tree(before, {"new_sub/mod.py": self.WIDGET_2})
+        delta = g.compute_api_delta(
+            data, prior, moved_table={"old_sub": ("pkg.new_sub", "0.9.0")}
+        )
+        self.assertEqual(
+            delta.removed,
+            ["old_sub_extra/util.py::PARAMS", "old_sub_extra/util.py::add_layer"],
+        )
+        self.assertIn("old_sub/util.py::add_layer", delta.moved_out)
+        self.assertIn("old_sub/mod.py::Widget.spin", delta.moved)  # it turned up in new_sub
+        self.assertEqual(delta.destinations["old_sub/util.py::PARAMS"], ("pkg.new_sub", "0.9.0"))
+
+    def test_a_subpackage_moved_table_covers_its_own_subpackage(self):
+        """A subpackage's ``MOVED_NAMES`` (extapps' ``realityscan_workflow``)
+        is read too, scoped to that subpackage: its row forgives the name
+        there, never a namesake elsewhere in the package."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            src = Path(td)
+            (src / "__init__.py").write_text(
+                'MOVED_NAMES = {"Spin": ("tentacle.Spin", "0.30.0")}\n', encoding="utf-8"
+            )
+            (src / "photo" / "scan").mkdir(parents=True)
+            (src / "photo" / "scan" / "__init__.py").write_text(
+                'MOVED_NAMES = {"Widget": ("pkg.photo.scan.Gadget", "0.9.0")}\n',
+                encoding="utf-8",
+            )
+            table = g.moved_names(src)
+        self.assertEqual(
+            table,
+            {
+                "Spin": ("tentacle.Spin", "0.30.0"),
+                "photo.scan.Widget": ("pkg.photo.scan.Gadget", "0.9.0"),
+            },
+        )
+        before = {"photo/scan/_impl.py": self.WIDGET_2, "other/mod.py": self.WIDGET_2}
+        data, prior = self._tree(before, {"keep.py": self.FN})
+        delta = g.compute_api_delta(data, prior, moved_table=table)
+        self.assertEqual(
+            delta.removed, ["other/mod.py::Widget", "other/mod.py::Widget.hop", "other/mod.py::Widget.spin"]
+        )
+        self.assertIn("photo/scan/_impl.py::Widget.spin", delta.moved_out)
+
     def test_the_changes_document_names_each_destination(self):
         data, prior = self._tree({"mod.py": self.WIDGET_2}, {"mod.py": self.WIDGET_1})
         md = g.emit_changes_markdown(data, prior, moved_table=self.MOVED)

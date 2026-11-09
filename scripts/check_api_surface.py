@@ -40,7 +40,8 @@ The delta (``--semver``, ``--changes``) is read against the package's last
 release: its newest ``v*`` tag (push.ps1 tags each release ``v<version>``),
 read through ``ApiSurface.read`` from a ``git archive`` copy of the tag's
 source. A removal is accounted for by a ``ptk.Deprecation`` alias (it retires)
-or a ``MOVED_NAMES`` entry (it moved to another package); one that is neither
+or a ``MOVED_NAMES`` entry (it moved, or a row names its renamed subpackage;
+a subpackage's own table covers the names under it); one that is neither
 is a break push.ps1 refuses. With no baseline (no tag, or a ``--since`` naming
 no commit) there is no verdict: ``--semver`` says so and exits 2, and
 ``--changes`` says there is no release to compare with.
@@ -1280,11 +1281,31 @@ def required_bump(delta: ApiDelta | None) -> tuple[str, list[str]]:
 
 
 def moved_names(source_dir: Path) -> dict[str, tuple[str, str]]:
-    """The package's moved-names table: the ``MOVED_NAMES`` literal its
-    ``__init__.py`` declares, ``{name: (new home, version)}``, read with
-    ``ast`` so nothing is imported. Empty when absent or not a literal."""
+    """The package's moved-names tables, ``{name: (new home, version)}``, read
+    with ``ast`` so nothing is imported: the ``MOVED_NAMES`` literal its
+    ``__init__.py`` declares, keyed by name, and each subpackage's, keyed by
+    the subpackage's dotted path and the name (``photo.scan.Widget``) so a row
+    covers its own subpackage alone. A root row may name a subpackage
+    (``substance_workflow``): it renamed or left, and covers every name under
+    it. Empty when absent or not a literal."""
+    table: dict[str, tuple[str, str]] = {}
+    inits = [source_dir / "__init__.py"] + sorted(
+        p for p in source_dir.rglob("__init__.py") if p.parent != source_dir
+    )
+    for init in inits:
+        rel = init.parent.relative_to(source_dir).parts
+        if any(part.startswith(".") or part == "__pycache__" for part in rel):
+            continue
+        scope = ".".join(rel)
+        for name, entry in _moved_literal(init).items():
+            table[f"{scope}.{name}" if scope else name] = entry
+    return table
+
+
+def _moved_literal(init: Path) -> dict[str, tuple[str, str]]:
+    """One ``__init__.py``'s ``MOVED_NAMES`` literal (:func:`moved_names`)."""
     try:
-        tree = ast.parse((source_dir / "__init__.py").read_text(encoding="utf-8"))
+        tree = ast.parse(init.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
         return {}
     for node in tree.body:
@@ -1325,16 +1346,24 @@ def _retired_keys(prior_json: dict) -> set[str]:
 
 
 def _moved_entry(
-    symbol: str, table: dict[str, tuple[str, str]], namespace: str = ""
+    symbol: str, table: dict[str, tuple[str, str]], namespace: str = "", relpath: str = ""
 ) -> tuple[str, str] | None:
     """The moved-names entry that covers *symbol* (``Name`` or
     ``Class.member``): the symbol itself, its whole class, or a member's flat
     name (a wildcard module's methods are exposed flat); a C# one also by its
-    full name in *namespace* (``M3trik.Unitytk.Core.Json.Parse``)."""
+    full name in *namespace* (``M3trik.Unitytk.Core.Json.Parse``). A Python
+    one's module *relpath* adds the subpackages holding it: a row naming one
+    (it renamed or left), and a subpackage's own rows (:func:`moved_names`)."""
     parts = symbol.split(".")
     candidates = [symbol, parts[0], parts[-1] if len(parts) == 2 else None]
     if namespace:
         candidates += [f"{namespace}.{symbol}", f"{namespace}.{parts[0]}"]
+    if relpath:
+        dirs = relpath.split("/")[:-1]
+        for depth in range(len(dirs), 0, -1):
+            scope = ".".join(dirs[:depth])
+            candidates += [f"{scope}.{symbol}", f"{scope}.{parts[0]}"]
+        candidates += [".".join(dirs[:depth]) for depth in range(len(dirs), 0, -1)]
     for candidate in candidates:
         if candidate in table:
             return table[candidate]
@@ -1434,7 +1463,11 @@ def compute_api_delta(
     destinations: dict[str, tuple[str, str]] = {}
     for key in still_removed:
         relpath, symbol = key.split("::", 1)
-        entry = _moved_entry(symbol, table, "" if relpath.endswith(".py") else relpath)
+        entry = (
+            _moved_entry(symbol, table, relpath=relpath)
+            if relpath.endswith(".py")
+            else _moved_entry(symbol, table, relpath)
+        )
         if entry is not None:
             moved_out.append(key)
             destinations[key] = entry
@@ -2015,7 +2048,7 @@ def judge_release(
         failed = True
         print(
             f"{name} removes public API nothing accounts for: each name owes a "
-            "ptk.Deprecation alias, or a MOVED_NAMES row when it left for another package:",
+            "ptk.Deprecation alias, or a MOVED_NAMES row naming it or its renamed subpackage:",
             file=sys.stderr,
         )
         for key in verdict["unaccounted"]:

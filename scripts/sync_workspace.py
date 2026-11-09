@@ -26,6 +26,10 @@ them spells the package set. What cannot read JSON is checked here:
    current (``pythontk.AgentInstructions``).
 4. Each package's committed operation catalog (``<package>/operations.json``)
    against the declarations it is generated from (``pythontk.OperationCatalog``).
+5. The dependency chain the prose states (:data:`CHAIN_STATEMENTS`: the root
+   ``AGENTS.md`` and ``docs/CODEBASE_MANIFEST.md``) against the ecosystem
+   packages' pyproject dependencies, each direction, through other packages
+   too; skipped where a statement or a pyproject is absent (a CI checkout).
 
 Usage:
     python sync_workspace.py            # rewrite the dispatch table (idempotent)
@@ -38,7 +42,7 @@ import re
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 # This file: _scripts/m3trik/scripts/sync_workspace.py
 M3TRIK = Path(__file__).resolve().parents[1]
@@ -55,6 +59,14 @@ RELEASE_MODES = ("cascade", "standalone", "none")
 ROLES = ("product",)
 DISPATCH_HEADING = "## Dispatch"
 SIBLING_LOOP = re.compile(r"for repo in ([\w ]+); do")
+#: Where the prose states the dependency chain: (file, anchor). A heading
+#: anchors the line under it; other text, the line it starts.
+CHAIN_STATEMENTS = (
+    (ROOT_AGENTS, "## Ecosystem chain"),
+    (M3TRIK / "docs" / "CODEBASE_MANIFEST.md", "The dependency chain is "),
+)
+#: A code span holding an arrow: one stated chain.
+CHAIN_SPAN = re.compile(r"`([^`]*→[^`]*)`")
 
 
 def validate(data: dict) -> List[str]:
@@ -331,6 +343,98 @@ def write_catalogs(workspace: Path = WORKSPACE, data: Optional[dict] = None) -> 
     return written
 
 
+def _layers():
+    """``check_layers`` (beside this file): its pyproject reader is the one
+    the import rules read dependencies with."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import check_layers
+
+    return check_layers
+
+
+def stated_edges(line: str) -> Set[Tuple[str, str]]:
+    """``(lower, upper)`` -- *upper* depends on *lower* -- for each arrow in each
+    code span of *line* holding one: ``a → b → {c, d}`` states ``(a, b)``,
+    ``(b, c)`` and ``(b, d)``."""
+    edges: Set[Tuple[str, str]] = set()
+    for span in CHAIN_SPAN.findall(line):
+        stages = [
+            [name.strip() for name in stage.strip().strip("{}").split(",") if name.strip()]
+            for stage in span.split("→")
+        ]
+        for lower, upper in zip(stages, stages[1:]):
+            edges |= {(a, b) for a in lower for b in upper}
+    return edges
+
+
+def declared_edges(workspace: Path = WORKSPACE, data: Optional[dict] = None) -> Set[Tuple[str, str]]:
+    """``(lower, upper)`` for each ecosystem package *upper*'s pyproject names
+    (``dependencies`` and every extra). A dependency on a product is no edge:
+    nothing imports a product (``check_layers.py``), so it pins an install."""
+    layers = _layers()
+    members = set(ecosystem_packages(data))
+    lowers = members - set(products(data))
+    edges = set()
+    for upper in members:
+        if not (workspace / upper / "pyproject.toml").is_file():
+            continue
+        named = layers.declared_dependencies(layers.pyproject(workspace / upper))
+        edges |= {(lower, upper) for lower in named & lowers}
+    return edges
+
+
+def _closure(edges: Set[Tuple[str, str]]) -> Set[Tuple[str, str]]:
+    """*edges* with every pair a path of them joins."""
+    closed = set(edges)
+    while True:
+        more = {(a, d) for a, b in closed for c, d in closed if b == c} - closed
+        if not more:
+            return closed
+        closed |= more
+
+
+def chain_statement(text: str, anchor: str) -> Optional[str]:
+    """The chain's line in *text*: the first line starting with *anchor*, or,
+    for a heading, the first non-blank line under it; None when absent."""
+    lines = text.split("\n")
+    for number, line in enumerate(lines):
+        if line.startswith(anchor):
+            if not anchor.startswith("#"):
+                return line
+            return next((rest for rest in lines[number + 1 :] if rest.strip()), None)
+    return None
+
+
+def chain_drift(
+    path: Path, anchor: str, workspace: Path = WORKSPACE, data: Optional[dict] = None
+) -> List[str]:
+    """Where the chain *path* states at *anchor* and the pyprojects' dependencies
+    disagree, each direction, through other packages too: a stated edge no
+    dependency holds, a dependency the chain does not state, a name no
+    ecosystem package bears."""
+    line = chain_statement(_read(path)[0], anchor)
+    if line is None:
+        return [f"{path.name}: no chain statement at {anchor!r}"]
+    stated = stated_edges(line)
+    members = set(ecosystem_packages(data))
+    unknown = sorted({name for edge in stated for name in edge} - members)
+    if unknown:
+        return [f"{path.name}: the chain names {name}, no ecosystem package" for name in unknown]
+    said, held = _closure(stated), _closure(declared_edges(workspace, data))
+    drift = [
+        f"{path.name}: states {upper} depends on {lower}; its pyproject does not "
+        "(directly or through another)"
+        for lower, upper in sorted(said - held, key=lambda e: (e[1], e[0]))
+    ]
+    drift += [
+        f"{path.name}: {upper} depends on {lower} (its pyproject); the chain does not state it"
+        for lower, upper in sorted(held - said, key=lambda e: (e[1], e[0]))
+    ]
+    return drift
+
+
 def unclassified(workspace: Path = WORKSPACE) -> List[str]:
     """Child repos (a folder holding ``.git``) with no manifest entry."""
     declared = {unit["path"] for unit in load()["units"]}
@@ -381,6 +485,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         else:
             print(f"[{'WROTE' if changed else 'OK'}] dispatch table")
     failures += workflow_drift()
+    absent = [p for p in ecosystem_packages() if not (WORKSPACE / p / "pyproject.toml").is_file()]
+    for path, anchor in CHAIN_STATEMENTS:
+        if not path.is_file() or absent:
+            print(f"[SKIP] chain: no {path.name if not path.is_file() else absent} here")
+            continue
+        failures += chain_drift(path, anchor)
     failures += [
         f"{path}: declared in workspace.json but carries no AGENTS.md (its charter)"
         for path in missing_charters()

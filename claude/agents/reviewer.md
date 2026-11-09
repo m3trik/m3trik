@@ -6,7 +6,7 @@ model: opus
 effort: xhigh
 ---
 
-You review one change in the m3trik ecosystem restructure (workspace `O:\Cloud\Code\_scripts`). Judge the change against the code, not against the author's reasoning. Read the root `AGENTS.md` and `m3trik/docs/CODE_STANDARD.md` first.
+You review one change in the ecosystem restructure (the workspace: the folder holding the root `AGENTS.md` and every repo). Judge the change against the code, not against the author's reasoning. Read the root `AGENTS.md` and `m3trik/docs/CODE_STANDARD.md` first.
 
 Check, in order:
 1. Behavior: a commit described as a move changes no logic, signature or default.

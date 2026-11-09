@@ -470,6 +470,7 @@ class TestSemverVerdict(unittest.TestCase):
                 "bump": None,
                 "reasons": [],
                 "unaccounted": [],
+                "held": [],
                 "baseline": "none (no package here)",
             },
         )
@@ -646,6 +647,7 @@ class TestReleaseBaseline(unittest.TestCase):
                 "bump": "minor",
                 "reasons": ["mod.py::Widget.spin"],
                 "unaccounted": ["mod.py::Widget.spin"],
+                "held": [],
                 "baseline": "the last release (v1.0.0)",
             },
         )
@@ -691,6 +693,396 @@ class TestReleaseBaseline(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     g.release_surface(pkg, "v0.1.0")
         self.assertEqual(list(temp_root.rglob("*.py")), [])
+
+
+class _NoticeFixture(unittest.TestCase):
+    """A package released with a dated notice, then changed: its verdict."""
+
+    NAME = "pkgh"
+
+    def setUp(self):
+        if not g._MIN_WINDOW_DAYS:
+            self.skipTest("pythontk sibling predates the calendar window")
+        self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name)
+        self.pkg = self.root / self.NAME
+
+    def _git(self, *args: str, date: str = "") -> None:
+        env = dict(os.environ)
+        if date:  # the release's commit date, which the window counts from
+            env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = f"{date}T12:00:00"
+        subprocess.run(
+            ["git", "-C", str(self.pkg), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
+
+    def _write(self, version: str, mod: str, init: str = "") -> None:
+        src = self.pkg / self.NAME
+        src.mkdir(parents=True, exist_ok=True)
+        (src / "__init__.py").write_text(f'__version__ = "{version}"\n{init}', encoding="utf-8")
+        (src / "mod.py").write_text(mod, encoding="utf-8")
+        ApiSurface._PARSED.clear()
+
+    def _release(self, version: str, mod: str, date: str) -> None:
+        """*mod* released as ``v<version>``, its commit dated *date*."""
+        self._write(version, mod)
+        if not (self.pkg / ".git").exists():
+            self._git("init")
+        self._git("add", "-A")
+        self._git("commit", "--allow-empty", "-m", version, date=date)
+        self._git("tag", f"v{version}")
+
+    @staticmethod
+    def _noticed(remove_in: str, since: str) -> str:
+        """A module whose ``Widget.spin`` is retired in *remove_in*, noticed *since*."""
+        return (
+            '"""Mod."""\n\n\nclass Widget:\n    """W."""\n\n'
+            f"    @Deprecation.symbol('Widget.hop', remove_in='{remove_in}', since='{since}')\n"
+            '    def spin(self):\n        """S."""\n\n'
+            '    def hop(self):\n        """H."""\n'
+        )
+
+    PLAIN = '"""Mod."""\n\n\nclass Widget:\n    """W."""\n\n    def hop(self):\n        """H."""\n'
+    WITHOUT = PLAIN  # the release that removes spin
+    MOVED = 'MOVED_NAMES = {"Widget.spin": ("other.Widget.spin", "0.2.0")}\n'
+
+    def _verdict(self, today: str) -> dict:
+        with contextlib.redirect_stderr(io.StringIO()):
+            return g.semver_verdict(
+                self.NAME, self.root, today=datetime.date.fromisoformat(today)
+            )
+
+    def _held(self, today: str) -> dict:
+        return {row["key"]: row for row in self._verdict(today)["held"]}
+
+    def _waive(self, reason: str = "no project uses pkgh") -> None:
+        """Declare the back-compat waiver in the package's pyproject."""
+        (self.pkg / "pyproject.toml").write_text(
+            f'[project]\nname = "{self.NAME}"\n\n[tool.m3trik.api]\nno_back_compat = "{reason}"\n',
+            encoding="utf-8",
+        )
+
+
+class TestSemverHoldsANoticesWindow(_NoticeFixture):
+    """``--semver`` refuses a removal its notice still holds (BACKLOG
+    2026-11-04): a name the last release marked retired (a ``Deprecation``
+    notice, a C# ``[Obsolete]``) goes only once ``Deprecation.window_expired``
+    passes at this version and today, a ``MOVED_NAMES`` row or not. Before,
+    either accounted for the removal on sight, so a release could delete a
+    name the day after its first warning. The window counts from the date the
+    notice states, the rule ``--check`` and the runtime roster share."""
+
+    def test_a_removal_inside_its_notices_window_is_held_until_the_date(self):
+        self._release("0.1.0", self._noticed("0.2.0", "2026-10-20"), "2026-10-20")
+        self._write("0.2.0", self.WITHOUT)
+        held = self._held("2026-11-01")
+        self.assertEqual(list(held), ["mod.py::Widget.spin"])
+        self.assertEqual(held["mod.py::Widget.spin"]["not_before"], "2026-11-19")
+        self.assertEqual(held["mod.py::Widget.spin"]["remove_in"], "0.2.0")
+        self.assertEqual(self._held("2026-11-19"), {}, "30 days on, it may go")
+
+    def test_a_moved_names_row_does_not_lift_the_hold(self):
+        """The live case: unitytk's 0.7.0 removals each had a row, and the row
+        alone accounted for them."""
+        self._release("0.1.0", self._noticed("0.2.0", "2026-10-20"), "2026-10-20")
+        self._write("0.2.0", self.WITHOUT, init=self.MOVED)
+        verdict = self._verdict("2026-11-01")
+        self.assertEqual(verdict["unaccounted"], [])
+        self.assertEqual([row["key"] for row in verdict["held"]], ["mod.py::Widget.spin"])
+
+    def test_the_window_counts_from_the_date_the_notice_states_as_check_does(self):
+        """One rule with ``--check``: a notice dated 2026-10-01 that first
+        shipped 2026-10-20 is overdue there on 2026-11-05, so its removal is
+        never held here. Counted from the release instead, a tree could pass
+        neither gate (mayatk's ``check_uv_snapshots``, 2026-11-07 to -09)."""
+        self._release("0.1.0", self._noticed("0.2.0", "2026-10-01"), "2026-10-20")
+        self._write("0.2.0", self._noticed("0.2.0", "2026-10-01"))
+        rows = g.deprecations(g.walk_package(self.pkg, self.root))
+        self.assertEqual(len(g._expired(rows, "0.2.0", datetime.date(2026, 11, 5))), 1)
+        self._write("0.2.0", self.WITHOUT)
+        self.assertEqual(self._held("2026-11-05"), {})
+        self.assertEqual(self._held("2026-10-30")["mod.py::Widget.spin"]["not_before"], "2026-10-31")
+
+    def test_a_version_short_of_remove_in_holds_whatever_the_date(self):
+        self._release("0.1.0", self._noticed("0.3.0", "2026-01-01"), "2026-01-01")
+        self._write("0.2.0", self.WITHOUT, init=self.MOVED)
+        held = self._held("2030-01-01")
+        self.assertEqual(list(held), ["mod.py::Widget.spin"])
+        self.assertEqual(held["mod.py::Widget.spin"]["remove_in"], "0.3.0")
+        self.assertEqual(held["mod.py::Widget.spin"]["not_before"], "", "its date is long past")
+        self.assertTrue(g._hold_text(held["mod.py::Widget.spin"]).startswith("by its version"))
+
+    FORMS = (
+        '"""Mod."""\n\n\nclass Widget:\n    """W."""\n\n'
+        "    OLD = Deprecation.class_attribute(1, 'Widget.NEW', remove_in='0.2.0', since='2026-10-20')\n\n"
+        "    @Deprecation.parameter('old', remove_in='0.2.0', since='2026-10-20')\n"
+        '    def hop(self, old=None):\n        """H."""\n'
+    )
+
+    def test_a_retired_class_attribute_or_keyword_removed_in_its_window_is_held(self):
+        """``Deprecation.class_attribute`` and ``Deprecation.parameter`` are no
+        surface symbol, so their removal is no removed key: measured
+        2026-11-08, pythontk's ``MeshConvert.*_WEB_*`` and blendertk's
+        ``build_manifest(lighting=)`` went in their window with ``held: []``.
+        A notice the release carries and the tree no longer does is its
+        retirement carried out, held to the same window and owing the minor."""
+        self._release("0.1.0", self.FORMS, "2026-10-20")
+        self._write("0.2.0", self.PLAIN)
+        verdict = self._verdict("2026-11-01")
+        held = [row["key"] for row in verdict["held"]]
+        self.assertEqual(len(held), 2, verdict)
+        self.assertTrue(any("class_attribute" in key for key in held), held)
+        self.assertTrue(any("parameter('old')" in key for key in held), held)
+        self.assertEqual(verdict["bump"], "minor")
+        self.assertTrue(set(held) <= set(verdict["reasons"]), verdict)
+        self.assertEqual(self._verdict("2026-11-19")["held"], [], "30 days on, they may go")
+
+    def test_a_retirement_still_in_the_tree_is_no_removal(self):
+        self._release("0.1.0", self.FORMS, "2026-10-20")
+        self._write("0.1.1", self.FORMS)
+        verdict = self._verdict("2026-11-01")
+        self.assertEqual((verdict["held"], verdict["reasons"]), ([], []))
+
+    def test_a_plain_removal_or_a_due_retirement_holds_nothing(self):
+        self._release("0.1.0", self.PLAIN + "\n\ndef gone():\n    \"\"\"G.\"\"\"\n", "2026-01-01")
+        self._write("0.2.0", self.PLAIN)
+        verdict = self._verdict("2026-11-05")
+        self.assertEqual((verdict["held"], verdict["unaccounted"]), ([], ["mod.py::gone"]))
+
+    def test_semver_exits_1_and_names_the_date_the_release_may_ship(self):
+        today = datetime.date.today()
+        since = (today - datetime.timedelta(days=5)).isoformat()
+        not_before = (today + datetime.timedelta(days=25)).isoformat()
+        self._release("0.1.0", self._noticed("0.2.0", since), since)
+        self._write("0.2.0", self.WITHOUT, init=self.MOVED)
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(g, "REPO_ROOT", self.root):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = g.main([self.NAME, "--semver"])
+        self.assertEqual(rc, 1, err.getvalue())
+        self.assertEqual(json.loads(out.getvalue())[0]["held"][0]["not_before"], not_before)
+        self.assertIn(f"not before {not_before}", err.getvalue())
+        self.assertIn("mod.py::Widget.spin", err.getvalue())
+
+    def test_the_changes_report_marks_a_held_removal(self):
+        today = datetime.date.today()
+        since = (today - datetime.timedelta(days=5)).isoformat()
+        self._release("0.1.0", self._noticed("0.2.0", since), since)
+        self._write("0.2.0", self.WITHOUT, init=self.MOVED)
+        with contextlib.redirect_stderr(io.StringIO()):
+            md = g.changes_report(self.NAME, self.root)
+        not_before = (today + datetime.timedelta(days=25)).isoformat()
+        self.assertIn(f"**HELD** until {not_before}", md)
+
+
+class TestBackCompatWaiver(_NoticeFixture):
+    """A package no project uses declares it carries no back-compat
+    (``[tool.m3trik.api] no_back_compat = "<reason>"``): no window holds a
+    removal, none owes a ``MOVED_NAMES`` row, and ``--check`` judges a notice
+    by its version alone; the bump a removal owes is still owed. Before, the
+    maintainer's standing call for unitytk lived in a CHANGELOG sentence the
+    gates could not read. Added: 2026-11-08"""
+
+    def test_a_waived_package_holds_nothing_and_owes_no_row_but_the_minor(self):
+        self._release("0.1.0", self._noticed("0.2.0", "2026-10-20") + "\n\ndef gone():\n    \"\"\"G.\"\"\"\n", "2026-10-20")
+        self._write("0.2.0", self.WITHOUT)
+        before = self._verdict("2026-11-01")
+        self.assertEqual(([r["key"] for r in before["held"]], before["unaccounted"]),
+                         (["mod.py::Widget.spin"], ["mod.py::gone"]))
+        self._waive()
+        verdict = self._verdict("2026-11-01")
+        self.assertEqual((verdict["held"], verdict["unaccounted"]), ([], []))
+        self.assertEqual(verdict["bump"], "minor")
+        self.assertEqual(sorted(verdict["reasons"]), ["mod.py::Widget.spin", "mod.py::gone"])
+        self.assertEqual(verdict["waived"], "no project uses pkgh")
+
+    def test_check_judges_a_waived_packages_notice_by_its_version_alone(self):
+        today = datetime.date.today().isoformat()
+        self._write("0.2.0", self._noticed("0.2.0", today))
+        for waived, want in ((False, 0), (True, 1)):
+            with self.subTest(waived=waived):
+                if waived:
+                    self._waive()
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = g.check([self.NAME], repo_root=self.root)
+                self.assertEqual(rc, want, out.getvalue() + err.getvalue())
+
+    def test_a_waiver_must_say_why(self):
+        self._release("0.1.0", self.PLAIN, "2026-10-20")
+        self._write("0.2.0", self.PLAIN)
+        self._waive("")
+        verdict = self._verdict("2026-11-01")
+        self.assertIsNone(verdict["bump"])
+        self.assertIn("no_back_compat", verdict["baseline"])
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            self.assertEqual(g.check([self.NAME], repo_root=self.root), 1)
+        self.assertIn("no_back_compat", err.getvalue())
+
+    def test_the_changes_report_says_the_waiver(self):
+        today = datetime.date.today()
+        since = (today - datetime.timedelta(days=5)).isoformat()
+        self._release("0.1.0", self._noticed("0.2.0", since), since)
+        self._write("0.2.0", self.WITHOUT)
+        self._waive()
+        with contextlib.redirect_stderr(io.StringIO()):
+            md = g.changes_report(self.NAME, self.root)
+        self.assertIn("- `mod.py::Widget.spin`\n", md)  # listed, never marked HELD
+        self.assertNotIn("— **HELD**", md)
+        self.assertIn("no back-compat: no project uses pkgh", md)
+
+    def test_unitytk_declares_it(self):
+        """The maintainer's standing call, as data the gates read."""
+        reason = g.back_compat_waiver(g.REPO_ROOT / "unitytk")
+        self.assertIn("no project uses unitytk", reason.lower())
+        self.assertEqual(g.back_compat_waiver(g.REPO_ROOT / "pythontk"), "")
+
+
+class TestSemverJudgesARelease(_NoticeFixture):
+    """``--semver --published <PyPI's> --release <this>``: the whole gate as
+    an exit code, for a release no push.ps1 makes (unitytk's and extapps'
+    ``publish.yml``): a removal nothing accounts for, a held one, or a release
+    below the bump its removals owe exits 1. With nothing published, or no
+    release tag in the repo yet (extapps), there is nothing to judge against:
+    exit 0, said; a published version whose tag is missing among others has
+    no verdict (exit 2), as push.ps1 refuses it. Added: 2026-11-08"""
+
+    MOVED = 'MOVED_NAMES = {"Widget.spin": ("other.Widget.spin", "0.2.0")}\n'
+
+    def _main(self, *argv) -> tuple:
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(g, "REPO_ROOT", self.root):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = g.main([self.NAME, "--semver", *argv])
+        return rc, err.getvalue()
+
+    def test_a_release_below_the_bump_its_removal_owes_fails(self):
+        self._release("0.1.0", self._noticed("0.2.0", "2020-01-01"), "2020-01-01")
+        self._write("0.2.0", self.WITHOUT, init=self.MOVED)
+        rc, err = self._main("--published", "0.1.0", "--release", "0.1.1")
+        self.assertEqual(rc, 1, err)
+        self.assertIn(">= 0.2.0", err)
+        self.assertEqual(self._main("--published", "0.1.0", "--release", "0.2.0")[0], 0)
+
+    def test_a_removal_nothing_accounts_for_fails_the_release(self):
+        self._release("0.1.0", self.PLAIN + "\n\ndef gone():\n    \"\"\"G.\"\"\"\n", "2020-01-01")
+        self._write("0.2.0", self.PLAIN)
+        rc, err = self._main("--published", "0.1.0", "--release", "0.2.0")
+        self.assertEqual(rc, 1, err)
+        self.assertIn("mod.py::gone", err)
+        self._waive()
+        self.assertEqual(self._main("--published", "0.1.0", "--release", "0.2.0")[0], 0)
+        self.assertEqual(self._main("--published", "0.1.0", "--release", "0.1.1")[0], 1)
+
+    def test_a_release_that_removes_nothing_passes_as_a_patch(self):
+        self._release("0.1.0", self.PLAIN, "2020-01-01")
+        self._write("0.1.1", self.PLAIN + "\n\ndef new():\n    \"\"\"N.\"\"\"\n")
+        self.assertEqual(self._main("--published", "0.1.0", "--release", "0.1.1")[0], 0)
+
+    def test_nothing_published_or_no_release_tag_yet_has_nothing_to_judge(self):
+        self._write("0.1.0", self.PLAIN)
+        rc, err = self._main("--published", "none", "--release", "0.1.0")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("nothing published", err)
+        self._git("init")
+        self._git("add", "-A")
+        self._git("commit", "-m", "work")
+        rc, err = self._main("--published", "0.0.9", "--release", "0.1.0")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("no release tag yet", err)
+
+    def test_nothing_published_beside_a_release_tag_has_no_verdict(self):
+        """``none`` is what a failed PyPI read once wrote too (``|| echo
+        none``): with a release tag here, a first release it cannot be, so it
+        is no verdict, never a pass."""
+        self._release("0.1.0", self.PLAIN, "2020-01-01")
+        self._write("0.1.1", self.PLAIN)
+        rc, err = self._main("--published", "none", "--release", "0.1.1")
+        self.assertEqual(rc, 2, err)
+        self.assertIn("v0.1.0", err)
+
+    def test_the_workflows_read_pypi_or_fail_never_guess_none(self):
+        """Each standalone ``publish.yml``'s version step, run under bash with
+        a stand-in ``pip`` and ``python``: a version PyPI lists is the
+        baseline, a package PyPI has never heard of is ``none``, and any other
+        pip failure (the network) fails the step instead of reading as a first
+        release."""
+        import shutil
+        import yaml
+
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash")
+        pips = {
+            "listed": ("echo 'unitytk (0.6.0)'; echo 'Available versions: 0.6.0, 0.5.0'", 0),
+            "unknown": ("echo 'ERROR: No matching distribution found for pkg' >&2", 1),
+            "offline": ("echo 'ERROR: Could not fetch URL: connection error' >&2", 1),
+        }
+        for name in g.standalone_packages():
+            path = g.REPO_ROOT / name / ".github" / "workflows" / "publish.yml"
+            if not path.is_file():
+                continue
+            steps = yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"]["version"]["steps"]
+            script = next(s["run"] for s in steps if s.get("id") == "version")
+            for mode, (body, code) in pips.items():
+                with self.subTest(package=name, pip=mode), tempfile.TemporaryDirectory() as td:
+                    bin_dir = Path(td) / "bin"
+                    bin_dir.mkdir()
+                    (bin_dir / "pip").write_text(f"#!/bin/sh\n{body}\nexit {code}\n", newline="\n")
+                    (bin_dir / "python").write_text(
+                        '#!/bin/sh\necho "$@" > "$CALLS"\necho "publish=true"\n', newline="\n"
+                    )
+                    out = Path(td) / "github_output"
+                    env = dict(
+                        os.environ,
+                        PATH=f"{bin_dir.as_posix()}:/usr/bin:/bin",
+                        CALLS=str(Path(td) / "calls"),
+                        GITHUB_OUTPUT=str(out),
+                        BASE="",
+                        LC_ALL="C.UTF-8",
+                    )
+                    for stub in bin_dir.iterdir():
+                        stub.chmod(0o755)
+                    done = subprocess.run(
+                        [bash, "-e", "-c", script], env=env, capture_output=True, text=True, timeout=60
+                    )
+                    said = done.stdout + done.stderr
+                    if mode == "offline":
+                        self.assertNotEqual(done.returncode, 0, said)
+                        continue
+                    self.assertEqual(done.returncode, 0, said)
+                    want = "0.6.0" if mode == "listed" else "none"
+                    self.assertIn(f"--published {want}", (Path(td) / "calls").read_text(), said)
+                    self.assertIn(f"published={want}", out.read_text(), said)
+
+    def test_every_standalone_publish_runs_the_gate_before_it_publishes(self):
+        """The workflows that publish a package no cascade releases (unitytk,
+        extapps) run it: a ``semver`` job ``publish`` needs, judging the
+        version it publishes against PyPI's."""
+        import yaml
+
+        for name in g.standalone_packages():
+            path = g.REPO_ROOT / name / ".github" / "workflows" / "publish.yml"
+            if not path.is_file():
+                continue
+            with self.subTest(package=name):
+                jobs = yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"]
+                self.assertIn("semver", jobs["publish"]["needs"])
+                run = " ".join(step.get("run", "") for step in jobs["semver"]["steps"])
+                self.assertIn(f"check_api_surface.py {name} --semver --published", run)
+                self.assertIn("--release", run)
+                self.assertIn("published", jobs["version"]["outputs"])
+
+    def test_a_published_version_whose_tag_is_missing_has_no_verdict(self):
+        self._release("0.1.0", self.PLAIN, "2020-01-01")
+        self._write("0.1.2", self.PLAIN)
+        rc, err = self._main("--published", "0.1.1", "--release", "0.1.2")
+        self.assertEqual(rc, 2, err)
+        self.assertIn("v0.1.1", err)
 
 
 class TestCheckGate(unittest.TestCase):
@@ -2116,19 +2508,19 @@ namespace Test.Core
             capture_output=True,
         )
 
-    def _released_then(self, now: str, init: str = "") -> None:
-        """v0.1.0 with :attr:`RELEASED` under ``pkgc/templates``; then *now*
-        under ``Packages/``, the declaration (and *init*) in ``__init__``."""
+    def _released_then(
+        self, now: str, init: str = "", released: str = RELEASED, declared: str = DECLARED
+    ) -> None:
+        """v0.1.0 with *released* under ``pkgc/templates``; then *now*
+        under ``Packages/``, *declared* (and *init*) in ``__init__``."""
         self._put(f"{self.NAME}/__init__.py", '__version__ = "0.1.0"\n')
-        self._put(f"{self.NAME}/templates/Core/Json.cs", self.RELEASED)
+        self._put(f"{self.NAME}/templates/Core/Json.cs", released)
         self._git("init")
         self._git("add", "-A")
         self._git("commit", "-m", "v0.1.0")
         self._git("tag", "v0.1.0")
         (self.pkg / self.NAME / "templates" / "Core" / "Json.cs").unlink()
-        self._put(
-            f"{self.NAME}/__init__.py", f'__version__ = "0.2.0"\n{self.DECLARED}{init}'
-        )
+        self._put(f"{self.NAME}/__init__.py", f'__version__ = "0.2.0"\n{declared}{init}')
         self._put("Packages/com.test.pkgc/Core/Json.cs", now)
 
     def _verdict(self) -> dict:
@@ -2153,6 +2545,7 @@ namespace Test.Core
                 "bump": "minor",
                 "reasons": removed,
                 "unaccounted": removed,
+                "held": [],
                 "baseline": "the last release (v0.1.0)",
             },
         )
@@ -2199,10 +2592,154 @@ namespace Test.Core
                 if want:
                     self.assertIn("pkgc/Test.Core::Json.Dump (was due in 0.2.0)", err.getvalue())
 
+    def test_a_removed_obsolete_inside_its_window_is_held(self):
+        """The C# half of BACKLOG 2026-11-04: an ``[Obsolete]`` the release
+        states as going in 0.2.0, deprecated today, removed in 0.2.0."""
+        if not g._MIN_WINDOW_DAYS:
+            self.skipTest("pythontk sibling predates the calendar window")
+        today = datetime.date.today()
+        released = self.RELEASED.replace(
+            "removed in 0.2.0.", f"this goes in pkgc 0.2.0 (deprecated {today.isoformat()})."
+        )
+        now = released.replace(
+            f'        [System.Obsolete("Use Write; this goes in pkgc 0.2.0 (deprecated {today.isoformat()}).")]\n'
+            "        public static string Dump(object value) => Write(value);\n",
+            "",
+        )
+        self._released_then(now, released=released)
+        verdict = self._verdict()
+        self.assertEqual(verdict["unaccounted"], [])
+        self.assertEqual(
+            [(row["key"], row["not_before"]) for row in verdict["held"]],
+            [("Test.Core::Json.Dump", (today + datetime.timedelta(days=30)).isoformat())],
+        )
+
+    def test_a_release_predating_the_declaration_is_read_where_it_kept_its_csharp(self):
+        """unitytk's declaration names the folder the C# moved to alone: the
+        release, which predates it, kept its C# in the package's ``templates``.
+        Read nowhere, the release had no C# and every removal went unseen."""
+        self._released_then(
+            self.RELEASED.replace("        public static void Old() { }\n", ""),
+            declared='CSHARP_SOURCES = ("../Packages/com.test.pkgc",)\n',
+        )
+        self.assertEqual(self._verdict()["unaccounted"], ["Test.Core::Json.Old"])
+
     def test_a_package_declaring_no_csharp_is_judged_as_before(self):
         self._put(f"{self.NAME}/__init__.py", '__version__ = "0.1.0"\n')
         self._put("Packages/com.test.pkgc/Core/Json.cs", self.RELEASED)  # declared by none
         self.assertIsNone(g.walk_csharp(self.pkg, self.root))
+
+
+
+class TestStandaloneFloors(unittest.TestCase):
+    """``--floors``: a standalone package's hand-set floor on an ecosystem
+    package names a release that carries every name its Python reaches there.
+    No cascade ratchets it, so a new upstream name used under an old floor
+    installed nowhere: unitytk called ``ptk.FolderDeliverer`` (added after
+    0.20.0) under ``pythontk>=0.20.0``."""
+
+    UPS_RELEASED = (
+        '"""Mod."""\n\n\nclass Widget:\n    """W."""\n\n'
+        '    def spin(self):\n        """S."""\n'
+    )
+    UPS_NOW = UPS_RELEASED + (
+        '\n    def turn(self):\n        """T."""\n\n\nclass Gadget:\n    """G."""\n'
+    )
+    CONSUMER = (
+        "import ups as u\n"
+        "from ups import Widget\n\n\n"
+        "def run():\n"
+        "    from ups.mod import Gadget as G\n\n"
+        "    Widget.spin()\n"
+        "    return u.Gadget, u.Widget.turn, G\n"
+    )
+
+    _git = staticmethod(TestReleaseBaseline._git)
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name)
+        ups = self.root / "ups" / "ups"
+        ups.mkdir(parents=True)
+        (ups / "__init__.py").write_text('__version__ = "0.1.0"\n', encoding="utf-8")
+        (ups / "mod.py").write_text(self.UPS_RELEASED, encoding="utf-8")
+        self._git(self.root / "ups", "init")
+        self._git(self.root / "ups", "add", "-A")
+        self._git(self.root / "ups", "commit", "-m", "release")
+        self._git(self.root / "ups", "tag", "v0.1.0")
+        (ups / "mod.py").write_text(self.UPS_NOW, encoding="utf-8")
+        cons = self.root / "cons" / "cons"
+        cons.mkdir(parents=True)
+        (cons / "__init__.py").write_text("", encoding="utf-8")
+        (cons / "use.py").write_text(self.CONSUMER, encoding="utf-8")
+        ApiSurface._PARSED.clear()
+
+    def _floor(self, spec: str) -> None:
+        (self.root / "cons" / "pyproject.toml").write_text(
+            f'[project]\nname = "cons"\ndependencies = ["{spec}", "numpy>=1.0"]\n',
+            encoding="utf-8",
+        )
+
+    def _problems(self):
+        return g.floor_problems("cons", self.root, ecosystem=("ups", "cons"))
+
+    def test_a_name_the_floors_release_lacks_is_named_with_where_it_is_used(self):
+        self._floor("ups>=0.1.0")
+        problems, _notes = self._problems()
+        self.assertEqual(
+            problems,
+            [
+                "cons: ups>=0.1.0 (v0.1.0) lacks Gadget (cons/cons/use.py:9), "
+                "Widget.turn (cons/cons/use.py:9), mod::Gadget (cons/cons/use.py:6)"
+            ],
+        )
+
+    def test_a_floor_on_the_pending_release_reads_the_working_tree(self):
+        """A floor above the newest tag waits for the upstream to publish
+        first (push.ps1, PyPI); what the floor promises is today's source."""
+        self._floor("ups>=0.2.0")
+        problems, notes = self._problems()
+        self.assertEqual(problems, [])
+        self.assertEqual(
+            notes, ["cons: ups>=0.2.0 is unreleased (newest v0.1.0): read the working tree"]
+        )
+
+    def test_a_name_the_working_tree_lacks_too_is_named(self):
+        self._floor("ups>=0.2.0,<0.3")
+        (self.root / "cons" / "cons" / "more.py").write_text(
+            "import ups\n\nups.Gizmo()\n", encoding="utf-8"
+        )
+        problems, _notes = self._problems()
+        self.assertEqual(
+            problems, ["cons: ups>=0.2.0 (the working tree) lacks Gizmo (cons/cons/more.py:3)"]
+        )
+
+    def test_a_released_floor_with_no_tag_here_is_unverifiable_and_says_so(self):
+        self._floor("ups>=0.0.9")
+        problems, _notes = self._problems()
+        self.assertEqual(
+            problems, ["cons: ups>=0.0.9 names no tag v0.0.9 in ups (fetch its tags)"]
+        )
+
+    def test_no_release_tags_at_all_is_a_note_not_a_verdict(self):
+        """A shallow CI checkout carries no tags: nothing to read, said."""
+        self._git(self.root / "ups", "tag", "-d", "v0.1.0")
+        self._floor("ups>=0.1.0")
+        problems, notes = self._problems()
+        self.assertEqual(problems, [])
+        self.assertEqual(notes, ["cons: ups has no release tag here (fetch its tags): unchecked"])
+
+    def test_main_exits_1_on_a_gap_and_0_once_the_floor_names_the_release(self):
+        for spec, want in (("ups>=0.1.0", 1), ("ups>=0.2.0", 0)):
+            with self.subTest(spec=spec):
+                self._floor(spec)
+                out = io.StringIO()
+                with mock.patch.object(g, "REPO_ROOT", self.root), mock.patch.object(
+                    g, "ECOSYSTEM_PACKAGES", ("ups", "cons")
+                ), contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                    rc = g.main(["cons", "--floors"])
+                self.assertEqual(rc, want, out.getvalue())
 
 
 if __name__ == "__main__":

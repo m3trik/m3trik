@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The m3trik plugin's hooks: one stdlib script for every event it answers.
+"""The workspace plugin's hooks: one stdlib script for every event it answers.
 
     hooks.py session-start   SessionStart: the backlog, graded in one line of context
     hooks.py edit            PostToolUse (async): note a file the turn changed
@@ -281,4 +281,4 @@ if __name__ == "__main__":
     try:
         handler(_input())
     except Exception as exc:  # a hook must never break the session it serves
-        sys.stderr.write(f"m3trik hook {sys.argv[1]}: {type(exc).__name__}: {exc}\n")
+        sys.stderr.write(f"plugin hook {sys.argv[1]}: {type(exc).__name__}: {exc}\n")

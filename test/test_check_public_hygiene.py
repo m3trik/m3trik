@@ -7,6 +7,7 @@ repo would be the very leak the gate exists to stop.
 """
 
 import io
+import json
 import os
 import shutil
 import stat
@@ -197,6 +198,140 @@ class TestMain(_RepoCase):
         code, out = self.run_main("broken")
         self.assertEqual(code, 2)
         self.assertIn("git", out)
+
+
+class TestMachinePaths(_RepoCase):
+    """A committed sample binary carries no folder of the machine that made it.
+
+    Bug: every unitytk sample FBX held its producer's user name and folders
+    (the staging file under the user's temp folder, the Maya project folder,
+    each map's source), and the gate passed: it reads text and skips binaries.
+    Fixed: 2026-11-08 -- each binary under a ``Samples~`` folder is searched
+    for a user-home or machine path, with or without the denylist."""
+
+    FBX_HEAD = b"Kaydara FBX Binary  \x00\x1a\x00"
+
+    def test_a_user_home_inside_a_sample_binary_is_reported(self):
+        for leaked in (
+            b"C:\\Users\\someone\\AppData\\Local\\Temp\\stage\\room.fbx",
+            b"C:/Users/someone/proj/sourceimages/wood.png",
+            b"/home/someone/proj/wood.png",
+            b"/Users/someone/proj/wood.png",
+            b"D:\\projects\\room\\sourceimages\\wood.png",
+        ):
+            with self.subTest(leaked=leaked):
+                self.write("pkg/Samples~/Room/Room.fbx", self.FBX_HEAD + b"\x00\x05" + leaked + b"\x00")
+                found = gate.scan_machine_paths(self.repo, "pubrepo")
+                self.assertEqual([f.path for f in found], ["pkg/Samples~/Room/Room.fbx"], found)
+                self.assertIn("someone" if b"someone" in leaked else "projects", found[0].text)
+
+    def test_a_bare_file_name_and_a_relative_path_are_not_machine_paths(self):
+        self.write(
+            "pkg/Samples~/Room/Room.fbx",
+            self.FBX_HEAD + b"\x00wood.png\x00..\\maps\\wood.png\x00\x89PNG\x01C:\x02",
+        )
+        self.assertEqual(gate.scan_machine_paths(self.repo, "pubrepo"), [])
+
+    def test_every_publishable_binary_is_searched_and_text_is_the_denylists(self):
+        """A committed test fixture publishes as a sample does (the repo, its
+        sdist): a Maya-written fixture FBX named the workspace's own drive
+        folders while the gate searched ``Samples~`` alone. Text is the
+        denylist's. Widened: 2026-11-08"""
+        self.write("test/assets/fixture.bin", b"\x00D:\\work\\repo\\test_assets\\x.png\x00")
+        self.write("pkg/Samples~/README.md", "C:\\Users\\someone\\x.png\n")
+        found = gate.scan_machine_paths(self.repo, "pubrepo")
+        self.assertEqual([f.path for f in found], ["test/assets/fixture.bin"], found)
+
+    def test_a_drive_letter_by_chance_in_compressed_bytes_is_no_path(self):
+        """Measured in two committed PNGs' compressed streams: ``K:/9/j8`` and
+        ``i:\\./KmN``. A folder of a path is a name of two characters or more."""
+        self.write(
+            "test/assets/noise.png",
+            b"\x89PNG\r\n\x1a\n\x00K:/9/j8\x00i:\\./KmN\x00",
+        )
+        self.assertEqual(gate.scan_machine_paths(self.repo, "pubrepo"), [])
+
+    def test_main_fails_on_one_even_without_a_denylist(self):
+        self.write("pkg/Samples~/Room/Room.fbx", self.FBX_HEAD + b"\x00C:\\Users\\someone\\a.fbx\x00")
+        code, out = self.run_main("pubrepo")
+        self.assertEqual(code, 1)
+        self.assertIn("pubrepo/pkg/Samples~/Room/Room.fbx", out)
+        os.remove(self.denylist)
+        code, out = self.run_main("pubrepo")
+        self.assertEqual(code, 1, out)
+        self.assertIn("machine path", out)
+
+    def test_clean_samples_pass_and_a_missing_denylist_still_skips(self):
+        self.write("pkg/Samples~/Room/Room.fbx", self.FBX_HEAD + b"\x00Room.png\x00")
+        self.assertEqual(self.run_main("pubrepo")[0], 0)
+        os.remove(self.denylist)
+        code, out = self.run_main("pubrepo")
+        self.assertEqual(code, 0)
+        self.assertIn("SKIP", out)
+
+
+class TestPersonalPaths(_RepoCase):
+    """Text naming the scanning machine's own folders -- the workspace's
+    absolute root, the user's home -- is published with the repo. The
+    binary scan read binaries alone and the denylist names clients, so
+    m3trik shipped the workspace root in its inventory, its agent briefs and
+    push.ps1 (measured 2026-11-08). The rule is derived, never listed: no
+    personal path is written in this public repo. Added: 2026-11-08"""
+
+    def test_each_spelling_of_the_roots_matches_and_a_neighbour_does_not(self):
+        pattern = gate.personal_paths(workspace="D:/Work/Code/_ws", home="C:/Users/jdoe")
+        for text in (
+            r"D:\Work\Code\_ws\pythontk\test",
+            "d:/work/code/_ws",
+            "/d/Work/Code/_ws/x.py",
+            r'"D:\\Work\\Code\\_ws"',
+            r"C:\Users\jdoe\AppData",
+            "/c/Users/jdoe/.claude",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNotNone(pattern.search(text))
+        for text in (
+            r"C:\Users\jdoe2\x",
+            r"D:\Work\Code\_wsx",
+            r"C:\Users\someone\x.png",
+            r"C:\Program Files\Autodesk\Maya2025\bin\mayapy.exe",
+            "Work/Code/_ws",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(pattern.search(text))
+
+    def test_a_posix_root_matches_too(self):
+        pattern = gate.personal_paths(workspace="/home/runner/work/ws", home="/home/runner")
+        self.assertIsNotNone(pattern.search("cd /home/runner/work/ws/m3trik"))
+        self.assertIsNone(pattern.search("/home/runner2/x"))
+
+    def test_main_fails_on_its_own_root_in_text_with_or_without_a_denylist(self):
+        self.write("docs/README.md", f"Generated from `{self.root}` today.\n")
+        code, out = self.run_main("pubrepo")
+        self.assertEqual(code, 1, out)
+        self.assertIn("pubrepo/docs/README.md:1", out)
+        self.assertIn("this machine's own", out)
+        os.remove(self.denylist)
+        code, out = self.run_main("pubrepo")
+        self.assertEqual(code, 1, out)
+
+    def test_a_relative_root_passes(self):
+        self.write("docs/README.md", "Generated from `../..` today.\n")
+        self.assertEqual(self.run_main("pubrepo")[0], 0)
+
+
+class TestPublicRepos(unittest.TestCase):
+    def test_every_repo_that_publishes_a_package_is_scanned(self):
+        """A repo private on GitHub still publishes once its package reaches PyPI:
+        the source tarball carries its tests and CHANGELOG. unitytk's did, in
+        every release, while the gate skipped it as private."""
+        manifest = os.path.join(os.path.dirname(HERE), "workspace.json")
+        with open(manifest, encoding="utf-8") as handle:
+            units = json.load(handle)["units"]
+        published = sorted(u["path"] for u in units if u.get("release", "none") != "none")
+        self.assertTrue(published, "workspace.json declares no released unit")
+        skipped = [name for name in published if name not in gate.PUBLIC_REPOS]
+        self.assertEqual(skipped, [], "these publish to PyPI, so the gate must scan them")
 
 
 if __name__ == "__main__":

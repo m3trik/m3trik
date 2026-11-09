@@ -38,8 +38,14 @@ import argparse
 import sys
 from pathlib import Path
 
+SCRIPTS = Path(__file__).resolve().parent
+if str(SCRIPTS) not in sys.path:  # a test may load this file by path
+    sys.path.insert(0, str(SCRIPTS))
+
+import sync_scene_records as records  # noqa: E402  (the Unity package's declared root)
+
 # This file: _scripts/m3trik/scripts/sync_shadow_shaders.py -> root is parents[2].
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = SCRIPTS.parents[1]
 SOURCE = REPO_ROOT / "pythontk" / "pythontk" / "geo_utils" / "shadow_horizon.glsl"
 
 BEGIN = "// >>> BEGIN GENERATED shadow_horizon body"
@@ -81,13 +87,7 @@ def mirrors(repo_root: Path = REPO_ROOT):
         if not root.is_dir():
             continue
         if relative is None:  # the Unity package's include: found by name under its declared root
-            # A sibling script: on the path when this one runs, not when a test loads it by file.
-            here = str(Path(__file__).resolve().parent)
-            if here not in sys.path:
-                sys.path.insert(0, here)
-            from sync_scene_records import unity_file
-
-            out.append((unity_file("ShadowPlaneHorizon.hlsl"), language))
+            out.append((records.unity_file("ShadowPlaneHorizon.hlsl", root), language))
             continue
         out.append((root / relative, language))
     return out

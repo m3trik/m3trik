@@ -336,16 +336,16 @@ class TestDefaultMemoryDir(unittest.TestCase):
 
     def test_slug_folds_colon_separators_and_underscores(self):
         with patch.dict(os.environ, {"CLAUDE_MEMORY_DIR": ""}, clear=False):
-            with patch.object(guard, "REPO_ROOT", Path(r"o:\Cloud\Code\_scripts")):
+            with patch.object(guard, "REPO_ROOT", Path(r"d:\Work\Code\_ws")):
                 got = guard._default_memory_dir()
-        self.assertEqual(got.parent.name, "o--Cloud-Code--scripts")
+        self.assertEqual(got.parent.name, "d--Work-Code--ws")
         self.assertEqual(got.name, "memory")
 
     def test_posix_style_root_slugs_identically(self):
         with patch.dict(os.environ, {"CLAUDE_MEMORY_DIR": ""}, clear=False):
-            with patch.object(guard, "REPO_ROOT", Path("o:/Cloud/Code/_scripts")):
+            with patch.object(guard, "REPO_ROOT", Path("d:/Work/Code/_ws")):
                 got = guard._default_memory_dir()
-        self.assertEqual(got.parent.name.lower(), "o--cloud-code--scripts")
+        self.assertEqual(got.parent.name.lower(), "d--work-code--ws")
 
     def test_every_non_alphanumeric_folds_like_claude_code(self):
         """Claude Code folds EVERY non-alphanumeric, so a Linux home with a dot
@@ -360,10 +360,13 @@ class TestDefaultMemoryDir(unittest.TestCase):
             self.assertEqual(guard._default_memory_dir(), Path(r"C:\elsewhere\mem"))
 
     def test_module_ships_no_hardcoded_workspace_path(self):
-        """Regression guard: the literal slug must not come back."""
+        """Regression guard: the literal slug must not come back. This
+        workspace's own, derived here, never spelled in a public repo."""
         source = Path(guard.__file__).read_text(encoding="utf-8")
+        with patch.dict(os.environ, {"CLAUDE_MEMORY_DIR": ""}, clear=False):
+            slug = guard._default_memory_dir().parent.name
         self.assertNotIn(
-            "o--Cloud-Code--scripts",
+            slug,
             source,
             "a machine-specific project slug is hardcoded in a public repo again",
         )
@@ -382,7 +385,7 @@ class TestPowerShellMemoryDirParity(unittest.TestCase):
     """
 
     PS_GUARD = M3TRIK_DIR / "scripts" / "Invoke-ContextBudgetCheck.ps1"
-    ROOT = r"O:\Cloud\Code\_scripts"
+    ROOT = r"D:\Work\Code\_ws"
 
     def _shipped_slug_expression(self) -> str:
         m = re.search(

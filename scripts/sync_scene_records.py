@@ -16,7 +16,7 @@ records when measured 2026-09-18):
 2. **The Unity importers' channel list.**  ``unitytk``'s core
    ``UnitytkRecords.cs`` declares each record it reads once, as a
    ``UnitytkRecords`` constant on a line naming its importer
-   (``public const string Audio = "audio"; // channel -> AudioEventImporter``).  That
+   (``public const string Audio = "audio"; // channel -> AnimationAudioImporter``).  That
    set must equal the deliverable records declared with the ``"unity"``
    consumer -- a record Unity reads but pythontk does not declare (or the
    reverse) is a contract nobody owns -- and each must declare its shape, so
@@ -27,12 +27,12 @@ records when measured 2026-09-18):
    :data:`PRODUCER_DIVERGENCES` ledgers with a reason (read from source by
    AST, so neither DCC needs to be importable here).
 4. **The WebXR runtime's records module.**  ``kernel/records.js`` in
-   pythontk's preview (:data:`WEB_RECORDS`) is generated whole: every block a
-   GLB carries (``RecordSpec.glb``, and the handoff) with its key and version,
-   the keys of the blocks retired before them (``SceneRecords.RETIRED_BLOCKS``),
-   and a JSDoc typedef for each declared manifest shape
-   (``GlbBlock.shape``), so the page's features read a block by the
-   declaration and ``tsc --checkJs`` holds them to its fields.
+   pythontk's preview (:data:`WEB_RECORDS`) is generated whole: every record
+   a GLB carries as it stands (``RecordSpec.glb_verbatim``, and the handoff)
+   with its key and version, the keys of the blocks retired before them
+   (``SceneRecords.RETIRED_BLOCKS``), and a JSDoc typedef for each declared
+   record shape (``RecordSpec.shape``), so the page's features read a block
+   by the declaration and ``tsc --checkJs`` holds them to its fields.
 
 5. **The deliverable format reference.**  ``DELIVERABLE_FORMAT.md`` beside
    the declarations (:data:`FORMAT_MD`) is generated whole: every record a
@@ -41,8 +41,9 @@ records when measured 2026-09-18):
    outside reader is handed, which cannot drift from what the readers enforce.
 6. **The published contract.**  ``scene_records.schema.json`` beside it
    (:data:`SCHEMA_JSON`) is ``SceneRecords.json_schema()`` whole: every
-   record's and block's shape, version and readers, the frame and the
-   transport, as one JSON Schema a reader in any language validates against.
+   record's and block's shape, version and readers, the frame, the
+   transport and the GLB media transport, as one JSON Schema a reader in any
+   language validates against.
 
 Each reader's generated types are its own view of a shape
 (``SchemaSpec.json_schema(reader=)``): a field another reader's extension
@@ -108,7 +109,7 @@ HOSTS = {"mayatk": "maya", "blendertk": "blender"}
 #: name -> (the DCC that lacks it, why). Delete a row when the port lands.
 PRODUCER_DIVERGENCES = {}
 
-#: ``public const string Audio = "audio";  // channel -> AudioEventController``
+#: ``public const string Audio = "audio";  // channel -> AnimationAudioImporter``
 #: -- the key's one spelling in unitytk, and the importer that reads it.
 _UNITY_CHANNEL = re.compile(
     r'const[ \t]+string[ \t]+\w+[ \t]*=[ \t]*"(?P<key>\w+)";[ \t]*'
@@ -210,29 +211,31 @@ def splice(text: str, body: str) -> str:
     return text[: start + len(BEGIN)] + "\n" + body + "\n" + text[end:]
 
 
-def unity_package() -> Path:
+def unity_package(unitytk: Path = UNITYTK) -> Path:
     """unitytk's Unity package folder: the ``root`` its pyproject declares in
     ``[tool.m3trik.layers.csharp]`` (the declaration check_layers.py and
-    check_csharp.py read), so moving the tree is one edit there."""
+    check_csharp.py read), so moving the tree is one edit there. *unitytk*:
+    the repo (another workspace's, say)."""
     try:
         import tomllib
     except ImportError:  # pragma: no cover - Python < 3.11
         import tomli as tomllib
 
-    data = tomllib.loads((UNITYTK / "pyproject.toml").read_text(encoding="utf-8"))
+    data = tomllib.loads((unitytk / "pyproject.toml").read_text(encoding="utf-8"))
     root = data.get("tool", {}).get("m3trik", {}).get("layers", {}).get("csharp", {})
     if not root.get("root"):
         raise ValueError(
             "unitytk/pyproject.toml declares no [tool.m3trik.layers.csharp] root: "
             "declare the Unity package's folder"
         )
-    return UNITYTK / root["root"]
+    return unitytk / root["root"]
 
 
-def unity_file(name: str) -> Path:
-    """The one file named *name* under the Unity package: a hand-written
-    partner a generated file sits beside, wherever a move put it."""
-    package = unity_package()
+def unity_file(name: str, unitytk: Path = UNITYTK) -> Path:
+    """The one file named *name* under the Unity package (of the *unitytk*
+    repo): a hand-written partner a generated file sits beside, wherever a
+    move put it."""
+    package = unity_package(unitytk)
     found = sorted(package.rglob(name))
     if len(found) != 1:
         raise FileNotFoundError(
@@ -413,48 +416,88 @@ def render_typedef(name: str, schema: dict) -> list:
     return lines
 
 
+def _camel(name: str) -> str:
+    """A Python field name as a JavaScript property's (``mime_type`` -> ``mimeType``)."""
+    head, *rest = name.split("_")
+    return head + "".join(part[:1].upper() + part[1:] for part in rest)
+
+
+def render_media_js(records) -> list:
+    """The lines of ``kernel/records.js`` stating how a file a record names
+    rides a GLB (``SceneRecords.GLB_MEDIA``, each field camel-cased), and the
+    UV set a lightmap is read through (``LightmapRecord.UV_SET``)."""
+    from dataclasses import asdict
+
+    fields = []
+    for name, value in asdict(records.GLB_MEDIA).items():
+        if isinstance(value, (list, tuple)):
+            value = f"Object.freeze([{', '.join(repr(v) for v in value)}])"
+        else:
+            value = repr(value)
+        fields.append(f"{_camel(name)}: {value}")
+    lines = ["/**"]
+    lines += [f" * {line}" for line in _wrap(_plain(records.GLB_MEDIA.text) + ".")]
+    lines += [
+        " * The fields are SceneRecords.GLB_MEDIA's, camel-cased.",
+        " * @type {Readonly<{name: string, mimeType: string, scale: string, "
+        "hdrWeb: ReadonlyArray<string>, radiance: string}>}",
+        " */",
+        f"export const GLB_MEDIA = Object.freeze({{ {', '.join(fields)} }});",
+    ]
+    uv_set = getattr(records.shape(records.LIGHTMAPS), "UV_SET", None)
+    if uv_set is not None:
+        lines += [
+            "/** The UV set every lightmap the `lightmaps` record names is read",
+            " * through (LightmapRecord.UV_SET): no entry names one. @type {number} */",
+            f"export const LIGHTMAP_UV_SET = {int(uv_set)};",
+        ]
+    return lines
+
+
 def render_records_js(records=None) -> str:
-    """``kernel/records.js``: every block a GLB carries -- each record's
-    (``RecordSpec.glb``) and the handoff -- and the JSDoc typedefs of each
-    declared block shape (:data:`WEB_RECORDS`)."""
+    """``kernel/records.js``: every block a GLB carries -- each record it
+    carries as it stands (``RecordSpec.glb_verbatim``) and the handoff -- and
+    the JSDoc typedefs of each declared shape (:data:`WEB_RECORDS`)."""
     records = records or _records()
     names = _spec_names(records)
     lines = ["/*", f"  {_wrap(GENERATED, 72)[0]}"]
     lines += [f"  {line}" for line in _wrap(GENERATED, 72)[1:]]
     lines += [
         "",
-        "  The blocks a deliverable GLB carries in its root extras: each one's key",
-        "  -- its record's own -- and the schema version this page reads, and,",
-        "  where it is declared, its shape. A feature reads a block by these,",
-        "  never by a spelling of its own.",
+        "  The records a deliverable GLB carries in its root extras -- each one",
+        "  as it stands, a block in this page's word (readBlock) -- with its key,",
+        "  the schema version this page reads, and, where it is declared, its",
+        "  shape. A feature reads a block by these, never by a spelling of its own.",
         "*/",
         "",
         "/**",
-        " * A block a GLB carries in its root extras.",
-        " * @typedef {object} GlbBlock",
+        " * A record a GLB carries in its root extras, as it stands.",
+        " * @typedef {object} GlbRecord",
         " * @property {string} key Its key in the root extras: its record's own.",
         " * @property {number} version Its schema version: the one this page reads.",
         " */",
         "",
     ]
     blocks = [
-        (names[id(spec)], spec.key, spec.glb.version) for spec in records.glb_records()
+        (names[id(spec)], spec.key, spec.version)
+        for spec in records.glb_records()
     ]
     blocks.append(("HANDOFF", _handoff().KEY, _handoff().VERSION))
     for name, key, version in blocks:
         lines += [
-            f"/** The `{key}` block. @type {{Readonly<GlbBlock>}} */",
+            f"/** The `{key}` record. @type {{Readonly<GlbRecord>}} */",
             f"export const {name} = Object.freeze({{ key: '{key}', version: {version} }});",
         ]
     lines += [
-        "/** Every block above, for a pass over all of them. @type {ReadonlyArray<Readonly<GlbBlock>>} */",
+        "/** Every record above, for a pass over all of them. @type {ReadonlyArray<Readonly<GlbRecord>>} */",
         f"export const BLOCKS = Object.freeze([{', '.join(name for name, _key, _version in blocks)}]);",
         "/** Root-extras keys of blocks a GLB written before these carries, which",
         " * nothing reads (SceneRecords.RETIRED_BLOCKS): a file holding one is",
         " * re-exported. @type {ReadonlyArray<string>} */",
         f"export const RETIRED_BLOCK_KEYS = Object.freeze([{', '.join(repr(key) for key in records.RETIRED_BLOCKS)}]);",
     ]
-    shapes = [records.glb_shape(spec) for spec in records.glb_records()]
+    lines += render_media_js(records)
+    shapes = [records.shape(spec) for spec in records.glb_records()]
     shapes.append(records.shape(records.HANDOFF))
     shapes = [shape for shape in shapes if shape is not None]
     for shape in shapes:
@@ -816,7 +859,8 @@ def render_record_cs(spec, shape) -> str:
 def record_cs_meta(spec) -> str:
     """The ``.meta`` a generated record type ships with: a GUID derived from
     the record's key alone, so regenerating -- or moving its reader to another
-    folder -- never mints a new one (unitytk deploys every file with its own)."""
+    folder -- never mints a new one (every file in the unitytk package ships with
+    its own)."""
     import uuid
 
     guid = uuid.uuid5(uuid.NAMESPACE_URL, CS_GUID_NAMESPACE + spec.key).hex
@@ -854,81 +898,11 @@ def record_cs_targets(records=None) -> list:
     return targets
 
 
-# ----------------------------------------------- the lighting recipe's numbers
-#: unitytk's copy of the lighting recipe every deliverable publishes
-#: (``HandoffRecord.RENDERING_POLICY``): the defaults its ``DeliverableRecipe``
-#: falls back to for a file that publishes none, and the handoff version its
-#: importer reads -- generated, so the Unity half cannot drift from the
-#: declaration the GLB, the FBX handoff and the WebXR viewer read. It sits
-#: beside its reader, ``DeliverableShading.cs``.
-def policy_cs() -> Path:
-    return unity_file("DeliverableShading.cs").with_name("RenderingPolicy.g.cs")
-
-
-def _policy() -> dict:
-    """The recipe's settings (``HandoffRecord.rendering_values``: every number,
-    number list and identifier string of ``RENDERING_POLICY``) from the
-    sibling pythontk checkout."""
-    return _handoff().rendering_values()
-
-
-def _pascal(name: str) -> str:
-    return name[:1].upper() + name[1:]
-
-
-def render_policy_cs(policy=None) -> str:
-    """``RenderingPolicy.g.cs``: every setting of the recipe (:func:`_policy`)
-    as a C# constant named ``<Section><Field>`` -- a number a float, a number
-    triple a ``Vector3``, an identifier a string; prose, which no runtime
-    reads, never reaches here. The handoff's version is its shape's
-    (``HandoffBlock.CurrentVersion``), never repeated here."""
-    policy = policy if policy is not None else _policy()
-
-    lines = ["// <auto-generated>"]
-    lines += [f"// {line}" for line in _wrap(GENERATED, 76)]
-    lines += ["// </auto-generated>", "//"]
-    about = (
-        "The lighting recipe every deliverable publishes in its handoff "
-        "(pythontk HandoffRecord.RENDERING_POLICY), as the defaults a reader "
-        "falls back to for a file that publishes none: one declaration, read "
-        "by the GLB, the FBX handoff, the WebXR viewer and this package."
-    )
-    lines += [f"// {line}" for line in _wrap(about, 76)]
-    lines += ["using UnityEngine;", "", "public static class RenderingPolicy", "{"]
-    for section, fields in policy.items():
-        for field, value in (fields or {}).items():
-            name = _pascal(section) + _pascal(field)
-            address = f"{section}.{field}"
-            if isinstance(value, bool):
-                continue
-            if isinstance(value, (int, float)):
-                lines.append(f"    /// <summary>{address}</summary>")
-                lines.append(f"    public const float {name} = {float(value)!r}f;")
-            elif (
-                isinstance(value, (list, tuple))
-                and len(value) == 3
-                and all(
-                    isinstance(v, (int, float)) and not isinstance(v, bool)
-                    for v in value
-                )
-            ):
-                x, y, z = (repr(float(v)) + "f" for v in value)
-                lines.append(f"    /// <summary>{address}</summary>")
-                lines.append(
-                    f"    public static readonly Vector3 {name} = new Vector3({x}, {y}, {z});"
-                )
-            elif isinstance(value, str):
-                lines.append(f"    /// <summary>{address}</summary>")
-                lines.append(f'    public const string {name} = "{value}";')
-    lines.append("}")
-    return "\n".join(lines) + "\n"
-
-
-#: In the templates' core, beside the materials record's reader: every
-#: component that shades from the record reads it (the import-time writers,
-#: Apply's Deliverable Lit), and a component compiles against the core alone.
+#: Beside its one reader, the Materials feature's glTF surface mapping: what
+#: a metal, roughness or occlusion map the record names and the project lacks
+#: stands for, on the materials the import writes.
 def absence_cs() -> Path:
-    return unity_file("MaterialRecord.cs").with_name("MapAbsence.g.cs")
+    return unity_file("GltfSurfaces.cs").with_name("MapAbsence.g.cs")
 
 #: The record's scalar maps, by the C# name and the map type whose absent
 #: value a reader takes for one it cannot find.
@@ -967,9 +941,9 @@ def render_absence_cs() -> str:
     return "\n".join(lines) + "\n"
 
 
-def policy_cs_meta(name: str = "rendering_policy") -> str:
+def script_cs_meta(name: str) -> str:
     """The ``.meta`` of a generated script: a GUID derived from *name*, so
-    regenerating never mints a new one."""
+    regenerating -- or moving it beside another reader -- never mints a new one."""
     import uuid
 
     guid = uuid.uuid5(uuid.NAMESPACE_URL, CS_GUID_NAMESPACE + name).hex
@@ -990,19 +964,17 @@ def policy_cs_meta(name: str = "rendering_policy") -> str:
 
 def cs_targets(records=None) -> list:
     """``[(path, text)]``: every C# file this script writes and its ``.meta``
-    -- the record types, the lighting recipe and the map absent values
+    -- the record types and the map absent values
     (check_csharp.py holds each ``*.g.cs`` to it)."""
     records = records or _records()
     out = []
     for spec, shape, path in record_cs_targets(records):
         out.append((path, render_record_cs(spec, shape)))
         out.append((path.with_name(path.name + ".meta"), record_cs_meta(spec)))
-    policy, absence = policy_cs(), absence_cs()
-    out.append((policy, render_policy_cs()))
-    out.append((policy.with_name(policy.name + ".meta"), policy_cs_meta()))
+    absence = absence_cs()
     out.append((absence, render_absence_cs()))
     out.append(
-        (absence.with_name(absence.name + ".meta"), policy_cs_meta("map_absence"))
+        (absence.with_name(absence.name + ".meta"), script_cs_meta("map_absence"))
     )
     return out
 
@@ -1040,9 +1012,8 @@ def _assembly_md(text: str, clauses) -> list:
 def render_format_md(records=None) -> str:
     """``DELIVERABLE_FORMAT.md`` (:data:`FORMAT_MD`): the data a deliverable
     carries, record by record -- its key and version in each file, what it
-    makes of the approved scene there (``RecordSpec.assembly``,
-    ``GlbBlock.assembly``) and its declared fields
-    (``SchemaSpec.to_markdown``)."""
+    makes of the approved scene (``RecordSpec.assembly``) and its declared
+    fields (``SchemaSpec.to_markdown``)."""
     records = records or _records()
     lines = [
         "# The data a deliverable carries",
@@ -1060,8 +1031,9 @@ def render_format_md(records=None) -> str:
         "else under `extras`; a reader ignores an extra it does not know.",
         "- **One key per record, in every file.** The FBX holds a record as "
         "a JSON string user property on a node named `data_export`; the GLB "
-        "holds its block -- bound to the file's node, texture and buffer "
-        "indices -- as an object in the root `extras`, under the same key.",
+        "holds the record itself -- the same version and shape, its names "
+        "resolved in the GLB's own scene -- as an object in the root "
+        "`extras`, under the same key.",
         "- **One version a reader reads.** A record or block of another "
         "version is refused, with a warning, and the file is re-exported; no "
         "reader keeps a branch for an older shape.",
@@ -1069,6 +1041,7 @@ def render_format_md(records=None) -> str:
         f"in the schema) states its values in {records.FRAME.text}; any other "
         "states its units in its assembly.",
         f"- **One transport.** {records.TRANSPORT.text}.",
+        f"- **One media transport.** {records.GLB_MEDIA.text}.",
         "- **Extensions name their readers.** A field only some readers use "
         "is optional and names them (\"Read only by ...\"; `x-readers` in "
         "the schema); every other reader ignores it, and its generated types "
@@ -1083,7 +1056,7 @@ def render_format_md(records=None) -> str:
     def in_glb(spec) -> str:
         if spec is records.HANDOFF:
             return f"`extras.{spec.key}` v{spec.version}"
-        return f"`extras.{spec.key}` v{spec.glb.version}" if spec.glb else "--"
+        return f"`extras.{spec.key}` v{spec.version}" if spec.glb_verbatim else "--"
 
     deliverable = list(records.deliverable())
     for spec in deliverable:
@@ -1108,21 +1081,20 @@ def render_format_md(records=None) -> str:
         lines += _assembly_md(spec.assembly, spec.clauses)
         if shape is not None:
             lines += ["", shape.to_markdown(_level=4)]
-        block_shape = records.glb_shape(spec)
-        if spec.glb:
-            lines += [
-                "",
-                f"### In the GLB: `extras.{spec.key}`, version {spec.glb.version}",
-            ]
-            lines += _assembly_md(spec.glb.assembly, spec.glb.clauses)
-            if block_shape is not None:
-                lines += ["", block_shape.to_markdown(_level=4)]
-        elif spec is records.HANDOFF:
+        if spec is records.HANDOFF:
             lines += [
                 "",
                 f"### In the GLB: `extras.{spec.key}`, version {spec.version}",
                 "",
                 "The same shape, its addresses the GLB's (`extras.<key>`).",
+            ]
+        elif spec.glb_verbatim:
+            lines += [
+                "",
+                f"### In the GLB: `extras.{spec.key}`, version {spec.version}",
+                "",
+                "The record itself, as the FBX carries it: the same version and "
+                "shape, its names resolved in the GLB's own scene.",
             ]
     return "\n".join(lines) + "\n"
 

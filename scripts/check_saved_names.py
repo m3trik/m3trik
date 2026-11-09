@@ -53,6 +53,9 @@ SKIP_DIRS = {"__pycache__", "templates", "temp_tests"}
 #: The panel-rename table, workspace-relative: ``RENAMED_FROM = {tool: {former
 #: panel: {former widget name: its name now}}}``, read as a literal.
 RENAMES_FILE = "tentacle/tentacle/slots/tools/__init__.py"
+#: extapps' table of renamed apps, the same shape, beside the launcher that
+#: carries their values (``{app: {former app: {former widget name: its name now}}}``).
+EXTAPPS_RENAMES_FILE = "extapps/extapps/_panel_launcher.py"
 RENAMES_NAME = "RENAMED_FROM"
 #: ``{former panel: (hosts it served,)}`` beside it, read as a literal too.
 RENAMED_HOSTS_NAME = "RENAMED_HOSTS"
@@ -185,7 +188,10 @@ def scan(
         "ui": {stem: sorted(names) for stem, names in sorted(ui.items())},
         "homes": {stem: sorted(pkgs) for stem, pkgs in sorted(homes.items())},
         "records": record_keys(registry) if registry else None,
-        "renamed": panel_renames(workspace / RENAMES_FILE),
+        "renamed": {
+            **panel_renames(workspace / EXTAPPS_RENAMES_FILE),
+            **panel_renames(workspace / RENAMES_FILE),
+        },
         "renamed_hosts": renamed_hosts(workspace / RENAMES_FILE),
         "present": present,
     }
@@ -263,7 +269,7 @@ def _kept_twice(baseline, current, run) -> List[str]:
         if run is not None and not stem_homes & run:
             continue
         tool, widgets = renamed[stem]
-        kept = {widgets.get(name, name) for name in names if name != stem}
+        kept = {widgets.get(name, name) for name in names if name != stem} - {None}
         by_tool.setdefault(tool, []).append((stem, kept))
     found = []
     for tool, formers in sorted(by_tool.items()):
@@ -285,13 +291,16 @@ def _kept_twice(baseline, current, run) -> List[str]:
 def _lost_into(stem: str, names, renamed, tool_names) -> List[str]:
     """The names of the gone panel *stem* its tool (``renamed`` = ``[tool,
     {name: name now}]``) does not carry. A name that is the panel's own is its
-    root widget, which stores nothing: the window takes the panel's name."""
+    root widget, which stores nothing: the window takes the panel's name; a
+    name renamed to ``None`` is dropped on purpose (declared: its value means
+    something else now)."""
     tool, widgets = renamed
     carried = set(tool_names)
     return [
         f"{stem}.ui: {name} (renamed into {tool}.ui as {widgets.get(name, name)})"
         for name in names
-        if name != stem and widgets.get(name, name) not in carried
+        if name != stem and widgets.get(name, name) is not None
+        and widgets.get(name, name) not in carried
     ]
 
 

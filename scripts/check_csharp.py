@@ -2,7 +2,7 @@
 # coding=utf-8
 """Hold a package's C# to its kernel, its prior art and its generated files.
 
-Three rules over each ecosystem package that declares its C# parts in
+Four rules over each ecosystem package that declares its C# parts in
 ``[tool.m3trik.layers.csharp]`` (``root``, ``order``, ``kernel``: the
 declaration check_layers.py holds the asmdef references to, rule 5 there; this
 reads the same :class:`check_layers.CSharpLayout`). A ``.cs`` file belongs to
@@ -42,6 +42,8 @@ the nearest asmdef above it.
    orphan or a stale file fails naming the generator to run. This is the
    generators' own ``--check`` for their C# half, run in-process from their
    target lists, so it needs only pythontk beside m3trik. Strict: never frozen.
+4. **Test framework.** A test assembly compiles only where the Test Framework
+   is (:func:`test_framework`). Strict: never frozen.
 
 Rules 1 and 2 started by freezing today's violations: ``check_csharp_baseline.json``
 lists them, ``--check`` fails only on one it does not list (printing where and
@@ -89,6 +91,7 @@ GENERATORS: Dict[str, Callable[[], List[Tuple[Path, str]]]] = {
         "sync_operation_contract", "targets"
     ),
     "m3trik/scripts/sync_scene_records.py": _targets("sync_scene_records", "cs_targets"),
+    "m3trik/scripts/sync_job_queue.py": _targets("sync_job_queue", "targets"),
 }
 
 # ---------------------------------------------------------------- lexing
@@ -417,6 +420,8 @@ def null_checked_calls(code: str) -> List[Tuple[int, str, str]]:
         for hit in calls:
             found.append((match.start(), f"if ({chain} != null) {chain}.{hit.group(1)}", fix(hit.group(1))))
     return found
+
+
 #: What a test assembly needs besides UNITY_INCLUDE_TESTS: a define only the
 #: Test Framework's presence sets, so a project without it (an embedded
 #: deploy) never compiles the tests.
@@ -670,7 +675,10 @@ def scan(
             problems.append(f"{package}: pyproject.toml does not parse ({error})")
             continue
         if declared is None:
-            if packages:
+            undeclared = cl.undeclared_csharp(repo, package)
+            if undeclared:
+                problems.append(f"{package}: {undeclared}")
+            elif packages:
                 problems.append(
                     f"{package}: declares no [tool.m3trik.layers.csharp]: declare its "
                     "C# parts (check_layers.py, rule 5) or name another package"

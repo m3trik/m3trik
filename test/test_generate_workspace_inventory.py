@@ -30,5 +30,30 @@ class TestDomains(unittest.TestCase):
                 self.assertTrue(domains.get(package))
 
 
+class TestNoMachinePath(unittest.TestCase):
+    def test_the_inventory_names_its_workspace_relative_to_itself(self):
+        """The inventory is published with m3trik: it named the workspace's
+        absolute root (a drive layout, CODE_STANDARD section 11). It now
+        names it from the inventory's own folder. Fixed: 2026-11-08"""
+        import json
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td).resolve()
+            repo = ws / "demo"
+            (repo / "demo").mkdir(parents=True)
+            (repo / "demo" / "__init__.py").write_text("X = 1\n", encoding="utf-8")
+            git = ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t"]
+            for args in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "x"]):
+                subprocess.run(git + args, check=True, capture_output=True)
+            md_path, json_path = inv.generate_inventory(ws, ws / "m3trik" / "docs")
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            text = md_path.read_text(encoding="utf-8") + json_path.read_text(encoding="utf-8")
+        self.assertEqual(data["workspace_root"], "../..")
+        for form in (ws.as_posix(), str(ws)):
+            self.assertNotIn(form, text)
+
+
 if __name__ == "__main__":
     unittest.main()

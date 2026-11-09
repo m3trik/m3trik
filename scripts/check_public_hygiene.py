@@ -29,17 +29,38 @@ listing, this workspace's own inventory included) and the text of every
 publishable file. A file with a NUL byte in its first 8 KB is binary and skipped,
 unless it opens with a UTF-16 byte order mark: that is text (:func:`read_text`).
 
+Machine paths in published binaries
+-----------------------------------
+A published binary -- a sample under a ``Samples~`` folder (unitytk's
+deliveries), a committed test fixture, an icon -- ships with the repo and its
+source tarball, so it must not name the machine that made it: a user's home,
+its ``AppData``, a drive-letter folder (:data:`MACHINE_PATH`). An FBX writer
+stamps exactly those (the staging file, the project folder, each map's source)
+and the producer strips them (pythontk ``FbxMedia.strip_machine_paths``); this
+checks the bytes of every publishable binary, needs no denylist and runs
+without one (:func:`scan_machine_paths`).
+
+This machine's folders in published text
+----------------------------------------
+Text naming the scanning machine's own folders -- the workspace's absolute
+root, the user's home, in any of their spellings -- ships with the repo too
+(m3trik's inventory, agent briefs and push.ps1 named the workspace root,
+measured 2026-11-08). The pattern is derived where the gate runs
+(:func:`personal_paths`), so no personal path is written here; it runs with
+or without the denylist, and push.ps1 runs it on the releasing machine.
+
 Usage
 -----
     python m3trik/scripts/check_public_hygiene.py                  # every public repo
     python m3trik/scripts/check_public_hygiene.py mayatk tentacle  # named repos
     python m3trik/scripts/check_public_hygiene.py --denylist PATH
-    python m3trik/scripts/check_public_hygiene.py --public-only unitytk mayatk
+    python m3trik/scripts/check_public_hygiene.py --public-only server mayatk
 
 ``--public-only`` skips the named repos that are not in :data:`PUBLIC_REPOS`:
 push.ps1 hands over every repo a run touches, and a private one may name clients.
 
-Exit code 0 = clean (or no denylist, or nothing public to check), 1 = a match,
+Exit code 0 = clean (or no denylist and clean samples, or nothing public to
+check), 1 = a match or a sample naming a machine path,
 2 = an unreadable denylist or a repo git cannot list.
 """
 
@@ -56,9 +77,11 @@ from typing import List, NamedTuple, Optional, Sequence
 WORKSPACE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_DENYLIST = os.path.join(WORKSPACE, ".claude", "public_hygiene.txt")
 
-#: The workspace repos GitHub serves publicly (``gh repo view <name> --json
-#: visibility``). unitytk, server, comfyui and www are private and may name
-#: clients; add a repo here the day it goes public.
+#: The workspace repos that publish anything: those GitHub serves publicly
+#: (``gh repo view <name> --json visibility``), and any whose package reaches
+#: PyPI, since its source tarball carries the tests and the CHANGELOG whatever
+#: the repo's visibility (unitytk). server, comfyui and www are private and
+#: publish nothing, so they may name clients; add a repo the day it publishes.
 PUBLIC_REPOS = (
     "pythontk",
     "uitk",
@@ -66,10 +89,58 @@ PUBLIC_REPOS = (
     "blendertk",
     "tentacle",
     "extapps",
+    "unitytk",
     "m3trik",
 )
 
 BINARY_SNIFF_BYTES = 8192
+
+#: A folder of the machine that wrote a file: a user's home (Windows, Linux,
+#: macOS), Windows' per-user ``AppData``, Maya's per-user projects folder, or
+#: any absolute drive-letter path with a folder in it. A bare file name or a
+#: relative path is no machine's. A drive path's every name is two characters
+#: or more, from a word character, and it has two separators: a drive letter
+#: a compressed stream holds by chance (``K:/9/j8``, ``i:\./KmN``, measured in
+#: two committed PNGs) is no path.
+MACHINE_PATH = re.compile(
+    rb"[A-Za-z]:[\\/]Users[\\/][^\\/\x00\"]{1,64}"
+    rb"|/(?:home|Users)/[\w.-]{1,64}/"
+    rb"|[\\/]AppData[\\/]"
+    rb"|Documents[\\/]maya"
+    rb"|(?<![A-Za-z0-9])[A-Za-z]:[\\/](?:\w[\w .()-]{1,63}[\\/])+\w[\w .()-]{1,63}",
+    re.IGNORECASE,
+)
+
+
+_DRIVE_ROOT = re.compile(r"^([A-Za-z]):[\\/]+(.*)$")
+
+
+def personal_paths(
+    workspace: str = "", home: Optional[str] = None
+) -> Optional["re.Pattern[str]"]:
+    """This machine's own folders as text spells them: *workspace*'s absolute
+    root and the user's *home* (default ``~``), with either separator,
+    doubled or not (JSON), any case, and Git Bash's ``/c/...`` form for a
+    drive; a name continuing past the folder's (``jdoe2``) is another's.
+    Derived from the machine that scans, so no personal path is written in
+    this repo; the releasing machine runs it (push.ps1), which is the one
+    whose folders could leak. None when neither names a folder."""
+    sep = r"[\\/]+"
+    forms = []
+    for raw in (workspace, os.path.expanduser("~") if home is None else home):
+        drive = _DRIVE_ROOT.match(raw or "")
+        rest = drive.group(2) if drive else (raw if (raw or "").startswith("/") else "")
+        parts = [re.escape(p) for p in re.split(r"[\\/]+", rest) if p]
+        if not parts:
+            continue  # a bare drive or "/" is everyone's
+        body = sep.join(parts) + r"(?![\w-])"
+        if drive:
+            letter = drive.group(1)
+            forms.append(rf"(?<![\w]){letter}:{sep}{body}")
+            forms.append(rf"(?<![\w.]){sep}{letter}{sep}{body}")
+        else:
+            forms.append(rf"(?<![\w.]){sep}{body}")
+    return re.compile("|".join(forms), re.IGNORECASE) if forms else None
 
 
 class Finding(NamedTuple):
@@ -180,6 +251,31 @@ def scan_repo(repo_dir: str, pattern: "re.Pattern[str]", label: str) -> List[Fin
     return findings
 
 
+def scan_machine_paths(repo_dir: str, label: str) -> List[Finding]:
+    """Each publishable binary of *repo_dir* -- a sample under a
+    ``Samples~`` folder, a test fixture, any other -- that holds a
+    :data:`MACHINE_PATH`: one finding per file, its ``line`` the first
+    match's byte offset, its text that match and how many more the file
+    holds. Text is the denylist's (:func:`scan_repo`)."""
+    findings = []
+    for rel in publishable_files(repo_dir):
+        path = os.path.join(repo_dir, rel)
+        if read_text(path) is not None:
+            continue
+        try:
+            with open(path, "rb") as handle:
+                data = handle.read()
+        except OSError:  # a staged deletion
+            continue
+        matches = list(MACHINE_PATH.finditer(data))
+        if matches:
+            first = matches[0]
+            text = first.group(0).decode("utf-8", "replace")
+            more = f" (+{len(matches) - 1} more)" if len(matches) > 1 else ""
+            findings.append(Finding(label, rel, first.start(), f"machine path {text}{more}"))
+    return findings
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -205,9 +301,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (OSError, ValueError) as error:
         print(f"[hygiene] unreadable denylist: {error}")
         return 2
-    if pattern is None:
-        print(f"[hygiene] SKIP: no denylist at {args.denylist} -- cannot judge.")
-        return 0
 
     names = list(args.repos) or list(PUBLIC_REPOS)
     if args.public_only:
@@ -219,13 +312,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("[hygiene] OK: no public repo to check.")
             return 0
     findings: List[Finding] = []
+    machine: List[Finding] = []
+    own: List[Finding] = []
+    personal = personal_paths(os.path.abspath(args.workspace))
     for name in names:
         repo_dir = os.path.join(args.workspace, name)
         if not os.path.exists(os.path.join(repo_dir, ".git")):
             print(f"[hygiene] not a git repo: {repo_dir}")
             return 2
         try:
-            findings.extend(scan_repo(repo_dir, pattern, name))
+            # The machine paths need no denylist: they are checked either way.
+            machine.extend(scan_machine_paths(repo_dir, name))
+            if personal is not None:  # neither needs the denylist
+                own.extend(scan_repo(repo_dir, personal, name))
+            if pattern is not None:
+                findings.extend(scan_repo(repo_dir, pattern, name))
         except subprocess.CalledProcessError as error:
             reason = (error.stderr or b"").decode("utf-8", "replace").strip()
             print(f"[hygiene] git could not list {repo_dir}: {reason or error}")
@@ -234,15 +335,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"[hygiene] could not run git: {error}")
             return 2
 
-    if not findings:
-        print(f"[hygiene] OK: no denylisted identifier in {', '.join(names)}.")
-        return 0
-    for finding in findings:
+    for finding in machine + own + findings:
         print(f"  {finding}")
-    print(
-        f"[hygiene] FAIL: {len(findings)} denylisted identifier(s) would be published."
-    )
-    return 1
+    if own:
+        print(
+            f"[hygiene] FAIL: {len(own)} line(s) name this machine's own folders (the "
+            "workspace's absolute root or the user's home): name them relative or derived."
+        )
+    if machine:
+        print(
+            f"[hygiene] FAIL: {len(machine)} binary(ies) name a machine "
+            "path (a user's home or folder) that would be published."
+        )
+    paths_failed = bool(machine or own)  # neither needs the denylist
+    if pattern is None:
+        print(f"[hygiene] SKIP: no denylist at {args.denylist} -- cannot judge.")
+        return 1 if paths_failed else 0
+    if findings:
+        print(
+            f"[hygiene] FAIL: {len(findings)} denylisted identifier(s) would be published."
+        )
+        return 1
+    if paths_failed:
+        return 1
+    print(f"[hygiene] OK: no denylisted identifier in {', '.join(names)}.")
+    return 0
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 {
   "name": "m3trik",
   "version": "0.1.0",
-  "description": "The m3trik ecosystem's Claude Code machinery: the review and sweep agents, the backlog skill, the workspace hooks, and the operation catalog's MCP servers (ops: reads and plans; ops-apply: changes).",
+  "description": "The workspace's Claude Code machinery: the review and sweep agents, the backlog skill, the workspace hooks, and the operation catalog's MCP servers (ops: reads and plans; ops-apply: changes).",
   "author": {
     "name": "m3trik"
   },

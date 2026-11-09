@@ -1,4 +1,4 @@
-# m3trik — the Claude Code plugin
+# The Claude Code plugin
 
 The ecosystem's Claude Code machinery, versioned here instead of living only in the workspace's unversioned `.claude/`. Rules are not here: they are each repo's `AGENTS.md` and the packs, which every agent reads and every clone carries. **Setting it up, using it and fixing it: [AGENT_INSTRUCTIONS.md](../docs/AGENT_INSTRUCTIONS.md#set-up)** (install it at project scope, step 4).
 

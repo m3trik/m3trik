@@ -12,7 +12,6 @@
   "mayatk/edit_utils/macros/_macros.py::MacroManager.apply_saved_macros = blendertk/edit_utils/macros/_macros.py::MacroManager.apply_saved_macros",
   "mayatk/edit_utils/macros/_macros.py::MacroManager.get_editor_registry = blendertk/edit_utils/macros/_macros.py::MacroManager.get_editor_registry",
   "mayatk/env_utils/fbx_utils.py::FbxUtils.embed_dependencies = blendertk/env_utils/fbx_utils.py::FbxUtils.embed_dependencies",
-  "mayatk/env_utils/material_records.py::MaterialRecords.export_record = blendertk/env_utils/material_records.py::MaterialRecords.export_record",
   "mayatk/env_utils/scene_exporter/_task_checks.py::_TaskChecksMixin.check_output_writable = blendertk/env_utils/scene_exporter/_task_checks.py::_TaskChecksMixin.check_output_writable",
   "mayatk/env_utils/scene_exporter/_task_data.py::_TaskDataMixin._resolved_output_type = blendertk/env_utils/scene_exporter/_task_data.py::_TaskDataMixin._resolved_output_type",
   "mayatk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._rebake = blendertk/light_utils/lightmap_baker/lightmap_baker.py::LightmapBaker._rebake",

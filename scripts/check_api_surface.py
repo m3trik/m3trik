@@ -10,11 +10,24 @@ Usage:
     python check_api_surface.py uitk --check       # one package (its own CI)
     python check_api_surface.py mayatk --semver    # JSON for push.ps1's semver
                                                    # gate ('minor' when the delta
-                                                   # removes a public symbol)
+                                                   # removes a public symbol;
+                                                   # exit 1: a removal is held)
     python check_api_surface.py mayatk --changes   # the delta since the last
                                                    # release, and retirement debt
     python check_api_surface.py --shadows          # names two packages define
+    python check_api_surface.py --floors           # a standalone package's floors
+                                                   # carry the names it uses
     python check_api_surface.py mayatk --semver --since v0.30.0   # another baseline
+    python check_api_surface.py unitytk --semver --published 0.6.0 --release 0.7.0
+                                                   # the whole gate as an exit code,
+                                                   # for a standalone publish.yml
+
+``--floors`` fails when a standalone package's hand-set floor on an
+ecosystem package (unitytk's ``pythontk>=``) names a release that lacks a
+name its Python reaches there: no cascade ratchets such a floor. It reads the
+floor's ``v<floor>`` tag, or the working tree for a floor above the newest
+tag (the pending release, which publishes first), so it needs the upstream's
+tags (a CI checkout's ``fetch-depth: 0``); without them it says so and passes.
 
 ``--check`` fails on a retirement past its window: a ``ptk.Deprecation`` alias
 or retired keyword whose ``remove_in`` the package's ``__version__`` has
@@ -31,6 +44,21 @@ or a ``MOVED_NAMES`` entry (it moved to another package); one that is neither
 is a break push.ps1 refuses. With no baseline (no tag, or a ``--since`` naming
 no commit) there is no verdict: ``--semver`` says so and exits 2, and
 ``--changes`` says there is no release to compare with.
+
+Either account holds a name only once its notice's window has closed: a
+removal or move of a name the release's notice still holds (a ``Deprecation``
+or an ``[Obsolete]`` not yet ``Deprecation.window_expired`` at this
+``__version__`` and today) is **held**: ``--semver`` lists it under ``held``
+with the date it may go and exits 1 (push.ps1 refuses), ``--changes`` marks it
+**HELD**. The window counts from the date the notice states, as ``--check``
+counts it (:func:`held_removals` says why).
+
+A package no project uses may declare that it carries no back-compat, with
+its reason: ``no_back_compat = "<why>"`` under ``[tool.m3trik.api]`` in its
+``pyproject.toml`` (:func:`back_compat_waiver`). For it alone no window holds
+a removal, none owes a ``MOVED_NAMES`` row, and ``--check`` judges a notice by
+its version alone; the bump a removal owes is still owed. A waiver naming no
+reason fails both modes.
 
 A package that declares C# (``CSHARP_SOURCES`` in its root ``__init__.py``:
 unitytk) is read and judged twice, with the same reader and the same rules:
@@ -430,7 +458,12 @@ def release_surface(pkg_dir: Path, ref: str) -> PackageSurface | None:
         source = root / name / name
         if not source.is_dir():
             return None
-        return ApiSurface.read(source, root=root, cache=False)
+        surface = ApiSurface.read(source, root=root, cache=False)
+        # Its retirements smaller than a symbol (a class attribute, a keyword),
+        # carried beside the surface as a value: no symbol records them, so
+        # their removal is no removed key (:func:`removed_forms`).
+        surface.retirement_rows = ApiSurface.retirements(source)
+        return surface
     finally:
         tmp.cleanup()
 
@@ -440,8 +473,10 @@ def release_csharp_surface(pkg_dir: Path, ref: str) -> PackageSurface | None:
     root ``__init__.py`` from a ``git archive`` of *ref*, laid out as the
     repo had them in a scoped temp copy, read in the folder the release
     declared (or, a release predating the declaration, the folders today's
-    declares). A release with no C# there is an empty surface: all of
-    today's is new. None when git cannot produce them."""
+    declares, else its package's source folder when that holds C#: unitytk's
+    sat in ``templates/``, which today's no longer names, and a type's key is
+    its namespace's, never its folder's). A release with no C# there is an
+    empty surface: all of today's is new. None when git cannot produce them."""
     name = pkg_dir.name
     init = f"{name}/__init__.py"
     archive = None
@@ -477,6 +512,8 @@ def release_csharp_surface(pkg_dir: Path, ref: str) -> PackageSurface | None:
             pkg_dir / name
         )
         folder = ApiSurface.csharp_root(released, sources)
+        if folder is None and next(released.rglob("*.cs"), None) is not None:
+            folder = released  # read nowhere, every C# removal went unseen
         if folder is None:
             return PackageSurface(name=f"{name} (C#)", source_root="", modules=[])
         surface = ApiSurface.read_csharp(folder, root=root, cache=False)
@@ -491,6 +528,15 @@ def release_baseline(
     """``(surface mapping, label)`` of the last release (:func:`release_tag`),
     or ``(None, why there is none)``; *read* reads it (default
     :func:`release_surface`; :func:`release_csharp_surface` for the C#)."""
+    surface, label = _release(pkg_dir, since, read)
+    return (surface.to_dict() if surface is not None else None), label
+
+
+def _release(
+    pkg_dir: Path, since: str | None = None, read=None
+) -> tuple[PackageSurface | None, str]:
+    """:func:`release_baseline` as ``(surface, label)``: the surface itself,
+    which carries each notice's ``since`` (the mapping never does)."""
     tag = release_tag(pkg_dir, since)
     if tag is None and since:
         return None, f"none ({since} names no commit in {pkg_dir.name}: fetch its tags)"
@@ -499,7 +545,356 @@ def release_baseline(
     surface = (read or release_surface)(pkg_dir, tag)
     if surface is None:
         return None, f"none ({tag} could not be read)"
-    return surface.to_dict(), f"the last release ({tag})"
+    return surface, f"the last release ({tag})"
+
+
+# ---------- A retirement's window, at release ----------------------------------
+
+
+def notices(surface: PackageSurface) -> dict[str, tuple[str, str]]:
+    """``{relpath::symbol: (remove_in, since)}``: every retirement notice
+    *surface* holds (a ``Deprecation`` decorator, a C# ``[Obsolete]``), keyed
+    as the delta keys a name (:func:`_flatten_mapping`); a retired class's
+    notice stands for each member without one of its own, and of a name's
+    overloads the one due last is kept."""
+    found: dict[str, tuple[str, str]] = {}
+
+    def due_last(row: tuple[str, str]) -> tuple:
+        try:
+            return (_version_key(row[0]), row[1])
+        except ValueError:
+            return ((-1,), row[1])
+
+    def put(key: str, symbol) -> None:
+        row = (symbol.remove_in or "", getattr(symbol, "since", "") or "")
+        found[key] = max(found.get(key, row), row, key=due_last)
+
+    for mod in surface.modules:
+        for fn in mod.functions:
+            if fn.deprecated:
+                put(f"{mod.relpath}::{_symbol_key(fn.qualname)}", fn)
+        for cls in mod.classes:
+            if cls.deprecated:
+                put(f"{mod.relpath}::{cls.name}", cls)
+            for member in cls.members:
+                if member.deprecated or cls.deprecated:
+                    key = f"{mod.relpath}::{_symbol_key(member.qualname)}"
+                    put(key, member if member.deprecated else cls)
+    return found
+
+
+def removed_forms(released, current) -> dict[str, tuple[str, str]]:
+    """``{relpath::what: (remove_in, since)}``: the retirements smaller than a
+    symbol (``ApiSurface.retirements`` rows: ``Deprecation.class_attribute``,
+    ``Deprecation.parameter`` and their kin) the release *released* carries
+    and the tree's *current* rows no longer do -- each one carried out. No
+    symbol records them, so the delta never sees their removal (measured
+    2026-11-08: pythontk's ``MeshConvert.*_WEB_*`` and blendertk's
+    ``build_manifest(lighting=)`` went inside their window unseen). Counted
+    per ``(relpath, what)``, so one of two alike notices in a module going
+    is one removal; a notice that moved module reads as removed, the safe
+    side."""
+    left: dict[tuple[str, str], int] = {}
+    for row in current:
+        left[(row[0], row[1])] = left.get((row[0], row[1]), 0) + 1
+    gone: dict[str, tuple[str, str]] = {}
+    for row in released:
+        key = (row[0], row[1])
+        if left.get(key):
+            left[key] -= 1
+            continue
+        gone[f"{row[0]}::{row[1]}"] = (row[2], row[3] if len(row) > 3 else "")
+    return gone
+
+
+def held_removals(
+    delta: ApiDelta,
+    baseline: PackageSurface,
+    version: str,
+    today: datetime.date | None = None,
+    forms: dict[str, tuple[str, str]] | None = None,
+) -> dict[str, dict]:
+    """The removals in *delta* a notice in *baseline* (the last release)
+    still holds, ``{key: {key, remove_in, since, not_before}}``: moved out or
+    retired, but not yet ``Deprecation.window_expired`` at *version* and
+    *today*. ``not_before`` is the date it may go, ``""`` when only its
+    version holds it.
+
+    The window counts from the date the notice states, as ``--check`` and
+    the runtime roster count it: one rule, so this gate never refuses a
+    removal ``--check`` demands. Counted from the first release carrying the
+    notice, the two disagreed (measured 2026-11-08: mayatk removed
+    ``TaskManager.check_uv_snapshots`` on 2026-11-07, when ``--check`` called
+    its 2026-10-08 notice overdue; counted from v0.23.0, which first carried
+    it, the removal was held to 2026-11-09, so neither tree could release).
+    A notice dated before its release runs short by the gap, which §5 closes
+    at the source: ``since`` is the day the notice first ships.
+
+    *version* is the tree's ``__version__``: a removal owes the minor it is
+    made in, hand-set before push.ps1's semver gate passes it, so it is the
+    release's. A notice with no comparable ``remove_in`` (an ``[Obsolete]``
+    naming no release), or a tree with no version, is held by its date
+    alone; one naming no date, by its version alone."""
+    removals = set(delta.moved_out) | set(delta.retired)
+    today = today or datetime.date.today()
+    held: dict[str, dict] = {}
+    rows = {**notices(baseline), **(forms or {})}  # forms: :func:`removed_forms`
+    for key, (remove_in, since) in sorted(rows.items()):
+        if key not in removals or _is_semver_exempt(key):
+            continue
+        try:
+            _version_key(version)
+            _version_key(remove_in)
+            comparable = True
+        except ValueError:
+            comparable = False
+        stated = _not_before(since)
+        date_open = bool(stated) and datetime.date.fromisoformat(stated) > today
+        if comparable:
+            due = bool(_expired([(key, key, remove_in, since)], version, today))
+        else:  # the date alone; a notice naming neither holds nothing
+            due = not date_open
+        if not due:
+            held[key] = {
+                "key": key,
+                "remove_in": remove_in,
+                "since": since,
+                "not_before": stated if date_open else "",
+            }
+    return held
+
+
+# ---------- A standalone package's floors ------------------------------------
+
+#: ``<name>[extras]>=<floor>`` (an optional ``,<cap>`` after it) in a requirement.
+_FLOOR_RE = re.compile(r"^\s*([A-Za-z0-9_.\-]+)\s*(?:\[[^\]]*\])?\s*>=\s*([0-9][0-9.]*)")
+
+
+def _pyproject(pkg_dir: Path) -> dict:
+    """*pkg_dir*'s ``pyproject.toml``, parsed: ``{}`` with none (a partial checkout)."""
+    path = pkg_dir / "pyproject.toml"
+    if not path.is_file():
+        return {}
+    try:
+        import tomllib
+    except ImportError:  # Python < 3.11
+        import tomli as tomllib  # type: ignore[no-redef]
+    return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+def _requirements(pkg_dir: Path) -> list[str]:
+    """*pkg_dir*'s ``[project] dependencies`` (requirement strings): ``[]``
+    with no pyproject (a partial checkout)."""
+    return list(_pyproject(pkg_dir).get("project", {}).get("dependencies", []))
+
+
+def back_compat_waiver(pkg_dir: Path) -> str:
+    """Why *pkg_dir* carries no back-compat, as its ``pyproject.toml`` states it
+    (``[tool.m3trik.api] no_back_compat = "<why>"``), or ``""`` when it declares
+    none: then no window holds its removals, none owes a ``MOVED_NAMES`` row,
+    and a notice is due by its version alone. CODE_STANDARD section 5.
+
+    Raises:
+        ValueError: The waiver is declared without a reason.
+    """
+    table = _pyproject(pkg_dir).get("tool", {}).get("m3trik", {}).get("api", {})
+    if "no_back_compat" not in table:
+        return ""
+    reason = table["no_back_compat"]
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(
+            f"{pkg_dir.name}: [tool.m3trik.api] no_back_compat must state why the "
+            "package carries no back-compat (a non-empty string)"
+        )
+    return reason.strip()
+
+
+def upstream_uses(source_root: Path, upstream: str, root: Path) -> dict[str, list[str]]:
+    """Every name the Python under *source_root* reaches on *upstream*, each
+    with where (``path:line``, relative to *root*): ``Name`` or
+    ``Name.member`` off the root (``import ups as u``; ``u.Name.member``,
+    ``from ups import Name``) and ``module::Name`` off a module path
+    (``from ups.core.mod import Name``: ``core/mod::Name``)."""
+    uses: dict[str, list[str]] = {}
+    for path in sorted(source_root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        where = path.relative_to(root).as_posix()
+        roots: set[str] = set()  # local names bound to the root
+        named: dict[str, str] = {}  # local name -> the root name it binds
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == upstream:
+                        roots.add(alias.asname or upstream)
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                parts = node.module.split(".")
+                if parts[0] != upstream:
+                    continue
+                for alias in node.names:
+                    if len(parts) == 1:
+                        named[alias.asname or alias.name] = alias.name
+                        key = alias.name
+                    else:
+                        key = f"{'/'.join(parts[1:])}::{alias.name}"
+                    uses.setdefault(key, []).append(f"{where}:{node.lineno}")
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Attribute):
+                continue
+            chain = [node.attr]
+            value = node.value
+            while isinstance(value, ast.Attribute):
+                chain.insert(0, value.attr)
+                value = value.value
+            if not isinstance(value, ast.Name):
+                continue
+            if value.id in roots:
+                key = ".".join(chain[:2])
+            elif value.id in named:
+                key = f"{named[value.id]}.{chain[0]}"
+            else:
+                continue
+            if not key.split(".")[-1].startswith("_"):
+                uses.setdefault(key, []).append(f"{where}:{node.lineno}")
+    return uses
+
+
+def _surface_index(surface: PackageSurface):
+    """``(names, {class: (bases, members)}, {module: names})`` of a surface:
+    what :func:`upstream_uses`' keys are looked up in. ``names`` holds every
+    public name, a class's members too: a wildcard root (pythontk's
+    ``*_utils``) hands a ``*Utils`` method out by its bare name."""
+    names: set[str] = set()
+    classes: dict[str, tuple[list[str], set[str]]] = {}
+    modules: dict[str, set[str]] = {}
+    for mod in surface.to_dict()["modules"]:
+        found = {f["qualname"] for f in mod.get("functions", [])}
+        found |= {c["name"] for c in mod.get("constants", [])}
+        for cls in mod.get("classes", []):
+            found.add(cls["name"])
+            bases, members = classes.setdefault(cls["name"], ([], set()))
+            bases.extend(b.split(".")[-1].split("[")[0] for b in cls.get("bases", []))
+            members.update(m["qualname"].split(".")[-1] for m in cls.get("members", []))
+            names |= members
+        names |= found
+        stem = mod["relpath"][: -len(".py")]
+        if stem == "__init__" or stem.endswith("/__init__"):
+            stem = stem[: -len("__init__")].rstrip("/")
+        modules.setdefault(stem, set()).update(found)
+    return names, classes, modules
+
+
+def _has_member(name: str, member: str, classes: dict) -> bool | None:
+    """Whether class *name* has *member*, through its bases; None when that
+    cannot be told (a base outside the surface, such as ``Exception``)."""
+    seen, stack = set(), [name]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        if current not in classes:
+            return None
+        bases, members = classes[current]
+        if member in members:
+            return True
+        stack.extend(b for b in bases if b != "object")
+    return False
+
+
+def _lacks(key: str, release, today) -> bool:
+    """Whether the release's index (:func:`_surface_index`) lacks *key*
+    (:func:`upstream_uses`). A member counts only when *today*'s index
+    records it: the surface keeps methods, not class attributes, so one it
+    never records is never called missing. A module path counts its own
+    names, a submodule, or the name anywhere (a package re-exports)."""
+    names, classes, modules = release
+    if "::" in key:
+        module, name = key.split("::", 1)
+        return not (
+            name in modules.get(module, ()) or name in names or f"{module}/{name}" in modules
+        )
+    name, _, member = key.partition(".")
+    if name not in names:
+        return True
+    return bool(
+        member
+        and _has_member(name, member, classes) is False
+        and _has_member(name, member, today[1]) is True
+    )
+
+
+def floor_problems(
+    name: str, repo_root: Path = REPO_ROOT, ecosystem: Iterable[str] | None = None
+) -> tuple[list[str], list[str]]:
+    """``(problems, notes)`` for *name*'s floors on the ecosystem packages
+    (``dependencies``, ``<dep>>=<floor>``): each name its Python reaches on
+    *dep* (:func:`upstream_uses`) must be in the release the floor names --
+    its ``v<floor>`` tag, read like a delta's baseline; a floor above the
+    newest tag is the pending release, read from the working tree (it
+    publishes first: push.ps1 and PyPI hold that). A released floor with no
+    tag here is a problem; a dep with no tags at all (a shallow checkout) a
+    note, never a verdict."""
+    members = set(ECOSYSTEM_PACKAGES if ecosystem is None else ecosystem)
+    pkg_dir = repo_root / name
+    problems: list[str] = []
+    notes: list[str] = []
+    for requirement in _requirements(pkg_dir):
+        match = _FLOOR_RE.match(requirement)
+        if not match:
+            continue
+        dep = match.group(1).lower().replace("-", "_")
+        floor = match.group(2)
+        if dep not in members or dep == name:
+            continue
+        dep_dir = repo_root / dep
+        if not (dep_dir / dep).is_dir():
+            notes.append(f"{name}: no {dep} checkout here: {dep}>={floor} unchecked")
+            continue
+        uses = upstream_uses(pkg_dir / name, dep, repo_root)
+        if not uses:
+            continue
+        newest = release_tag(dep_dir)
+        tag = f"v{floor}"
+        if newest is None:
+            notes.append(f"{name}: {dep} has no release tag here (fetch its tags): unchecked")
+            continue
+        if release_tag(dep_dir, tag):
+            surface, label = release_surface(dep_dir, tag), tag
+        elif _version_key(floor) > _version_key(newest[1:]):
+            notes.append(
+                f"{name}: {dep}>={floor} is unreleased (newest {newest}): read the working tree"
+            )
+            surface, label = walk_package(dep_dir, repo_root), "the working tree"
+        else:
+            problems.append(f"{name}: {dep}>={floor} names no tag {tag} in {dep} (fetch its tags)")
+            continue
+        if surface is None:
+            problems.append(f"{name}: {dep}>={floor}: {tag} could not be read")
+            continue
+        release = _surface_index(surface)
+        today = release if label == "the working tree" else _surface_index(
+            walk_package(dep_dir, repo_root)
+        )
+        lacking = [key for key in sorted(uses) if _lacks(key, release, today)]
+        if lacking:
+            problems.append(
+                f"{name}: {dep}>={floor} ({label}) lacks "
+                + ", ".join(f"{key} ({uses[key][0]})" for key in lacking)
+            )
+    return problems, notes
+
+
+def standalone_packages() -> tuple:
+    """The ecosystem packages no cascade releases (``"release": "standalone"``
+    in ``m3trik/workspace.json``): their floors are set by hand."""
+    _declared_ecosystem()  # puts sync_workspace on the path
+    import sync_workspace
+
+    units = sync_workspace.load()["units"]
+    return tuple(u["path"] for u in units if u["release"] == "standalone")
 
 
 def _symbol_key(qualname: str) -> str:
@@ -726,6 +1121,16 @@ def _lazy_exported_names(node: ast.stmt) -> set[str]:
     return names
 
 
+def _hold_text(row: dict) -> str:
+    """What holds a removal (:func:`held_removals`' row), in words:
+    ``until 2026-11-19 (remove in 0.5.0, noticed 2026-10-20)``."""
+    until = f"until {row['not_before']}" if row["not_before"] else "by its version"
+    facts = [f"remove in {row['remove_in']}" if row["remove_in"] else "no removal version"]
+    if row["since"]:
+        facts.append(f"noticed {row['since']}")
+    return f"{until} ({', '.join(facts)})"
+
+
 def _relpaths_losing_symbols(pkg: PackageSurface, prior_json: dict | None) -> set[str]:
     """Modules whose recorded symbols shrank -- the only ones worth reparsing."""
     if not prior_json:
@@ -752,7 +1157,9 @@ def _not_before(since: str) -> str:
     return (start + datetime.timedelta(days=_MIN_WINDOW_DAYS)).isoformat()
 
 
-def _deprecation_section(pkg: PackageSurface, version: str) -> list[str]:
+def _deprecation_section(
+    pkg: PackageSurface, version: str, today: datetime.date | None = None
+) -> list[str]:
     """The retirement-debt section: everything deprecated, earliest deadline first.
 
     It rides in the ``--changes`` report because that is what a reviewer reads
@@ -764,7 +1171,7 @@ def _deprecation_section(pkg: PackageSurface, version: str) -> list[str]:
     rows = deprecations(pkg)
     if not rows:
         return []
-    expired = {(row[0], row[1]) for row in expired_deprecations(pkg, version)}
+    expired = {(row[0], row[1]) for row in expired_deprecations(pkg, version, today)}
     # Due by version, but its calendar window is still open: it stays.
     due = {(row[0], row[1]) for row in _expired(rows, version, datetime.date.max)}
     lines = [f"## Deprecations ({len(rows)})", ""]
@@ -831,8 +1238,8 @@ class ApiDelta:
     #: another package, and its old home says where (pythontk's
     #: ``MovedNameError``).
     moved_out: list[str] = field(default_factory=list)
-    #: Removals of names the baseline already marked deprecated: an alias whose
-    #: window ran out.
+    #: Removals of names the baseline already marked deprecated: an alias
+    #: removed, its window closed or not (:func:`held_removals` says which).
     retired: list[str] = field(default_factory=list)
     #: ``key -> (new home, version)`` for each :attr:`moved_out` key.
     destinations: dict[str, tuple[str, str]] = field(default_factory=dict)
@@ -1057,11 +1464,24 @@ def emit_changes_markdown(
     reexports: dict[str, set[str]] | None = None,
     version: str = "",
     moved_table: dict[str, tuple[str, str]] | None = None,
+    delta: ApiDelta | None = None,
+    held: dict[str, dict] | None = None,
+    waived: str = "",
 ) -> str:
-    """Render :func:`compute_api_delta`'s result as the ``--changes`` report."""
-    delta = compute_api_delta(
-        pkg, prior_json, foreign_members, reexports, moved_table=moved_table
-    )
+    """Render :func:`compute_api_delta`'s result (or *delta*, already
+    computed) as the ``--changes`` report; a removal in *held*
+    (:func:`held_removals`) is marked **HELD** with the date it may go."""
+    if delta is None:
+        delta = compute_api_delta(
+            pkg, prior_json, foreign_members, reexports, moved_table=moved_table
+        )
+    held = held or {}
+
+    def hold(key: str) -> str:
+        row = held.get(key)
+        if row is None:
+            return ""
+        return " — **HELD** " + _hold_text(row)
     if delta is None:
         # No release to diff against, but the retirement debt is a
         # property of THIS tree, not of the delta -- a package whose first
@@ -1083,10 +1503,18 @@ def emit_changes_markdown(
     lines = [f"# {pkg.name} — API Changes", ""]
     lines.append(f"_Diff vs {baseline_label}._")
     lines.append("")
+    if waived:
+        lines.append(
+            f"_It carries no back-compat: {waived}. A removal owes no window and no "
+            "`MOVED_NAMES` row (it reads as Retired); it still owes its minor bump._"
+        )
+        lines.append("")
     # Built before the early return: retirement debt is reported whether or not
     # this release changed anything else, which is the point -- an alias runs
     # out of time during a release that touched nothing near it.
-    deprecation_lines = _deprecation_section(pkg, version)
+    deprecation_lines = _deprecation_section(
+        pkg, version, datetime.date.max if waived else None
+    )
     if delta.is_empty():
         lines.append(f"No public API changes since {baseline_label}.")
         if deprecation_lines:
@@ -1112,16 +1540,19 @@ def emit_changes_markdown(
         for key in delta.moved_out:
             mod, sym = key.split("::", 1)
             home, since = delta.destinations[key]
-            lines.append(f"- `{mod}::{sym}` → `{home}` (from {since})")
+            lines.append(f"- `{mod}::{sym}` → `{home}` (from {since}){hold(key)}")
         lines.append("")
     if delta.retired:
         lines.append(f"## Retired ({len(delta.retired)})")
         lines.append("")
-        lines.append("_Deprecated aliases whose window ran out._")
+        lines.append(
+            "_Deprecated aliases removed. A **HELD** one is still inside its "
+            "notice's window: the release refuses it until the date._"
+        )
         lines.append("")
         for key in delta.retired:
             mod, sym = key.split("::", 1)
-            lines.append(f"- `{mod}::{sym}`")
+            lines.append(f"- `{mod}::{sym}`{hold(key)}")
         lines.append("")
     if added:
         lines.append(f"## Added ({len(added)})")
@@ -1274,6 +1705,13 @@ def check(package_names: list[str], repo_root: Path = REPO_ROOT) -> int:
             unwalkable.append(name)
             continue
         walked.append(name)
+        try:
+            waived = back_compat_waiver(pkg_dir)
+        except ValueError as exc:
+            overdue.append(str(exc))
+            continue
+        # No back-compat: a notice is due by its version alone, its window waived.
+        today = datetime.date.max if waived else None
 
         # The one-release alias window, enforced rather than remembered: a
         # retirement that named ``remove_in`` and then shipped past it is caught
@@ -1298,14 +1736,14 @@ def check(package_names: list[str], repo_root: Path = REPO_ROOT) -> int:
         # none is judged by version alone, the rule under which a run of
         # releases retired names 15 days after their first warning.
         undated = [f"{row[0]}::{row[1]}" for row in dated + forms if not row[3]]
-        if undated and _MIN_WINDOW_DAYS:
+        if undated and _MIN_WINDOW_DAYS and not waived:
             print(
                 f"warning: {name} has {len(undated)} retirement(s) naming no "
                 "since= date, judged by version alone: " + "; ".join(undated),
                 file=sys.stderr,
             )
-        for relpath, qualname, remove_in, *_ in _expired(dated, pkg_version) + _expired(
-            forms, pkg_version
+        for relpath, qualname, remove_in, *_ in _expired(dated, pkg_version, today) + _expired(
+            forms, pkg_version, today
         ):
             overdue.append(f"{name}/{relpath}::{qualname} (was due in {remove_in})")
 
@@ -1337,18 +1775,32 @@ def check(package_names: list[str], repo_root: Path = REPO_ROOT) -> int:
     return 0
 
 
+@dataclass(frozen=True)
+class _Reading:
+    """One surface of a package judged against its last release."""
+
+    data: PackageSurface
+    delta: ApiDelta | None
+    prior: dict | None
+    label: str
+    #: The removals a notice still holds (:func:`held_removals`).
+    held: dict[str, dict] = field(default_factory=dict)
+    #: Why the package carries no back-compat (:func:`back_compat_waiver`).
+    waived: str = ""
+
+
 def _delta(
-    name: str, repo_root: Path, since: str | None
-) -> tuple[PackageSurface, ApiDelta | None, dict | None, str]:
-    """``(surface, delta, baseline mapping, baseline label)`` of *name* against
-    its last release.
+    name: str, repo_root: Path, since: str | None, today: datetime.date | None = None
+) -> _Reading:
+    """*name*'s Python against its last release.
 
     Raises:
         FileNotFoundError: The package has no source root here.
     """
     pkg_dir = repo_root / name
     data = walk_package(pkg_dir, repo_root)
-    prior, label = release_baseline(pkg_dir, since)
+    baseline, label = _release(pkg_dir, since)
+    prior = baseline.to_dict() if baseline is not None else None
     delta = compute_api_delta(
         data,
         prior,
@@ -1358,12 +1810,15 @@ def _delta(
         ),
         moved_table=moved_names(repo_root / data.source_root),
     )
-    return data, delta, prior, label
+    return _judged(
+        pkg_dir, data, delta, baseline, prior, label, today,
+        current_forms=ApiSurface.retirements(pkg_dir / name),
+    )
 
 
 def _csharp_delta(
-    name: str, repo_root: Path, since: str | None
-) -> tuple[PackageSurface, ApiDelta | None, dict | None, str] | None:
+    name: str, repo_root: Path, since: str | None, today: datetime.date | None = None
+) -> _Reading | None:
     """:func:`_delta` of *name*'s C#, or None when it declares none: read
     against the same release, accounted for by the same ``MOVED_NAMES``
     (no base resolves across packages, no Python module re-exports).
@@ -1375,85 +1830,216 @@ def _csharp_delta(
     data = walk_csharp(pkg_dir, repo_root)
     if data is None:
         return None
-    prior, label = release_baseline(pkg_dir, since, read=release_csharp_surface)
-    moved_table = moved_names(pkg_dir / name)
-    return data, compute_api_delta(data, prior, moved_table=moved_table), prior, label
+    baseline, label = _release(pkg_dir, since, read=release_csharp_surface)
+    prior = baseline.to_dict() if baseline is not None else None
+    delta = compute_api_delta(data, prior, moved_table=moved_names(pkg_dir / name))
+    return _judged(pkg_dir, data, delta, baseline, prior, label, today)
 
 
-def semver_verdict(name: str, repo_root: Path = REPO_ROOT, since: str | None = None) -> dict:
-    """``{package, bump, reasons, unaccounted, baseline}`` -- the smallest
-    release *name* may ship as (:func:`required_bump`) against its last
-    release: the delta ``--changes`` prints, so the verdict cannot drift from
-    the report that explains it.
+def _judged(
+    pkg_dir, data, delta, baseline, prior, label, today, current_forms=None
+) -> _Reading:
+    """The :class:`_Reading` of *delta*, its held removals found; under a
+    back-compat waiver none is held and none is unaccounted. With
+    *current_forms* (the tree's ``ApiSurface.retirements``), a retirement the
+    release carried and the tree no longer does (:func:`removed_forms`) is a
+    removal too: retired, owing the minor, held to its window.
+
+    Raises:
+        ValueError: The package declares a waiver without a reason.
+    """
+    waived = back_compat_waiver(pkg_dir)
+    forms = {}
+    if delta is not None and baseline is not None and current_forms is not None:
+        forms = removed_forms(getattr(baseline, "retirement_rows", ()), current_forms)
+        if forms:
+            delta = dataclasses.replace(delta, retired=sorted({*delta.retired, *forms}))
+    held = {}
+    if delta is not None and waived:
+        delta = dataclasses.replace(
+            delta, retired=sorted(delta.retired + delta.removed), removed=[]
+        )
+    elif delta is not None and baseline is not None:
+        version = package_version(pkg_dir, pkg_dir.name)
+        held = held_removals(delta, baseline, version, today, forms)
+    return _Reading(data, delta, prior, label, held, waived)
+
+
+def semver_verdict(
+    name: str,
+    repo_root: Path = REPO_ROOT,
+    since: str | None = None,
+    today: datetime.date | None = None,
+) -> dict:
+    """``{package, bump, reasons, unaccounted, held, baseline}`` -- the
+    smallest release *name* may ship as (:func:`required_bump`) against its
+    last release: the delta ``--changes`` prints, so the verdict cannot drift
+    from the report that explains it. ``held`` lists the removals a notice
+    still holds (:func:`held_removals`), each with the date it may go; a gate
+    refuses the release while any is held (``--semver`` exits 1).
 
     With no baseline -- no package here, no release tag, a *since* naming no
     commit -- there is no verdict: ``bump`` is None and ``baseline`` says why
     (``"none (...)"``). A gate must refuse that, never read it as a clean
     patch: a missing tag is how a removal would ship unseen.
     """
-    none = {"package": name, "bump": None, "reasons": [], "unaccounted": []}
+    none = {"package": name, "bump": None, "reasons": [], "unaccounted": [], "held": []}
     try:
-        _data, delta, _prior, label = _delta(name, repo_root, since)
-        csharp = _csharp_delta(name, repo_root, since)
+        readings = [_delta(name, repo_root, since, today)]
+        csharp = _csharp_delta(name, repo_root, since, today)
     except (FileNotFoundError, NotADirectoryError):
         return {**none, "baseline": "none (no package here)"}
-    if delta is None:
+    except ValueError as exc:  # a waiver naming no reason
+        return {**none, "baseline": f"none ({exc})"}
+    label = readings[0].label
+    if readings[0].delta is None:
         return {**none, "baseline": label}
-    deltas = [delta]
     if csharp is not None:
-        if csharp[1] is None:  # its C# could not be read at the release
-            return {**none, "baseline": f"{label}; its C#: {csharp[3]}"}
-        deltas.append(csharp[1])
-    reasons = [r for d in deltas for r in required_bump(d)[1]]
+        if csharp.delta is None:  # its C# could not be read at the release
+            return {**none, "baseline": f"{label}; its C#: {csharp.label}"}
+        readings.append(csharp)
+    reasons = [r for x in readings for r in required_bump(x.delta)[1]]
     bump = "minor" if reasons else "patch"
-    unaccounted = [k for d in deltas for k in d.removed if not _is_semver_exempt(k)]
-    return {
+    unaccounted = [k for x in readings for k in x.delta.removed if not _is_semver_exempt(k)]
+    verdict = {
         "package": name,
         "bump": bump,
         "reasons": reasons,
         "unaccounted": unaccounted,
+        "held": [row for x in readings for row in x.held.values()],
         "baseline": label,
     }
+    if readings[0].waived:
+        verdict["waived"] = readings[0].waived
+    return verdict
 
 
-def changes_report(name: str, repo_root: Path = REPO_ROOT, since: str | None = None) -> str:
+def changes_report(
+    name: str,
+    repo_root: Path = REPO_ROOT,
+    since: str | None = None,
+    today: datetime.date | None = None,
+) -> str:
     """*name*'s public-API changes since its last release, and its retirement
     debt, as markdown.
 
     Raises:
         FileNotFoundError: The package has no source root here.
     """
-    pkg_dir = repo_root / name
-    data = walk_package(pkg_dir, repo_root)
-    prior, label = release_baseline(pkg_dir, since)
-    return emit_changes_markdown(
-        data,
-        prior,
-        label,
-        foreign_members=sibling_class_members(data.name, repo_root),
-        reexports=module_reexports(
-            repo_root / data.source_root, _relpaths_losing_symbols(data, prior)
-        ),
-        version=package_version(pkg_dir, name),
-        moved_table=moved_names(repo_root / data.source_root),
-    ) + _csharp_changes(name, repo_root, since)
-
-
-def _csharp_changes(name: str, repo_root: Path, since: str | None) -> str:
-    """*name*'s C# changes and retirement debt (:func:`changes_report`'s
-    second part), or ``""`` when it declares no C#."""
-    csharp = _csharp_delta(name, repo_root, since)
-    if csharp is None:
-        return ""
-    data, _delta_cs, prior, label = csharp
-    report = emit_changes_markdown(
-        data,
-        prior,
-        label,
-        version=package_version(repo_root / name, name),
-        moved_table=moved_names(repo_root / name / name),
+    version = package_version(repo_root / name, name)
+    readings = [_delta(name, repo_root, since, today), _csharp_delta(name, repo_root, since, today)]
+    return "\n".join(
+        emit_changes_markdown(
+            x.data,
+            x.prior,
+            x.label,
+            version=version,
+            delta=x.delta,
+            held=x.held,
+            waived=x.waived,
+        )
+        for x in readings
+        if x is not None
     )
-    return f"\n{report}"
+
+
+def _say_held(verdict: dict) -> None:
+    """The refusal of *verdict*'s held removals, on stderr, naming each and its date."""
+    dates = sorted(row["not_before"] for row in verdict["held"] if row["not_before"])
+    print(
+        f"{verdict['package']} removes {len(verdict['held'])} name(s) their "
+        "notices still hold: the removal may ship "
+        + (f"not before {dates[-1]}, and " if dates else "")
+        + "only at the version each names. Keep each name until then:",
+        file=sys.stderr,
+    )
+    for row in verdict["held"]:
+        print(f"  {row['key']}: {_hold_text(row)}", file=sys.stderr)
+
+
+#: The release a verdict's baseline label names: ``the last release (v0.6.0)``.
+_LABEL_VERSION_RE = re.compile(r"\(v(\d+\.\d+\.\d+)\)")
+
+
+def judge_release(
+    name: str,
+    published: str | None,
+    release: str | None,
+    since: str | None = None,
+    repo_root: Path | None = None,
+) -> int:
+    """push.ps1's semver gate as an exit code, for a release it does not make
+    (a standalone package's ``publish.yml``): 1 when the delta removes a name
+    nothing accounts for, removes one a notice still holds, or *release* is
+    below the minor its removals owe over the baseline; 2 with no verdict; else
+    0. The verdict's JSON goes to stdout, the refusal to stderr.
+
+    *published* is the version PyPI holds; its ``v<published>`` tag is the
+    baseline. ``none`` beside a release tag is no verdict (exit 2): a lost
+    PyPI read, never a first release. Nothing published (``none``), or a repo with no release tag yet
+    (extapps: its ``publish.yml`` tags each release from the next one on), is
+    judged against nothing: said, exit 0, and the tag this release makes is
+    the next one's baseline. Once any tag exists, a missing ``v<published>``
+    is no verdict (exit 2), as push.ps1 refuses it.
+    """
+    repo_root = repo_root or REPO_ROOT
+    pkg_dir = repo_root / name
+    if published is not None:
+        if published.strip().lower() in ("", "none"):
+            tag = release_tag(pkg_dir)
+            if tag is not None:
+                # A first release it cannot be: PyPI's answer was lost, never "none".
+                print(
+                    f"no verdict for {name}: nothing published, yet {tag} is a release "
+                    "here: read PyPI again.",
+                    file=sys.stderr,
+                )
+                return 2
+            print(f"{name}: nothing published: a first release has nothing to judge against.", file=sys.stderr)
+            return 0
+        if release_tag(pkg_dir) is None:
+            print(
+                f"{name}: no release tag yet, so nothing to judge {published} -> {release} "
+                "against; this release's tag is the next one's baseline.",
+                file=sys.stderr,
+            )
+            return 0
+        since = f"v{published}"
+    verdict = semver_verdict(name, repo_root, since)
+    print(json.dumps([verdict], indent=2))
+    if verdict["bump"] is None:
+        print(f"no verdict for {name}: {verdict['baseline']}", file=sys.stderr)
+        return 2
+    failed = False
+    if verdict["unaccounted"]:
+        failed = True
+        print(
+            f"{name} removes public API nothing accounts for: each name owes a "
+            "ptk.Deprecation alias, or a MOVED_NAMES row when it left for another package:",
+            file=sys.stderr,
+        )
+        for key in verdict["unaccounted"]:
+            print(f"  {key}", file=sys.stderr)
+    if verdict["held"]:
+        failed = True
+        _say_held(verdict)
+    match = _LABEL_VERSION_RE.search(verdict["baseline"])
+    if release and verdict["bump"] == "minor" and match:
+        major, minor, _ = (int(p) for p in match.group(1).split("."))
+        wanted = f"{major}.{minor + 1}.0"
+        try:
+            short = _version_key(release) < _version_key(wanted)
+        except ValueError:
+            print(f"{name}: {release!r} is no comparable version: its bump is unchecked.", file=sys.stderr)
+            short = False
+        if short:
+            failed = True
+            print(
+                f"{name} {release} removes public API, so it owes a minor bump (>= {wanted}) "
+                f"over {match.group(1)}: " + ", ".join(verdict["reasons"][:8]),
+                file=sys.stderr,
+            )
+    return 1 if failed else 0
 
 
 def shadow_report(package_names: list[str], repo_root: Path = REPO_ROOT) -> str:
@@ -1493,8 +2079,10 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Print, as JSON, the smallest release each package may ship as "
             "('minor' when the delta since its last release removes a public "
-            "symbol, else 'patch') with the removals that force it; exit 2 "
-            "when a package has no baseline to judge against (bump null)."
+            "symbol, else 'patch') with the removals that force it; exit 1 "
+            "when a removal is one its notice still holds (held, with the date "
+            "it may go), exit 2 when a package has no baseline to judge "
+            "against (bump null)."
         ),
     )
     mode.add_argument(
@@ -1507,6 +2095,27 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the names more than one package defines (a DRY review).",
     )
+    mode.add_argument(
+        "--floors",
+        action="store_true",
+        help=(
+            "Exit non-zero when a hand-set floor on an ecosystem package names a "
+            "release lacking a name the package uses (default: the standalone "
+            "packages; reads the upstream's v<floor> tag)."
+        ),
+    )
+    parser.add_argument(
+        "--published",
+        metavar="VERSION",
+        help="With --semver and one package: the version PyPI holds ('none' when it holds "
+        "none); the baseline is its v<VERSION> tag (judge_release).",
+    )
+    parser.add_argument(
+        "--release",
+        metavar="VERSION",
+        help="With --semver and one package: judge this release too, exit 1 when a removal "
+        "nothing accounts for, a held one, or VERSION below the bump its removals owe.",
+    )
     parser.add_argument(
         "--since",
         metavar="REF",
@@ -1516,13 +2125,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     names = list(args.packages) or list(ECOSYSTEM_PACKAGES)
+    if args.published is not None or args.release:
+        if not args.semver or len(args.packages) != 1:
+            parser.error("--published and --release judge one package's release: <pkg> --semver")
+        if args.published is not None and args.since:
+            parser.error("--published names the baseline: drop --since")
+        return judge_release(names[0], args.published, args.release, args.since)
     if args.semver:
         verdicts = [semver_verdict(n, REPO_ROOT, args.since) for n in names]
         print(json.dumps(verdicts, indent=2))
         missing = [v for v in verdicts if v["bump"] is None]
         for verdict in missing:
             print(f"no verdict for {verdict['package']}: {verdict['baseline']}", file=sys.stderr)
-        return 2 if missing else 0
+        held = [v for v in verdicts if v["held"]]
+        for verdict in held:
+            _say_held(verdict)
+        return 2 if missing else 1 if held else 0
     if args.changes:
         for name in names:
             try:
@@ -1533,6 +2151,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.shadows:
         print(shadow_report(names, REPO_ROOT), end="")
         return 0
+    if args.floors:
+        failed = False
+        for name in list(args.packages) or list(standalone_packages()):
+            problems, notes = floor_problems(name, REPO_ROOT)
+            for note in notes:
+                print(f"[NOTE] {note}")
+            for problem in problems:
+                print(f"[FAIL] {problem}")
+            failed = failed or bool(problems)
+            if not problems:
+                print(f"[OK] {name}: its floors carry every name it uses")
+        return 1 if failed else 0
     return check(names)
 
 

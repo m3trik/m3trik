@@ -89,6 +89,10 @@ and are exempt, as ruff already treats them.
 
        [tool.m3trik.names]
        forbid = ["Maya", "Blender"]          # unitytk: what produces its assets
+       copies = {"pkg/_vendored.py" = "source_pkg"}   # a vendored copy's source
+
+   A vendored copy (CODE_STANDARD section 6) names its source in its header, so
+   ``copies`` declares each one (package-relative) and the source it may name.
 
    Words are read with identifiers split at case and underscores, so
    ``MayaSurface`` and ``maya_surface`` name Maya while ``mayatk`` names only
@@ -490,6 +494,29 @@ def csharp(data: dict) -> Optional[dict]:
     return data.get("tool", {}).get("m3trik", {}).get("layers", {}).get("csharp")
 
 
+_CSHARP_SOURCES = re.compile(r"^CSHARP_SOURCES\s*[:=]", re.M)
+
+
+def undeclared_csharp(repo: Path, package: str) -> Optional[str]:
+    """The declaration problem of a package that holds C# yet declares no
+    ``[tool.m3trik.layers.csharp]`` (an asmdef Unity would import, or
+    ``CSHARP_SOURCES`` in its root ``__init__.py``), or None when it holds none:
+    a deleted or misspelled table must never switch the C# rules off."""
+    init = repo / package / "__init__.py"
+    if init.is_file() and _CSHARP_SOURCES.search(init.read_text(encoding="utf-8", errors="replace")):
+        held = f"CSHARP_SOURCES in {package}/__init__.py"
+    else:
+        found = next(unity_walk(repo, ".asmdef"), None)
+        if found is None:
+            return None
+        held = found.relative_to(repo).as_posix()
+    return (
+        f"holds C# ({held}) but declares no [tool.m3trik.layers.csharp]: declare "
+        "its C# parts (root, order, kernel; check_layers.py rule 5), or every C# "
+        "rule skips it"
+    )
+
+
 def _segments(folder: str) -> List[str]:
     """A root-relative posix folder (or part pattern) as segments; ``.`` and
     ``""`` are the root itself."""
@@ -792,6 +819,10 @@ def scan(
             layout = CSharpLayout(repo, declared_cs)
             problems += [f"{package}: {p}" for p in layout.problems]
             found |= layout.violations()
+        else:
+            undeclared = undeclared_csharp(repo, package)
+            if undeclared:
+                problems.append(f"{package}: {undeclared}")
         violations[package] = sorted(found)
         hard = product_violations(repo, package, products)
         declared = roles(data)
@@ -825,6 +856,13 @@ def words(text: str) -> Set[str]:
     """The lower-cased words of *text*, identifiers split at case and
     underscores: ``MayaSurface`` holds ``maya``; ``mayatk`` is one word."""
     return {match.group(0).lower() for match in _WORD.finditer(text)}
+
+
+def name_copies(data: dict) -> Dict[str, str]:
+    """The package's declared vendored copies (``[tool.m3trik.names] copies``):
+    package-relative path -> the source package it may name, lower-cased."""
+    names = data.get("tool", {}).get("m3trik", {}).get("names", {})
+    return {path.replace("\\", "/"): source.lower() for path, source in names.get("copies", {}).items()}
 
 
 def name_forbid(data: dict) -> Set[str]:
@@ -890,6 +928,7 @@ def name_violations(repo: Path, package: str, data: dict, forbidden: Set[str]) -
     found: Set[str] = set()
     if not forbidden:
         return found
+    copies = name_copies(data)
     for path in iter_named_files(name_roots(repo, package, data)):
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -898,7 +937,14 @@ def name_violations(repo: Path, package: str, data: dict, forbidden: Set[str]) -
         lowered = text.lower()
         if not any(name in lowered for name in forbidden):
             continue  # the cheap test first: most files name nothing
-        for word in sorted(words(text) & forbidden):
+        allowed = set()
+        try:
+            source = copies.get(path.relative_to(repo / package).as_posix())
+        except ValueError:  # a test file, outside the package folder
+            source = None
+        if source:
+            allowed.add(source)
+        for word in sorted((words(text) & forbidden) - allowed):
             found.add(f"{path.relative_to(repo).as_posix()} names {word} (names)")
     return found
 

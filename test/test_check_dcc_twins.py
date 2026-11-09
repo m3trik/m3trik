@@ -424,13 +424,13 @@ class WrittenOnceTest(unittest.TestCase):
         body anywhere the guard does not compare still is."""
         guard = (
             "import os\n"
-            'MARMOSET_PANEL_DIR = "marmoset_workflow"\n'
+            'MARMOSET_PANEL_DIR = "marmoset_scripts"\n'
             'MARMOSET_PANEL_VENDORED = ("toolbag_log.py", os.path.join("templates", "a.py"))\n'
         )
         body = "def tail(count):\n" + self.LOGIC
         vendored = {
             "extapps/test/test_vendor_sync.py": guard,
-            "extapps/extapps/marmoset_workflow/toolbag_log.py": body,
+            "extapps/extapps/marmoset_scripts/toolbag_log.py": body,
             "mayatk/mayatk/mat_utils/marmoset_bridge/toolbag_log.py": body,
             "blendertk/blendertk/mat_utils/marmoset_bridge/toolbag_log.py": body,
         }
@@ -440,6 +440,30 @@ class WrittenOnceTest(unittest.TestCase):
         unlisted = dict(vendored)
         unlisted["extapps/test/test_vendor_sync.py"] = guard.replace('"toolbag_log.py", ', "")
         self.assertEqual(len(gate.written_once_violations(self.tree(unlisted))), 1)
+
+    def test_the_whole_vendored_substance_slice_is_no_copy(self):
+        """extapps' Substance Scripts vendors mayatk's whole engine slice (its
+        top files and every file under its folders, the guard's
+        ``SUBSTANCE_ENGINE_TOP`` / ``SUBSTANCE_ENGINE_DIRS``), held byte-equal:
+        none of it is a copy. A file outside the slice still is."""
+        guard = (
+            'SUBSTANCE_PANEL_DIR = "substance_scripts"\n'
+            'SUBSTANCE_ENGINE_TOP = ("connection.py",)\n'
+            'SUBSTANCE_ENGINE_DIRS = ("substance_rpc",)\n'
+        )
+        body = "def plan(count):\n" + self.LOGIC
+        vendored = {
+            "extapps/test/test_vendor_sync.py": guard,
+            "extapps/extapps/substance_scripts/connection.py": body,
+            "extapps/extapps/substance_scripts/substance_rpc/client.py": body.replace("plan", "ask"),
+            "mayatk/mayatk/mat_utils/substance_bridge/connection.py": body,
+            "mayatk/mayatk/mat_utils/substance_bridge/substance_rpc/client.py": body.replace("plan", "ask"),
+            "blendertk/blendertk/mat_utils/substance_bridge/connection.py": body,
+            "blendertk/blendertk/mat_utils/substance_bridge/substance_rpc/client.py": body.replace("plan", "ask"),
+        }
+        self.assertEqual(gate.written_once_violations(self.tree(vendored)), [])
+        stray = dict(vendored, **{"extapps/extapps/substance_scripts/slots.py": body})
+        self.assertEqual(len(gate.written_once_violations(self.tree(stray))), 1)
 
     def test_a_run_judges_only_copies_its_packages_write(self):
         """A copy between tentacle's layout and mayatk stops a release of

@@ -536,6 +536,49 @@ class TestMain(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("declares no [tool.m3trik.layers.csharp]", out.getvalue())
 
+    def test_csharp_without_the_declaration_fails_and_no_csharp_skips(self):
+        """A deleted or misspelled ``[tool.m3trik.layers.csharp]`` must not switch
+        the kernel-bypass, prior-art and generated-file rules off: an asmdef
+        Unity would import, or ``CSHARP_SOURCES`` in the package root, fails
+        without it; a package with no C# is skipped."""
+
+        def asmdef(repo):
+            _tree(
+                repo,
+                {"Pkg/Features/A/P.A.asmdef": {}},
+                {"Pkg/Features/A/A.cs": "class A { void F() { Debug.Log(1); } }\n"},
+            )
+
+        def sources(repo):
+            (repo / "unitytk" / "__init__.py").write_text('CSHARP_SOURCES = ("../Pkg",)\n')
+
+        results = {}
+        for name, lay in {"asmdef": asmdef, "sources": sources, "none": None}.items():
+            with _scratch(f"undeclared_{name}") as tmp:
+                root = Path(tmp.dir_path())
+                repo = root / "unitytk"
+                (repo / "unitytk").mkdir(parents=True)
+                (repo / "unitytk" / "__init__.py").write_text("")
+                (repo / "pyproject.toml").write_text(
+                    '[project]\nname = "unitytk"\n\n[tool.m3trik.layer.csharp]\nroot = "Pkg"\n'
+                )
+                if lay:
+                    lay(repo)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    results[name] = (cc.main(["--workspace", str(root)]), out.getvalue())
+        self.assertEqual(
+            {name: code for name, (code, _) in results.items()},
+            {"asmdef": 1, "sources": 1, "none": 0},
+        )
+        self.assertIn(
+            "[FAIL] declaration: unitytk: holds C# (Pkg/Features/A/P.A.asmdef) but "
+            "declares no [tool.m3trik.layers.csharp]",
+            results["asmdef"][1],
+        )
+        self.assertIn("CSHARP_SOURCES in unitytk/__init__.py", results["sources"][1])
+        self.assertIn("[SKIP] no package declares", results["none"][1])
+
 
 class TestRealWorkspace(unittest.TestCase):
     def test_no_new_violation_beyond_the_baseline(self):

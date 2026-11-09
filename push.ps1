@@ -65,6 +65,10 @@ Core safety rules (Strict+Merge)
   committed; so is a tree that cannot be hashed. Not re-checked: the rebase onto
   origin/dev before a push, and a direct merge's conflict resolution. Not under
   -SkipReview, which waives the whole gate.
+- Refuses to merge a release of pythontk or mayatk (not -DryRun) while unitytk's samples
+  differ from a fresh export of their recipes (Test-UnitySamples: sync_unity_samples.py
+  --check in a headless mayapy; a machine without Maya fails it), after the cheap pre-passes
+  and before any mutation.
 - Keeps internal pyproject.toml pins in sync with the versions being released, and
   waits for a just-published upstream version to become visible on PyPI before merging
   a downstream package that pins it.
@@ -371,8 +375,9 @@ function Invoke-RepoGate {
 
 function Test-PublicHygiene {
     # The public-hygiene gate: scripts/check_public_hygiene.py over $Names. A machine with no
-    # private denylist passes (the script reports SKIP). -Script and -Denylist exist for tests;
-    # the real denylist lives outside every repo.
+    # private denylist skips the identifier scan (the script reports SKIP) and still fails on a
+    # machine path inside a sample binary. -Script and -Denylist exist for tests; the real
+    # denylist lives outside every repo.
     param(
         [string]$Root,
         [string[]]$Names,
@@ -395,6 +400,46 @@ function Test-EnglishOnly {
         [string]$Script = (Join-Path $PSScriptRoot "scripts\check_english_only.py")
     )
     return Invoke-RepoGate "English-only" $Script @("--workspace", $Root) $Names
+}
+
+function Test-UnitySamples {
+    # unitytk's samples against a fresh export of their recipes: scripts/sync_unity_samples.py
+    # --check, which drives a headless mayapy it launches. It runs here, on the releasing machine,
+    # never in CI (no Maya); a machine without Maya fails it (exit 2) rather than passing it.
+    # Its script is the run's own ($M3TRIK_SCRIPTS, from -Root): a hermetic run (-Root <temp>)
+    # has none and skips the gate, never reaching the real workspace's export -- which launches
+    # mayapy, and stalled this repo's stubbed release tests. -Script exists for tests.
+    param([string]$Script = "")
+    if (-not $Script) {
+        $Script = Join-Path $M3TRIK_SCRIPTS "sync_unity_samples.py"
+        if (-not (Test-Path -LiteralPath $Script)) {
+            Write-Host "  Unity samples: no $Script in this run's root, nothing to check" -ForegroundColor DarkGray
+            return $true
+        }
+    }
+    if (-not (Test-Path -LiteralPath $Script)) {
+        Write-Err "Unity samples gate missing: $Script"
+        return $false
+    }
+    if (-not (Get-Command $PYTHON -CommandType Application -ErrorAction SilentlyContinue)) {
+        Write-Err "Unity samples gate cannot run: no python on PATH"
+        return $false
+    }
+    $report = & $PYTHON $Script --check 2>&1
+    $code = $LASTEXITCODE
+    foreach ($line in @($report)) { Write-Host "  $line" }
+    if ($code -eq 0) { return $true }
+    Write-Err "Unity samples gate failed (exit $code): run python m3trik/scripts/sync_unity_samples.py where Maya is installed and commit unitytk's samples; nothing was committed, pushed or released"
+    return $false
+}
+
+function Get-UnitySampleProducers {
+    # The packages of $Names whose release Test-UnitySamples gates: those that export unitytk's
+    # samples (the recipes run pythontk's and mayatk's Scene Exporter), and none unless the run
+    # merges for real.
+    param([string[]]$Names, [bool]$Merge, [bool]$DryRun)
+    if (-not $Merge -or $DryRun) { return @() }
+    return @($Names | Where-Object { @("pythontk", "mayatk") -contains $_ })
 }
 
 function Test-LineBudget {
@@ -1045,7 +1090,13 @@ function Get-RequiredBump {
     if ($row -and $row.baseline -and ([string]$row.baseline).StartsWith('none')) {
         return @{ failed = "no baseline: $($row.baseline)"; detail = $detail }
     }
-    if ($code -ne 0) { return @{ failed = "check_api_surface.py exited $code"; detail = $detail } }
+    # Exit 1 with a verdict is the script refusing a removal its notice still
+    # holds (`held`): a verdict to act on, never a failure to give one.
+    $held = @()
+    if ($row -and $row.bump -and $row.held) { $held = @($row.held | Where-Object { $_ }) }
+    if ($code -ne 0 -and -not ($code -eq 1 -and $held.Count -gt 0)) {
+        return @{ failed = "check_api_surface.py exited $code"; detail = $detail }
+    }
     if (-not $row -or -not $row.bump) {
         return @{ failed = 'check_api_surface.py printed no verdict'; detail = $detail + $raw }
     }
@@ -1055,6 +1106,7 @@ function Get-RequiredBump {
         bump        = [string]$row.bump
         reasons     = @($row.reasons)
         unaccounted = @($row.unaccounted | Where-Object { $_ })
+        held        = $held
     }
 }
 
@@ -1087,6 +1139,23 @@ function Test-SemverGate {
             Write-Host "    ... and $($unaccounted.Count - 8) more (check_api_surface.py $PackageName --changes lists them all)" -ForegroundColor DarkGray
         }
         Write-Err "Account for them, or re-run with -AllowBreakingPatch."
+        return $false
+    }
+    # A removal of a name the release's notice (ptk.Deprecation, C# [Obsolete]) still holds: its
+    # window (Deprecation.window_expired) is open, so its callers have not had their warning yet.
+    $held = @($required.held | Where-Object { $_ })
+    if ($held.Count -gt 0) {
+        $dates = @($held | ForEach-Object { [string]$_.not_before } | Where-Object { $_ } | Sort-Object)
+        $when = if ($dates.Count -gt 0) { "not before $($dates[-1]), and " } else { '' }
+        Write-Err "$PackageName removes $($held.Count) name(s) their notices still hold: the removal may ship $($when)only at the version each names."
+        foreach ($h in ($held | Select-Object -First 8)) {
+            $until = if ($h.not_before) { "until $($h.not_before)" } else { 'by its version' }
+            Write-Host "    - $($h.key): $until (remove in $($h.remove_in))" -ForegroundColor DarkGray
+        }
+        if ($held.Count -gt 8) {
+            Write-Host "    ... and $($held.Count - 8) more (check_api_surface.py $PackageName --changes marks them HELD)" -ForegroundColor DarkGray
+        }
+        Write-Err "Keep each name until then, or re-run with -AllowBreakingPatch."
         return $false
     }
     if ($required.bump -ne 'minor') { return $true }
@@ -1359,7 +1428,7 @@ function Test-Build {
         $oldErrorAction = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
 
-        # Cloud-sync clients (OneDrive/Dropbox) on O:\Cloud\ intermittently lock the
+        # Cloud-sync clients (OneDrive/Dropbox) on a synced workspace intermittently lock the
         # final wheel write, surfacing as "Permission denied" / Errno 13. Retry on
         # that signature; bail immediately on real build errors.
         $maxAttempts = 3
@@ -2857,7 +2926,8 @@ if ($reposToProcess.Count -gt 1) {
 # Public-hygiene and English-only gates (every run). A client identifier, or non-English text,
 # in anything this run could commit, push or cut into Release notes stops it HERE, before any of
 # that happens: a pushed leak cannot be recalled. The denylist lives outside every repo, so the
-# check itself publishes nothing; a machine without it gets SKIP and runs on (Test-PublicHygiene).
+# check itself publishes nothing; a machine without it skips that scan, never the machine-path one
+# (Test-PublicHygiene).
 # ------------------------------------------------------------------------------------------------
 if ($reposToProcess.Count -gt 0) {
     $hygieneNames = @($reposToProcess | ForEach-Object { $_.Name })
@@ -3079,6 +3149,18 @@ if ($Merge -and $Strict -and -not $SkipReview) {
 "@ -ForegroundColor Yellow
         exit 1
     }
+}
+
+# ------------------------------------------------------------------------------------------------
+# Unity samples gate (-Merge, not -DryRun). unitytk's samples are exported through pythontk's and
+# mayatk's Scene Exporter: a release of either that changes what a sample's export holds stops
+# here (Test-UnitySamples). The export takes minutes, so it runs after every pre-pass that fails
+# in seconds, and still before any mutation.
+# ------------------------------------------------------------------------------------------------
+$sampleProducers = @(Get-UnitySampleProducers @($reposToProcess | ForEach-Object { $_.Name }) $Merge $DryRun)
+if ($sampleProducers.Count -gt 0) {
+    Write-Step "Unity samples: $($sampleProducers -join ', ') export them"
+    if (-not (Test-UnitySamples)) { exit 1 }
 }
 
 $results = @{}

@@ -614,17 +614,17 @@ class TestCSharpAssemblies(unittest.TestCase):
             (repo / "pyproject.toml").write_text(
                 '[project]\nname = "unitytk"\n\n'
                 "[tool.m3trik.layers.csharp]\n"
-                'root = "unitytk/templates"\n'
+                'root = "com.m3trik.unitytk"\n'
                 'order = [".", "Core"]\n',
                 encoding="utf-8",
             )
             _unity(
                 repo,
                 {
-                    "unitytk/templates/P.asmdef": {
+                    "com.m3trik.unitytk/P.asmdef": {
                         "references": ["P.Core", "Unity.InputSystem"]
                     },
-                    "unitytk/templates/Core/P.Core.asmdef": {},
+                    "com.m3trik.unitytk/Core/P.Core.asmdef": {},
                 },
             )
             out = io.StringIO()
@@ -642,6 +642,56 @@ class TestCSharpAssemblies(unittest.TestCase):
         self.assertEqual(
             frozen,
             {"unitytk": ["P.asmdef -> Unity.InputSystem (outside the package)"]},
+        )
+
+    def test_csharp_without_the_declaration_fails_and_no_csharp_skips(self):
+        """A deleted or misspelled ``[tool.m3trik.layers.csharp]`` must not switch
+        the C# rules off: a package holding an asmdef Unity would import, or
+        declaring ``CSHARP_SOURCES`` in its root ``__init__.py``, fails without
+        it; one with no C# (or only a ``~`` folder's, which Unity never imports)
+        is skipped."""
+
+        def asmdef(repo):
+            _unity(repo, {"com.m3trik.unitytk/P.asmdef": {}})
+
+        def sources(repo):
+            (repo / "unitytk" / "__init__.py").write_text(
+                'CSHARP_SOURCES = ("../com.m3trik.unitytk",)\n'
+            )
+
+        def sample_only(repo):
+            _unity(repo, {"com.m3trik.unitytk/Samples~/S/S.asmdef": {}})
+
+        results = {}
+        cases = {"asmdef": asmdef, "sources": sources, "sample_only": sample_only, "none": None}
+        for name, lay in cases.items():
+            with _scratch(f"undeclared_{name}") as tmp:
+                root = Path(tmp.dir_path())
+                repo = root / "unitytk"
+                (repo / "unitytk").mkdir(parents=True)
+                (repo / "unitytk" / "__init__.py").write_text("")
+                (repo / "pyproject.toml").write_text(
+                    '[project]\nname = "unitytk"\n\n[tool.m3trik.layers.charp]\n'
+                    'root = "com.m3trik.unitytk"\n',
+                    encoding="utf-8",
+                )
+                if lay:
+                    lay(repo)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    results[name] = (cl.main(["--workspace", str(root)]), out.getvalue())
+        self.assertEqual(
+            {name: code for name, (code, _) in results.items()},
+            {"asmdef": 1, "sources": 1, "sample_only": 0, "none": 0},
+        )
+        self.assertIn(
+            "[FAIL] declaration: unitytk: holds C# (com.m3trik.unitytk/P.asmdef) but "
+            "declares no [tool.m3trik.layers.csharp]",
+            results["asmdef"][1],
+        )
+        self.assertIn(
+            "holds C# (CSHARP_SOURCES in unitytk/__init__.py) but declares no",
+            results["sources"][1],
         )
 
 
@@ -713,6 +763,28 @@ class TestNames(unittest.TestCase):
         self.assertIn("mayatk", cl.words("import mayatk"))
         self.assertNotIn("maya", cl.words("import mayatk"))
         self.assertIn("unitytk", cl.words("UNITYTK_URP"))
+
+    def test_a_declared_copy_may_name_its_source_and_nothing_else(self):
+        """A vendored copy (CODE_STANDARD section 6) names its source in its
+        header; ``copies`` lets that file name that one package. Added: 2026-11-04"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._workspace(root)
+            app = root / "extapps"
+            (app / "extapps" / "unity").mkdir(parents=True)
+            (app / "extapps" / "__init__.py").write_text("")
+            (app / "pyproject.toml").write_text(
+                '[project]\nname = "extapps"\ndependencies = ["uitk"]\n'
+                '[tool.m3trik.names]\ncopies = {"unity/_cli.py" = "unitytk"}\n'
+            )
+            (app / "extapps" / "unity" / "_cli.py").write_text("# the source is unitytk's; mayatk too\n")
+            (app / "extapps" / "unity" / "panel.py").write_text("# unitytk reads it\n")
+            violations, _problems, _strict = cl.scan(root, ["pythontk", "uitk", "mayatk", "unitytk", "extapps"])
+        names = sorted(v for v in violations["extapps"] if v.endswith("(names)"))
+        self.assertEqual(names, [
+            "extapps/unity/_cli.py names mayatk (names)",
+            "extapps/unity/panel.py names unitytk (names)",
+        ])
 
     def test_a_names_violation_names_its_fix(self):
         self.assertIn("CODE_STANDARD section 0", cl.layers_fix("a.py names uitk (names)"))

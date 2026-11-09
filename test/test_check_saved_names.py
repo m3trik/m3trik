@@ -249,6 +249,41 @@ class TestRenamedPanels(unittest.TestCase):
         one_host = self.TABLE.replace('("blender",)', '("maya",)')
         self.assertEqual(gate.lost(frozen, self.scan(self._after(extra, one_host))), lost)
 
+    def test_an_extapps_app_renamed_through_its_own_table_loses_nothing(self):
+        """extapps declares its renamed apps beside the launcher that carries
+        them (``_panel_launcher.RENAMED_FROM``), read like tentacle's table."""
+        before = {"extapps/extapps/old_app/old_app.ui": UI.format(stem="old_app", extra="")}
+        after = {
+            "extapps/extapps/new_app/new_app.ui": UI.format(stem="new_app", extra=""),
+            gate.EXTAPPS_RENAMES_FILE: 'RENAMED_FROM = {"new_app": {"old_app": {}}}\n',
+        }
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            frozen = gate.scan(_tree(Path(a), before), packages=("extapps",))
+            now = gate.scan(_tree(Path(b), after), packages=("extapps",))
+        self.assertEqual(now["renamed"], {"old_app": ["new_app", {}]})
+        self.assertEqual(gate.lost(frozen, now), [])
+
+    def test_a_widget_renamed_to_none_is_dropped_on_purpose_not_lost(self):
+        """``None`` in the table: the value is not carried, because its meaning
+        changed (a template combo's row in a list now ordered otherwise). It is
+        declared, so the gate reads it as a decision; a typo still fails."""
+        extra = '<widget class="QComboBox" name="cmb000"/>'
+        before = {"extapps/extapps/old_app/old_app.ui": UI.format(stem="old_app", extra=extra)}
+        table = 'RENAMED_FROM = {"new_app": {"old_app": {"cmb000": None}}}\n'
+        after = {
+            "extapps/extapps/new_app/new_app.ui": UI.format(stem="new_app", extra=extra),
+            gate.EXTAPPS_RENAMES_FILE: table,
+        }
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            frozen = gate.scan(_tree(Path(a), before), packages=("extapps",))
+            now = gate.scan(_tree(Path(b), after), packages=("extapps",))
+        self.assertEqual(gate.lost(frozen, now), [])
+        typo = dict(after)
+        typo[gate.EXTAPPS_RENAMES_FILE] = 'RENAMED_FROM = {"new_app": {"old_app": {"b000": "b999"}}}\n'
+        with tempfile.TemporaryDirectory() as c:
+            wrong = gate.scan(_tree(Path(c), typo), packages=("extapps",))
+        self.assertTrue(gate.lost(frozen, wrong), "a rename to a name no widget has is lost")
+
     def test_the_table_never_enters_the_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = _tree(Path(tmp), self._after(""))

@@ -15,9 +15,8 @@ The mayatk / blendertk plugins are *installed* into the host's own plugin folder
 / Painter have no ``pythontk`` on ``sys.path``. Their payloads must therefore be
 self-contained, so the core ships inside each one as ``_rpc_core.py``.
 
-extapps' Painter plugin is NOT staged: it loads in place from the checkout and
-bootstraps ``sys.path`` back to it, so it imports the core directly. One source,
-two consumption modes.
+extapps' Substance Scripts vendors mayatk's ``substance_rpc`` payload
+(``test_vendor_sync.py``), so its copy is staged here too.
 
 The mirrors are committed rather than generated at install time, for the same
 reason ``sync_shared_bat.py``'s are: the payload has to be complete on disk before
@@ -42,13 +41,16 @@ SOURCE = REPO_ROOT / "pythontk" / "pythontk" / "net_utils" / "rpc" / "plugin_cor
 #: a staged artifact, not part of the plugin's own surface.
 STAGED_NAME = "_rpc_core.py"
 
-#: ``(package, bridge subpath, plugin package name)`` for every payload that is
-#: INSTALLED into a host's plugin folder and so must carry its own copy.
+#: ``(package, bridge subpath, plugin package name)`` for every payload whose
+#: ``plugin_src`` runs in a host app's own Python (installed into its plugin
+#: folder, or loaded in place by an app a bridge launches), which has no
+#: pythontk: each must carry its own copy.
 _PAYLOADS = (
     ("mayatk", ("mat_utils", "marmoset_bridge"), "marmoset_rpc"),
     ("mayatk", ("mat_utils", "substance_bridge"), "substance_rpc"),
     ("blendertk", ("mat_utils", "marmoset_bridge"), "marmoset_rpc"),
     ("blendertk", ("mat_utils", "substance_bridge"), "substance_rpc"),
+    ("extapps", ("substance_scripts",), "substance_rpc"),
 )
 
 

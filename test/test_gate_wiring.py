@@ -58,6 +58,11 @@ WIRING_EXEMPT = {
         "controlled, so a runner has no ledger to check. Called by the /backlog "
         "skill at SELECT and when stamping a verification."
     ),
+    "scaffold_unity_part": (
+        "A generator a person or agent runs once to start a Unity part (its "
+        "folders, assemblies, .meta files and a failing test), not a gate: "
+        "there is nothing for a workflow or a release to check."
+    ),
     "build_stingray_ao_presets": (
         "Needs a Maya install even to --check: main() calls build(args.maya) "
         "BEFORE the --check branch, and stock_presets_dir() sys.exits with 'no "

@@ -30,7 +30,8 @@ import affected_tests as at  # noqa: E402
 
 def _clear_caches():
     for fn in (at.packages, at.test_files, at.source_files, at.name_spread, at._parse,
-               at.gui_required, at.last_seconds, at.operation_targets):
+               at.gui_required, at.last_seconds, at.operation_targets,
+               at.conformance_providers, at.project_inputs):
         fn.cache_clear()
     at._INDEX.clear()
 
@@ -397,6 +398,320 @@ class TestSelection(_Fixture):
         _clear_caches()
         _, picks = self.picks("pythontk/pythontk/__init__.py")
         self.assertIn("test_surface_snapshot", picks.get("pythontk", set()))
+
+    def test_a_changed_test_no_runner_collects_is_noted_not_run(self):
+        """Bug: a suite parked in a folder no runner collects
+        (``m3trik/test/unity_e2e/``) was selected by its stem and run as
+        ``test/<stem>.py``, which does not exist, so pytest exited 4.
+        Fixed: 2026-11-04"""
+        _write(self.ws, {
+            "pythontk/test/parked/test_parked.py": "def test_x():\n    pass\n",
+        })
+        _clear_caches()
+        sel, picks = self.picks("pythontk/test/parked/test_parked.py")
+        self.assertNotIn("test_parked", picks.get("pythontk", set()))
+        self.assertTrue(any("test_parked.py" in n for n in sel.notes), sel.notes)
+
+
+
+class TestWholeSuites(_Fixture):
+    """A file no Python test imports can still be what a suite checks: the
+    Unity package's C# and samples are the Edit Mode tests' (run in the owned
+    project), and a sample's recipe is the samples check's. Such a suite runs
+    whole, through the runner its unit declares; a C# change selected nothing
+    before."""
+
+    FILES = dict(
+        _Fixture.FILES,
+        **{
+            "unitytk/unitytk/__init__.py": "",
+            "unitytk/test/run_tests.py": "",
+            "unitytk/test/test_unity_host.py": "def test_h():\n    pass\n",
+            "unitytk/com.m3trik.unitytk/Core/Json.cs": "class Json {}\n",
+            "unitytk/com.m3trik.unitytk/Core/M3trik.Unitytk.Core.asmdef": "{}\n",
+            "unitytk/com.m3trik.unitytk/Samples~/Shots/Shots.fbx": "fbx\n",
+            "unitytk/com.m3trik.unitytk/Samples~/Shots/Editor/ShotsDemoRecipe.cs": "class R {}\n",
+            "unitytk/com.m3trik.unitytk/README.md": "# Package\n",
+            "m3trik/scripts/sync_unity_samples.py": "def main():\n    pass\n",
+            "m3trik/scripts/unity_samples/shots.py": "RECORDS = ('animation',)\n",
+            "m3trik/test/test_sync_unity_samples.py": (
+                "import sync_unity_samples\n\ndef test_s():\n    sync_unity_samples.main()\n"
+            ),
+            "m3trik/test/unity_e2e/test_sample_twins.py": "def test_t():\n    pass\n",
+            "m3trik/test/unity_e2e/twins/_assembly.py": "ORDER = []\n",
+            "m3trik/test/unity_e2e/twins/blender_shots.py": "NAME = 'BlenderShots'\n",
+        },
+    )
+
+    def test_the_end_to_end_suite_and_its_twins_select_it_whole(self):
+        """Bug: a change under ``m3trik/test/unity_e2e/`` selected no test --
+        its suite sits in a folder no runner collects, so its own module was
+        "a test no runner collects" and a twin "a test-dir file no test
+        imports". Fixed: 2026-11-08"""
+        for rel in (
+            "m3trik/test/unity_e2e/test_sample_twins.py",
+            "m3trik/test/unity_e2e/twins/_assembly.py",
+            "m3trik/test/unity_e2e/twins/blender_shots.py",
+        ):
+            with self.subTest(rel=rel):
+                sel, picks = self.picks(rel)
+                self.assertEqual(set(picks), {"unity_e2e"}, picks)
+                self.assertEqual(sel.notes, [])
+                (name, argv, _), = at.commands(sel, workspace=self.ws)
+                self.assertEqual(
+                    (name, argv[1:]), ("unity_e2e", ["-m", "pytest", "-q", "m3trik/test/unity_e2e"])
+                )
+
+    def test_the_packages_csharp_and_samples_select_its_edit_mode_run(self):
+        for rel in (
+            "unitytk/com.m3trik.unitytk/Core/Json.cs",
+            "unitytk/com.m3trik.unitytk/Core/M3trik.Unitytk.Core.asmdef",
+            "unitytk/com.m3trik.unitytk/Samples~/Shots/Shots.fbx",
+            "unitytk/com.m3trik.unitytk/Samples~/Shots/Editor/ShotsDemoRecipe.cs",
+        ):
+            with self.subTest(rel=rel):
+                sel, picks = self.picks(rel)
+                self.assertEqual(set(picks), {"unity_edit_mode"}, picks)
+                self.assertEqual(sel.notes, [])
+                (name, argv, _), = at.commands(sel, workspace=self.ws)
+                self.assertEqual(
+                    (name, argv[1:]), ("unity_edit_mode", ["unitytk/test/run_tests.py", "--edit-mode"])
+                )
+
+    def test_a_deleted_csharp_file_still_selects_it(self):
+        _commit(self.ws / "unitytk")
+        (self.ws / "unitytk/com.m3trik.unitytk/Core/Json.cs").unlink()
+        sel, picks = self.picks("unitytk/com.m3trik.unitytk/Core/Json.cs")
+        self.assertIn("unity_edit_mode", picks)
+        self.assertEqual(sel.notes, [])  # the suite took it: nothing left unmapped
+
+    def test_a_doc_in_the_package_selects_nothing(self):
+        sel, picks = self.picks("unitytk/com.m3trik.unitytk/README.md")
+        self.assertEqual(picks, {})
+        self.assertEqual(sel.docs, ["unitytk/com.m3trik.unitytk/README.md"])
+
+    def test_a_samples_recipe_or_its_exporter_selects_the_samples_check(self):
+        for rel, also in (
+            ("m3trik/scripts/unity_samples/shots.py", set()),
+            ("m3trik/scripts/sync_unity_samples.py", {"m3trik"}),  # and the tests that import it
+        ):
+            with self.subTest(rel=rel):
+                sel, picks = self.picks(rel)
+                self.assertEqual(set(picks), {"unity_samples"} | also, picks)
+                self.assertEqual(sel.notes, [])  # the check reaches it: never "untested?"
+                argv = dict((n, a) for n, a, _ in at.commands(sel, workspace=self.ws))["unity_samples"]
+                self.assertEqual(argv[1:], ["m3trik/scripts/sync_unity_samples.py", "--check"])
+
+    def test_the_plan_names_the_suite_and_the_run_logs_in_its_unit(self):
+        sel, _ = self.picks("unitytk/com.m3trik.unitytk/Core/Json.cs")
+        cmds = at.commands(sel, workspace=self.ws)
+        text = at.report(sel, cmds, explain=True, workspace=self.ws)
+        self.assertIn("unity_edit_mode: the package's Edit Mode tests, in the owned project", text)
+        self.assertIn("changed unitytk/com.m3trik.unitytk/Core/Json.cs", text)
+        tally = "Total: 3 tests, 3 passed, 0 failed, 0 skipped, 0 inconclusive"
+        fake = [("unity_edit_mode", [sys.executable, "-c", f"print({tally!r})"], cmds[0][2])]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = at.run(fake, workspace=self.ws)
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn("unity_edit_mode: PASS", out.getvalue())
+        self.assertTrue(list((self.ws / "unitytk/test/temp_tests").glob("affected_*_unity_edit_mode.log")))
+
+
+_CORE_CSPROJ = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="../../com.m3trik.unitytk/Core/*.cs" Link="Core/%(Filename)%(Extension)" />
+    <Compile Include="*.cs" />
+    <Compile Include="../models_dotnet/Conformance.cs" Link="Conformance.cs" />
+    <None Include="../../unitytk/editor_operations.json" Link="editor_operations.json" />
+  </ItemGroup>
+</Project>
+"""
+_MODELS_CSPROJ = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="../../com.m3trik.unitytk/Core/*.cs" Link="Core/%(Filename)%(Extension)" />
+    <Compile Include="../../com.m3trik.unitytk/Features/*/Model/*.cs" Link="Models/%(Filename)%(Extension)" />
+    <Compile Include="*.cs" />
+  </ItemGroup>
+</Project>
+"""
+
+
+class TestDotnetSuites(_Fixture):
+    """The C# ports' conformance suites (``dotnet test``): what each project
+    compiles, and the Python references its golden cases come from
+    (``ptk.Conformance.PROVIDERS``), select it whole. Bug: a change to a
+    ported model or to its Python reference planned the Edit Mode run alone,
+    never the suite that catches a Python/C# drift (BACKLOG 2026-11-08)."""
+
+    FILES = dict(
+        _Fixture.FILES,
+        **{
+            "unitytk/unitytk/__init__.py": "",
+            "unitytk/unitytk/editor_operations.json": "{}\n",
+            "unitytk/test/run_tests.py": "",
+            "unitytk/com.m3trik.unitytk/Core/Json.cs": "class Json {}\n",
+            "unitytk/com.m3trik.unitytk/Features/ShadowPlane/Model/ShadowHorizonBaker.cs": "class B {}\n",
+            "unitytk/com.m3trik.unitytk/Features/ShadowPlane/Editor/ShadowPlaneImporter.cs": "class I {}\n",
+            "unitytk/test/core_dotnet/Unitytk.Core.Tests.csproj": _CORE_CSPROJ,
+            "unitytk/test/core_dotnet/RecordNamesTests.cs": (
+                'class T { void S() { Conformance.Cases("record_names", 5, "{}"); } }\n'
+            ),
+            "unitytk/test/models_dotnet/Unitytk.Models.Tests.csproj": _MODELS_CSPROJ,
+            "unitytk/test/models_dotnet/Conformance.cs": "static class Conformance {}\n",
+            "unitytk/test/models_dotnet/ShadowHorizonBakerTests.cs": (
+                'class T { void S() { var d = Conformance.Cases("shadow_horizon", Seed, Options); } }\n'
+            ),
+            "pythontk/pythontk/core_utils/conformance.py": (
+                "class Conformance:\n    PROVIDERS = {\n"
+                '        "articulation": ("pythontk.geo_utils.articulation.conformance", "A"),\n'
+                '        "shadow_horizon": ("pythontk.geo_utils.shadow_horizon", "H"),\n'
+                '        "record_names": ("pythontk.file_utils.mesh_convert._media_conformance", "R"),\n'
+                "    }\n"
+            ),
+            "pythontk/pythontk/geo_utils/__init__.py": "",
+            "pythontk/pythontk/geo_utils/_raster.py": "def rasterize():\n    return 1\n",
+            "pythontk/pythontk/geo_utils/shadow_horizon.py": (
+                "from pythontk.geo_utils._raster import rasterize\n\n"
+                "class ShadowHorizonThing:\n    def bake(self):\n        return rasterize()\n"
+            ),
+            "pythontk/pythontk/geo_utils/articulation/__init__.py": "",
+            "pythontk/pythontk/geo_utils/articulation/conformance.py": "class ArtThing:\n    pass\n",
+            "pythontk/pythontk/file_utils/__init__.py": "",
+            "pythontk/pythontk/file_utils/mesh_convert/__init__.py": "",
+            "pythontk/pythontk/file_utils/mesh_convert/_media.py": "class _MediaThing:\n    pass\n",
+            "pythontk/pythontk/file_utils/mesh_convert/_media_conformance.py": (
+                "from pythontk.file_utils.mesh_convert._media import _MediaThing\n\n"
+                "class RecordNamesThing:\n    pass\n"
+            ),
+        },
+    )
+
+    CORE, MODELS, EDIT = "unity_core_dotnet", "unity_models_dotnet", "unity_edit_mode"
+
+    def test_what_each_project_compiles_or_reads_selects_it(self):
+        both = {self.CORE, self.MODELS}
+        for rel, want in (
+            ("unitytk/com.m3trik.unitytk/Core/Json.cs", both | {self.EDIT}),
+            (
+                "unitytk/com.m3trik.unitytk/Features/ShadowPlane/Model/ShadowHorizonBaker.cs",
+                {self.MODELS, self.EDIT},
+            ),
+            ("unitytk/com.m3trik.unitytk/Features/ShadowPlane/Editor/ShadowPlaneImporter.cs", {self.EDIT}),
+            ("unitytk/test/models_dotnet/ShadowHorizonBakerTests.cs", {self.MODELS}),
+            ("unitytk/test/models_dotnet/Conformance.cs", both),
+            ("unitytk/test/core_dotnet/Unitytk.Core.Tests.csproj", {self.CORE}),
+            ("unitytk/unitytk/editor_operations.json", {self.CORE}),
+        ):
+            with self.subTest(rel=rel):
+                sel, picks = self.picks(rel)
+                self.assertEqual(set(picks), want, picks)
+                self.assertEqual(sel.notes, [])
+
+    def test_the_python_reference_of_its_golden_cases_selects_it(self):
+        for rel, want in (
+            ("pythontk/pythontk/geo_utils/shadow_horizon.py", {self.MODELS}),  # the provider
+            ("pythontk/pythontk/geo_utils/_raster.py", {self.MODELS}),  # what it imports
+            ("pythontk/pythontk/file_utils/mesh_convert/_media.py", {self.CORE}),
+            ("pythontk/pythontk/core_utils/conformance.py", {self.CORE, self.MODELS}),  # the registry
+            ("pythontk/pythontk/geo_utils/articulation/conformance.py", set()),  # no suite asks for it
+        ):
+            with self.subTest(rel=rel):
+                _sel, picks = self.picks(rel)
+                self.assertEqual(set(picks) & {self.CORE, self.MODELS}, want, picks)
+
+    def test_it_runs_as_dotnet_test_of_its_project_with_k_as_its_filter(self):
+        sel, _ = self.picks("unitytk/com.m3trik.unitytk/Core/Json.cs")
+        argv = {n: a for n, a, _ in at.commands(sel, k="Bake", workspace=self.ws)}
+        for name, folder in ((self.CORE, "core_dotnet"), (self.MODELS, "models_dotnet")):
+            with self.subTest(name=name):
+                self.assertEqual(Path(argv[name][0]).stem.lower(), "dotnet")
+                self.assertEqual(
+                    argv[name][1:],
+                    ["test", f"unitytk/test/{folder}", "--filter", "Bake", "--nologo"],
+                )
+        text = at.report(sel, at.commands(sel, workspace=self.ws), explain=False, workspace=self.ws)
+        self.assertIn(f"{self.MODELS}: {at.RUNNERS[self.MODELS].label}, run whole", text)
+        self.assertIn("$ dotnet test unitytk/test/models_dotnet --nologo", text)
+
+    def test_a_run_gives_the_suite_this_python_and_reads_its_tally(self):
+        """Its golden cases come from ``UNITYTK_PYTHON`` (else ``python`` on the
+        PATH, which may lack pythontk): the run hands it this interpreter."""
+        line = "Passed!  - Failed:     0, Passed:    31, Skipped:     0, Total:    31, Duration: 2 s - M.dll (net10.0)"
+        script = f"import os; print(os.environ['UNITYTK_PYTHON']); print({line!r})"
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("UNITYTK_PYTHON", None)
+            with contextlib.redirect_stdout(out):
+                code = at.run([(self.MODELS, [sys.executable, "-c", script], ["x"])], workspace=self.ws)
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn(f"{self.MODELS}: PASS", out.getvalue())
+        log = next((self.ws / "unitytk/test/temp_tests").glob(f"affected_*_{self.MODELS}.log"))
+        self.assertIn(sys.executable, log.read_text(encoding="utf-8"))
+
+    def test_a_dotnet_run_that_executed_nothing_is_not_a_pass(self):
+        for text, want in (
+            ("Passed!  - Failed:     0, Passed:    31, Skipped:     2, Total:    33, Duration: 1 s", 31),
+            ("Failed!  - Failed:     2, Passed:    29, Skipped:     0, Total:    31, Duration: 1 s", 31),
+            ("Passed!  - Failed:     0, Passed:     0, Skipped:     4, Total:     4, Duration: 1 s", 0),
+            ("No test matches the given testcase filter `Nope` in C:\\x\\M.dll", 0),
+            ("Test summary: total: 12, failed: 1, succeeded: 10, skipped: 1, duration: 1.2s", 11),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(at.executed(text), want)
+
+
+class TestWholeSuitesReadingProducers(_Fixture):
+    """A sample's recipe names the producer API it exports through, and a twin
+    builds from the recipe: a change to that API selects the samples check and
+    the end-to-end suite, as a test naming it selects that test. Bug: a change
+    to mayatk's or pythontk's exporter selected neither. Fixed: 2026-11-08"""
+
+    FILES = dict(
+        _Fixture.FILES,
+        **{
+            "mayatk/mayatk/scene_exporter.py": (
+                "from mayatk._export_core import write_fbx\n\n"
+                "class SceneExporter:\n    def export(self):\n        return write_fbx()\n"
+            ),
+            "mayatk/mayatk/_export_core.py": "def write_fbx():\n    return 1\n",
+            "mayatk/mayatk/rigging.py": "class TubeRigger:\n    pass\n",
+            "m3trik/scripts/sync_unity_samples.py": "def main():\n    pass\n",
+            "m3trik/scripts/unity_samples/shots.py": (
+                "NAME = 'Shots'\nRECORDS = ('animation',)\n\n"
+                "def build(out_dir):\n    import mayatk as mtk\n"
+                "    return mtk.SceneExporter().export()\n"
+            ),
+            "m3trik/test/unity_e2e/test_sample_twins.py": "def test_t():\n    pass\n",
+            "m3trik/test/unity_e2e/twins/blender_shots.py": (
+                "from unity_samples import shots as recipe\n\nNAME = 'BlenderShots'\n"
+                "SAMPLE = recipe.NAME\n\ndef build(out_dir):\n"
+                "    import pythontk as ptk\n    return ptk.FeatureThing().go()\n"
+            ),
+        },
+    )
+
+    def test_the_api_a_recipe_or_twin_exports_through_selects_them_whole(self):
+        both = {"unity_samples", "unity_e2e"}
+        for rel, want in (
+            ("mayatk/mayatk/scene_exporter.py", both),  # the recipe names SceneExporter
+            ("mayatk/mayatk/_export_core.py", both),  # through its one importer
+            ("pythontk/pythontk/core_utils/feature.py", {"unity_e2e"}),  # a twin names FeatureThing
+            ("mayatk/mayatk/rigging.py", set()),  # nothing names TubeRigger
+            ("pythontk/pythontk/core_utils/lonely.py", set()),
+        ):
+            with self.subTest(rel=rel):
+                sel, picks = self.picks(rel)
+                self.assertEqual(set(picks) & both, want, picks)
+        sel, _ = self.picks("mayatk/mayatk/_export_core.py")
+        reasons = sel.picks["unity_samples"][at.RUNNERS["unity_samples"].label]
+        self.assertEqual(
+            reasons, {"via mayatk.scene_exporter: shots.py names SceneExporter"}
+        )
+        argv = dict((n, a) for n, a, _ in at.commands(sel, workspace=self.ws))
+        self.assertEqual(argv["unity_samples"][1:], ["m3trik/scripts/sync_unity_samples.py", "--check"])
 
 
 class TestCommands(_Fixture):

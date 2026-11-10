@@ -3537,6 +3537,39 @@ else:
                 notes.read_text(encoding="utf-8").splitlines(), expected, out
             )
 
+    def test_release_notes_past_githubs_limit_keep_whole_entries_and_link_the_rest(self):
+        """GitHub refuses a Release body over 125,000 characters (HTTP 422):
+        pythontk 0.21.0's notes passed it, so its Release was never created.
+        `Limit-ReleaseNotes` keeps whole entries, in order, while they fit,
+        and closes with how many more there are and where they are; notes
+        within the limit pass through unchanged."""
+        entries = [
+            f"- **2026-11-0{i} -- entry {i} (`m{i}.py`).** " + "x" * 80 + f"\n  continuation {i}"
+            for i in range(1, 4)
+        ]
+        notes = "\n".join(entries)
+        link = "https://github.com/m3trik/pkg/blob/v1.2.0/CHANGELOG.md"
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source, out_short, out_long = root / "notes.txt", root / "short.txt", root / "long.txt"
+            source.write_text(notes, encoding="utf-8")
+            result = self._run_push_functions(
+                root,
+                f"$notes = [System.IO.File]::ReadAllText('{source}', [System.Text.Encoding]::UTF8)\n"
+                "$enc = New-Object System.Text.UTF8Encoding $false\n"
+                f"[System.IO.File]::WriteAllText('{out_long}', (Limit-ReleaseNotes $notes '{link}' 400), $enc)\n"
+                f"[System.IO.File]::WriteAllText('{out_short}', (Limit-ReleaseNotes $notes '{link}'), $enc)\n",
+            )
+            out = result.stdout + result.stderr
+            self.assertTrue(out_long.exists(), out)
+            self.assertEqual(out_short.read_text(encoding="utf-8"), notes, out)
+            capped = out_long.read_text(encoding="utf-8")
+            self.assertLessEqual(len(capped), 400, capped)
+            self.assertTrue(capped.startswith(entries[0]), capped)
+            self.assertNotIn("entry 3", capped)
+            self.assertIn(link, capped)
+            self.assertRegex(capped, r"\b1 more entr")
+
     @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_release_asset_is_uploaded_as_committed_at_the_tag(self):
         """The asset attached to Release vX.Y.Z is the file AT vX.Y.Z.

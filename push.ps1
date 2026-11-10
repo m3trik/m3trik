@@ -1448,12 +1448,16 @@ function Test-Build {
                 & $python -m build --wheel 2>&1
             } -ArgumentList $RepoPath, $PYTHON
 
-            Wait-Job $buildJob -Timeout 60 | Out-Null
+            # pythontk's isolated wheel build takes about 40 s on the cloud-synced
+            # workspace (measured 2026-11-10, in and out of a job); 60 s failed two
+            # release runs in a row. A hung build still ends the run.
+            $buildTimeout = 180
+            Wait-Job $buildJob -Timeout $buildTimeout | Out-Null
             if ($buildJob.State -eq 'Running') {
                 Stop-Job $buildJob
                 Remove-Job $buildJob
                 $ErrorActionPreference = $oldErrorAction
-                Write-Err "Build timed out (60s)!"
+                Write-Err "Build timed out (${buildTimeout}s)!"
                 return $false
             }
 
@@ -2235,6 +2239,39 @@ function Get-ReleaseNotes {
     finally { Pop-Location }
 }
 
+function Limit-ReleaseNotes {
+    # GitHub refuses a Release body over 125,000 characters (HTTP 422, "body is
+    # too long"), and a long release's entries pass it: pythontk 0.21.0's Release
+    # was never created. Keeps whole entries ($CHANGELOG_BULLET starts one), in
+    # order, while they fit with a closing line that says how many more there
+    # are and links $Link (the CHANGELOG at the tag). Notes within $Max pass
+    # through unchanged.
+    param([string]$Notes, [string]$Link, [int]$Max = 125000)
+    if ($Notes.Length -le $Max) { return $Notes }
+    $entries = New-Object System.Collections.Generic.List[string]
+    $current = New-Object System.Collections.Generic.List[string]
+    foreach ($line in ($Notes -split "`n")) {
+        if ($line -match $CHANGELOG_BULLET -and $current.Count) {
+            $entries.Add(($current -join "`n").TrimEnd())
+            $current.Clear()
+        }
+        $current.Add($line)
+    }
+    if ($current.Count) { $entries.Add(($current -join "`n").TrimEnd()) }
+    $footer = { param($n) "... and $n more entr$(if ($n -eq 1) { 'y' } else { 'ies' }): the full notes are in $Link" }
+    $kept = New-Object System.Collections.Generic.List[string]
+    $length = 0
+    foreach ($entry in $entries) {
+        $tail = & $footer ($entries.Count - $kept.Count - 1)
+        if ($length + $entry.Length + 2 + $tail.Length -gt $Max) { break }
+        $kept.Add($entry)
+        $length += $entry.Length + 1
+    }
+    $kept.Add("")
+    $kept.Add((& $footer ($entries.Count - $kept.Count + 1)))
+    return ($kept -join "`n")
+}
+
 function Select-ReleaseNotes {
     # The notes in a CHANGELOG.md diff: every ADDED top-level bullet dated on or
     # after $Since (YYYY-MM-DD, the previous release tag's commit date), with the
@@ -2410,6 +2447,7 @@ function Complete-Release {
             Write-Skip "No new dated CHANGELOG entries for $tag (tag-only, no Release)"
             return $did
         }
+        $notes = Limit-ReleaseNotes $notes "https://github.com/$RepoSlug/blob/$tag/CHANGELOG.md"
         $tmp = [System.IO.Path]::GetTempFileName()
         try {
             [System.IO.File]::WriteAllText($tmp, $notes, (New-Object System.Text.UTF8Encoding $false))

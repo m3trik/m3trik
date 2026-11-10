@@ -200,9 +200,13 @@ LEDGER: List[TwinSpec] = [
         symbols=(
             "UsdUtils.sanitize_prim_name",
             "UsdUtils.skinning_methods",
+            "UsdUtils.author_lod_variants",
+            "UsdUtils.expand_lod_variants",
         ),
         note=(
-            "2 of the 6 shared names are identical. The other 4 (export, "
+            "4 of the 8 shared names are identical (the LOD variant pair joined "
+            "2026-11-10: pxr cannot enter pythontk, which plans the variant sets "
+            "as plain data, ptk.LodChain.variant_plan). The other 4 (export, "
             "import_scene, is_usd_file, sampling_frame_range) each wrap their own "
             "host's importer and are expected to differ. sanitize_prim_name also "
             "has a third, dependency-free copy in mayatk's _import_scene_usd "

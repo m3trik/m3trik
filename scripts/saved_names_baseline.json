@@ -1939,7 +1939,8 @@
    "s000",
    "s001",
    "subdivision",
-   "tb000"
+   "tb000",
+   "tb001"
   ],
   "subdivision#submenu": [
    "QtUi",
@@ -2847,6 +2848,7 @@
   "lightmap_web",
   "lightmap_writers",
   "lightmaps",
+  "lods",
   "materials",
   "render_effects",
   "render_effects_bindings",

@@ -119,6 +119,9 @@ Key flags
 -RecordReceipt        Record named verification receipt(s) (e.g. review,tests) for
                       the current tree of -Packages, then exit. See "Release
                       preflight" in m3trik/AGENTS.md.
+-GateReport           Print the release gate's verdicts for this run's packages as one
+                      JSON line (which owe a review / tests receipt) and exit; mutates
+                      nothing. Read by scripts/Invoke-RunnerRelease.ps1.
 -ShowReceipts         Show receipt validity for -Packages (default: strict set),
                       then exit.
 -CommitMessage        Message for the auto-commit Sync-DevWithOrigin makes when
@@ -159,6 +162,8 @@ param(
     [switch]$AllowBreakingPatch,
     [string[]]$RecordReceipt,
     [switch]$ShowReceipts,
+    # The release gate's verdicts as one JSON line, and nothing else (see the block below).
+    [switch]$GateReport,
     [int]$ReceiptMaxAgeDays = 7,
     [switch]$UsePR,
     # 3600s (60 min), not 1800s: uitk's own pull_request Tests workflow took 21,
@@ -3082,6 +3087,32 @@ if ($Merge) {
 "@ -ForegroundColor Yellow
         exit 1
     }
+}
+
+# ------------------------------------------------------------------------------------------------
+# -GateReport: the release gate's verdicts as data. What a caller that RUNS the preflight (the
+# release runner, scripts/Invoke-RunnerRelease.ps1) reads to learn which packages of this run owe
+# which receipts: the gate's own rule (Get-GateVerdict) over the run's own set (auto-cascade
+# included), so nothing restates either. One JSON line on the output stream, then exit 0:
+#   [{package, sha, hash, class, exempt, missing}]
+# sha is the commit judged, hash the source tree a receipt keys on, missing the receipts the gate
+# would demand and this tree lacks. After every read-only pre-pass above; mutates nothing.
+# ------------------------------------------------------------------------------------------------
+if ($GateReport) {
+    $gateRows = @(foreach ($repo in $reposToProcess) {
+        if ($STRICT_PACKAGES -notcontains $repo.Name) { continue }
+        $gateVerdict = Get-GateVerdict $repo.Name $repo.FullName $publishedVersions
+        [ordered]@{
+            package = $repo.Name
+            sha     = "$(git -C $repo.FullName rev-parse HEAD 2>$null)"
+            hash    = $gateVerdict.Hash
+            class   = $gateVerdict.Class
+            exempt  = $gateVerdict.Exempt
+            missing = @($gateVerdict.Missing)
+        }
+    })
+    ConvertTo-Json -InputObject $gateRows -Compress -Depth 3
+    exit 0
 }
 
 if ($Merge -and $Strict -and -not $SkipReview) {

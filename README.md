@@ -40,7 +40,7 @@ Every operation is a public library function that panels only call, so anything 
 
 ### One toolset, two hosts
 
-- **Mirrored by name and behavior.** mayatk and blendertk expose the same operations under the same names, so tentacle's menus and 48 of its 50 tool panels are shared. A control one host can't support is hidden there, never left as a dead button, and CI fails when a shared panel calls anything one library lacks ([the scorecard](https://github.com/m3trik/tentacle/blob/main/docs/PARITY_AUDIT.md)).
+- **Mirrored by name and behavior.** mayatk and blendertk expose the same operations under the same names, so tentacle's menus and all 49 of its tool panels are shared. A control one host can't support is hidden there, never left as a dead button, and CI fails when a shared panel calls anything one library lacks ([the scorecard](https://github.com/m3trik/tentacle/blob/main/docs/PARITY_AUDIT.md)).
 - **Name it, and it connects.** uitk turns a Qt Designer file and a Python class into a working tool: each widget calls the method that shares its name, its state persists and the theme applies, with no glue code.
 - **Hosts are adapters.** Whatever a host does differently sits behind a small adapter with a plain-Python default, so shared logic runs and is tested with no DCC, and tentacle needs one launcher with no per-host fork.
 
@@ -49,13 +49,6 @@ Every operation is a public library function that panels only call, so anything 
 - **Declared once, generated everywhere.** Scene records are declared in pythontk and read by Maya, Blender, Unity and the WebXR viewer, whose C# and JavaScript types are generated from that declaration and held to it in CI.
 - **Every port held to its reference.** A model that also runs in C# or JavaScript must reproduce cases its Python reference generates at test time, so no port is measured against a stale copy. The height-field shadow shader is one GLSL source for every engine.
 - **Plug-and-play export.** A deliverable is the authored scene written by a stock exporter in an open format, with glTF output tested against the Khronos reference validator. Previews only layer over authored values, and saved fingerprints fail any refactor that changes an export.
-
-### Built for real sessions
-
-- **Native in each host.** Maya tools take the selection, keep their settings in option boxes and undo in one step, OpenMaya edits included; Blender tools undo in one step in Blender's own history. A live preview rolls back cleanly and commits as one step.
-- **Honest about limits.** A tool says what it could not do. A cancel that came too late reports that the job finished instead of undoing it, and rig transfer records what it can't read and falls back to baked keys rather than guess.
-- **Bridges that respect your session.** One-click hand-offs reach Marmoset Toolbag, Substance 3D Painter, RizomUV, Unity and the other DCC. They act on an app you have open only when you invoke them, through a connection you enabled, with their edits in that app's own undo.
-- **Your work outlives the code.** Saved values carry over when panels merge or are renamed, and CI fails on a stored name that would stop loading.
 
 ### A design that enforces itself
 

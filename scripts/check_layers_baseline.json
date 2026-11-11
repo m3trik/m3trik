@@ -553,7 +553,6 @@
   "pythontk/core_utils/engines/lighting/__init__.py names mayatk (names)",
   "pythontk/core_utils/engines/lighting/light_layers.py names arnold (names)",
   "pythontk/core_utils/engines/lighting/light_layers.py names mayatk (names)",
-  "pythontk/core_utils/engines/lighting/light_rig_payload.py names maya (names)",
   "pythontk/core_utils/engines/lighting/light_rig_payload.py names mayatk (names)",
   "pythontk/core_utils/engines/lighting/look_match/_look_match.py names mayatk (names)",
   "pythontk/core_utils/engines/lighting/look_match/loop.py names arnold (names)",

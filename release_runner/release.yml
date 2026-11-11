@@ -1,0 +1,58 @@
+# The cascade's Release workflow, run by the self-hosted release runner.
+# Published to the private release repo by m3trik/scripts/Install-ReleaseRunner.ps1
+# from m3trik/release_runner/release.yml: edit it there, never in the release repo.
+# Every step is m3trik's: scripts/Invoke-RunnerRelease.ps1 (docs/RELEASE_RUNNER.md).
+name: Release
+run-name: "Release ${{ inputs.packages || 'the cascade' }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Cascade packages to release, comma-separated (blank: the whole cascade)"
+        required: false
+        default: ""
+      reviewed:
+        description: "The dev commits you reviewed: package@sha,... (a dry run prints it)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run: the plan, the cheap gates and who owes a receipt; nothing tested, merged or published"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: [self-hosted, Windows, m3trik-release]
+    timeout-minutes: 720
+    steps:
+      - name: Sync the release tooling (m3trik dev)
+        shell: pwsh
+        run: |
+          $root = $env:M3TRIK_RELEASE_ROOT
+          if (-not $root -or -not (Test-Path -LiteralPath (Join-Path $root '.release-runner'))) {
+            throw "M3TRIK_RELEASE_ROOT is not a release-runner workspace: re-run m3trik/scripts/Install-ReleaseRunner.ps1."
+          }
+          $m3trik = Join-Path $root 'm3trik'
+          git -C $m3trik fetch --quiet --prune --tags origin; if ($LASTEXITCODE) { exit 1 }
+          git -C $m3trik checkout --quiet --force -B dev origin/dev; if ($LASTEXITCODE) { exit 1 }
+          git -C $m3trik reset --quiet --hard origin/dev; if ($LASTEXITCODE) { exit 1 }
+          git -C $m3trik log --oneline -1
+
+      - name: Test, record receipts, release
+        shell: pwsh
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          REVIEWED: ${{ inputs.reviewed }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          $script = Join-Path $env:M3TRIK_RELEASE_ROOT 'm3trik/scripts/Invoke-RunnerRelease.ps1'
+          & $script -Root $env:M3TRIK_RELEASE_ROOT -Packages $env:PACKAGES `
+            -Reviewed $env:REVIEWED -DryRun:($env:DRY_RUN -eq 'true')
+          exit $LASTEXITCODE

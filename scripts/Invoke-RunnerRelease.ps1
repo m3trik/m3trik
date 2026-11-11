@@ -10,8 +10,9 @@ still editing.
 
     Sync      clone or fetch every workspace repo; each checks out dev at origin/dev,
               reset and cleaned (untracked files go, ignored ones stay).
-    Tooling   m3trik's dev reaches main first, through a PR it waits on, when they
-              differ (push.ps1 refuses a release while m3trik/scripts lags origin/main).
+    Tooling   m3trik's dev reaches main first when they differ, by a fast-forward push
+              as m3trik lands (push.ps1 refuses a release while m3trik/scripts lags
+              origin/main); a main dev does not contain stops the run.
     Suites    each requested package whose origin/main..origin/dev touches anything
               that ships runs its FULL suite (fresh Maya / Blender instances, launched
               by each runner); green records its tests receipt, and its review receipt
@@ -32,8 +33,7 @@ param(
     [switch]$DryRun,
     # Where the workspace repos are cloned from: https://github.com/<owner>/<repo>. A test
     # points it at local bare repos.
-    [string]$RemoteBase = "https://github.com/m3trik",
-    [int]$ToolingMergeTimeoutMinutes = 60
+    [string]$RemoteBase = "https://github.com/m3trik"
 )
 
 $ErrorActionPreference = "Stop"
@@ -129,38 +129,21 @@ function Sync-ReleaseRepo {
 }
 
 function Merge-ToolingRepo {
-    # m3trik's dev into main by PR, waited on, when their trees differ.
-    param([string]$Root, [string]$Slug, [int]$TimeoutMinutes)
+    # m3trik's dev onto main, as m3trik lands (a direct push; its CI runs on main), when
+    # their trees differ. A fast-forward only: a main that dev does not contain is a
+    # person's call, never the runner's. Returns what it did.
+    param([string]$Root)
     $path = Join-Path $Root "m3trik"
     git -C $path diff --quiet origin/main origin/dev
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "  m3trik: dev and main hold one tree"
-        return
+    if ($LASTEXITCODE -eq 0) { return "level" }
+    git -C $path merge-base --is-ancestor origin/main origin/dev
+    if ($LASTEXITCODE) {
+        throw "m3trik's main holds commits dev lacks: merge main into dev, then dispatch again"
     }
-    $pr = gh pr list --repo $Slug --head dev --base main --state open --json number --jq ".[0].number"
-    if (-not $pr) {
-        gh pr create --repo $Slug --head dev --base main --title "Release tooling: dev into main" `
-            --body "Merged by the release runner before the cascade releases (push.ps1 refuses a release while m3trik/scripts lags main)." | Out-Null
-        if ($LASTEXITCODE) { throw "could not open m3trik's dev -> main PR" }
-        $pr = gh pr list --repo $Slug --head dev --base main --state open --json number --jq ".[0].number"
-    }
-    Write-Host "  m3trik: PR #$pr, merging when its checks pass"
-    gh pr merge $pr --repo $Slug --merge --auto
-    if ($LASTEXITCODE) { throw "could not arm m3trik PR #$pr" }
-    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-    while ((Get-Date) -lt $deadline) {
-        $state = gh pr view $pr --repo $Slug --json state --jq ".state"
-        if ($state -eq "MERGED") {
-            git -C $path fetch --quiet origin
-            Write-Host "  m3trik: PR #$pr merged"
-            return
-        }
-        if ($state -eq "CLOSED") { throw "m3trik PR #$pr was closed unmerged" }
-        $failed = gh pr checks $pr --repo $Slug --json name,bucket --jq '[.[] | select(.bucket == "fail") | .name] | join(", ")'
-        if ($failed) { throw "m3trik PR #${pr}: red check(s) $failed; fix on dev and dispatch again" }
-        Start-Sleep -Seconds 20
-    }
-    throw "m3trik PR #$pr did not merge within $TimeoutMinutes minutes"
+    git -C $path push --quiet origin "refs/remotes/origin/dev:refs/heads/main"
+    if ($LASTEXITCODE) { throw "could not push m3trik's dev to main" }
+    git -C $path fetch --quiet origin
+    return "fast-forwarded"
 }
 
 function Copy-HygieneDenylist {
@@ -197,8 +180,7 @@ function Invoke-RunnerRelease {
         [string]$Packages,
         [bool]$Reviewed,
         [bool]$DryRun,
-        [string]$RemoteBase,
-        [int]$ToolingMergeTimeoutMinutes
+        [string]$RemoteBase
     )
     if (-not $Root -or -not (Test-Path -LiteralPath (Join-Path $Root $RUNNER_MARKER))) {
         throw "$Root is not a release-runner workspace (no $RUNNER_MARKER): this run resets and cleans every repo under its root, so it never runs in a person's workspace. Run Install-ReleaseRunner.ps1."
@@ -238,8 +220,7 @@ function Invoke-RunnerRelease {
     }
 
     Write-Phase "Tooling: m3trik dev -> main"
-    $slug = ($RemoteBase -replace '^https://github\.com/', '') + "/m3trik"
-    Merge-ToolingRepo $Root $slug $ToolingMergeTimeoutMinutes
+    Write-Host "  m3trik: $(Merge-ToolingRepo $Root)"
 
     foreach ($name in $release) {
         $delta = Get-ArtifactDelta (Join-Path $Root $name)
@@ -263,7 +244,7 @@ if ($MyInvocation.InvocationName -eq ".") { return }
 
 try {
     $code = Invoke-RunnerRelease -Root $Root -Packages $Packages -Reviewed $Reviewed.IsPresent `
-        -DryRun $DryRun.IsPresent -RemoteBase $RemoteBase -ToolingMergeTimeoutMinutes $ToolingMergeTimeoutMinutes
+        -DryRun $DryRun.IsPresent -RemoteBase $RemoteBase
     exit $(if ($code) { $code } else { 0 })
 }
 catch {

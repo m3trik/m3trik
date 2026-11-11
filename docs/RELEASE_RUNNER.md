@@ -13,7 +13,7 @@ A release needs Maya: the `tests` receipt asserts mayatk's and tentacle's full s
 A run:
 
 1. **Sync.** The workflow resets m3trik's clone to `origin/dev`; the driver clones or fetches every other workspace repo (the cascade, unitytk, extapps) and resets each to `origin/dev`. The private public-hygiene denylist is copied in from your workspace's `.claude/` each run. It runs only in the **dedicated workspace** the installer marked (`.release-runner`), never in a person's working trees: a release publishes what `dev` holds, never an edit in progress.
-2. **Tooling.** When m3trik's `dev` and `main` differ, `dev` reaches `main` through a PR the driver opens and waits on (push.ps1 refuses a release while `m3trik/scripts` lags `origin/main`).
+2. **Tooling.** When m3trik's `dev` and `main` differ, `main` is fast-forwarded to `dev` and pushed, the way m3trik lands (push.ps1 refuses a release while `m3trik/scripts` lags `origin/main`); a `main` holding commits `dev` lacks stops the run.
 3. **Suites and receipts.** Each requested package whose `origin/main..origin/dev` touches anything that ships runs its full suite: `pythontk`, `uitk` and `blendertk` (fresh background Blenders) their runners, `mayatk --all` and `tentacle --in-maya` (fresh Maya instances, never one a person opened). Green records the `tests` receipt; `reviewed=true` records the `review` receipt beside it. Red stops the run before anything merges.
 4. **Release.** `push.ps1 -Packages <set> -Strict -Merge -UsePR`, with every gate push.ps1 has (receipts, behind-dev, Unity samples, semver, line budget, PR checks, PyPI visibility).
 
@@ -41,7 +41,7 @@ pwsh -File <workspace>\m3trik\scripts\Install-ReleaseRunner.ps1 -Python <workspa
    ```
 
    An agent dispatches it the same way (the GitHub MCP `actions_run_trigger`, workflow `release.yml`, ref `main`) and reads the run's job log for the outcome.
-3. **On a red run**, the log names the phase: a red suite (fix on `dev`, dispatch again), a red tooling PR check, or a push.ps1 gate. push.ps1's phases are idempotent, so dispatching again completes anything a run left merged but unpublished.
+3. **On a red run**, the log names the phase: a red suite (fix on `dev`, dispatch again), m3trik's `main` ahead of `dev`, or a push.ps1 gate. push.ps1's phases are idempotent, so dispatching again completes anything a run left merged but unpublished.
 
 ## Remove
 

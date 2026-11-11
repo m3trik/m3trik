@@ -217,6 +217,41 @@ class TestSync(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(repo, "stray.py")))
         self.assertTrue(os.path.exists(os.path.join(repo, "cache.ignored")))
 
+    def _tooling(self):
+        code, out = _ps(f". {_quote(DRIVER)}; Merge-ToolingRepo {_quote(self.root)}")
+        return code, out.strip().splitlines()[-1] if out.strip() else ""
+
+    def _heads(self):
+        bare = os.path.join(self.remotes, "m3trik")
+        return [
+            subprocess.run(["git", "rev-parse", ref], cwd=bare, capture_output=True, text=True).stdout.strip()
+            for ref in ("main", "dev")
+        ]
+
+    def test_tooling_main_is_fast_forwarded_to_dev(self):
+        self._remote("m3trik", {"scripts/new.py": ""})
+        self._sync("m3trik")
+        main, dev = self._heads()
+        self.assertNotEqual(main, dev)
+        self.assertEqual(self._tooling(), (0, "fast-forwarded"))
+        self.assertEqual(len(set(self._heads())), 1)
+        self.assertEqual(self._tooling(), (0, "level"))
+
+    def test_tooling_main_ahead_of_dev_stops_the_run(self):
+        self._remote("m3trik", {"scripts/new.py": ""})
+        work = os.path.join(self.tmp, "work_m3trik")
+        _git("checkout", "-q", "main", cwd=work)
+        open(os.path.join(work, "hotfix.py"), "w").close()
+        _git("add", "-A", cwd=work)
+        _git("commit", "-q", "-m", "hotfix", cwd=work)
+        _git("push", "-q", os.path.join(self.remotes, "m3trik"), "main", cwd=work)
+        self._sync("m3trik")
+        before = self._heads()
+        code, out = _ps(f". {_quote(DRIVER)}; Merge-ToolingRepo {_quote(self.root)}")
+        self.assertNotEqual(code, 0)
+        self.assertIn("main holds commits dev lacks", out)
+        self.assertEqual(self._heads(), before)
+
     def test_the_delta_lists_what_ships_and_drops_tests_and_docs(self):
         self._remote("ships", {"lib/new.py": "y = 2\n", "test/test_new.py": "", "docs/new.md": ""})
         self._remote("tests_only", {"test/test_new.py": "", "CHANGELOG.md": ""})

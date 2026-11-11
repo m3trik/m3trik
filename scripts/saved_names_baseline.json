@@ -60,16 +60,6 @@
    "i027",
    "widget"
   ],
-  "arnold_bridge": [
-   "QtUi",
-   "b000",
-   "b001",
-   "central_widget",
-   "chk000",
-   "cmb000",
-   "footer",
-   "header"
-  ],
   "articulated_rig": [
    "QtUi",
    "btn_analyze",
@@ -2301,9 +2291,6 @@
    "tentacle"
   ],
   "arnold#submenu": [
-   "tentacle"
-  ],
-  "arnold_bridge": [
    "tentacle"
   ],
   "articulated_rig": [

@@ -9,7 +9,7 @@
     "Restatements (root AGENTS.md dispatch table, CI sibling lists) are checked by scripts/sync_workspace.py --check.",
     "packs: the agent-instruction packs (m3trik/agents/packs) a unit vendors; the top-level list is the workspace root's, imported once. sync_workspace.py writes and checks them (pythontk's AgentInstructions)."
   ],
-  "line_budget": 663535,
+  "line_budget": 663539,
   "cascade": ["pythontk", "uitk", "mayatk", "blendertk", "tentacle"],
   "packs": ["principles", "python"],
   "units": [

@@ -140,8 +140,12 @@ function Install-Runner {
             New-Item -ItemType Directory -Force -Path $RunnerDir | Out-Null
             $zip = Join-Path ([IO.Path]::GetTempPath()) "actions-runner-win-x64.zip"
             Remove-Item -LiteralPath $zip -ErrorAction SilentlyContinue
+            # The one full win-x64 build, by exact name: a release may carry trimmed variants.
+            $asset = gh release view --repo actions/runner --json assets --jq ".assets[].name" |
+                Where-Object { $_ -match '^actions-runner-win-x64-[0-9.]+\.zip$' } | Select-Object -First 1
+            if (-not $asset) { throw "could not find the runner's win-x64 download" }
             Invoke-Native "could not download the runner" {
-                gh release download --repo actions/runner --pattern "actions-runner-win-x64-*.zip" --output $zip --clobber
+                gh release download --repo actions/runner --pattern $asset --output $zip --clobber
             }
             Expand-Archive -LiteralPath $zip -DestinationPath $RunnerDir -Force
             Remove-Item -LiteralPath $zip
@@ -176,6 +180,8 @@ function Install-Runner {
 
 function Register-LogonTask {
     Write-Step "Starting the runner at logon (task '$TaskName')"
+    # A runner already up read the old .env: stop it, so the start below is a fresh one.
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     $action = New-ScheduledTaskAction -Execute (Join-Path $RunnerDir "run.cmd") -WorkingDirectory $RunnerDir
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
@@ -217,5 +223,6 @@ Install-Runner
 Register-LogonTask
 Write-Host ""
 Write-Host "Ready. Release from anywhere:" -ForegroundColor Green
-Write-Host "  gh workflow run release.yml --repo $Repo -f packages=pythontk,uitk,mayatk,blendertk,tentacle -f reviewed=true"
-Write-Host "  (or: GitHub > $Repo > Actions > Release > Run workflow). A dry run: -f dry_run=true."
+Write-Host "  gh workflow run release.yml --repo $Repo -f dry_run=true                 # the plan, and the reviewed= value"
+Write-Host "  gh workflow run release.yml --repo $Repo -f reviewed=<package@sha,...>   # release what you reviewed"
+Write-Host "  (or: GitHub > $Repo > Actions > Release > Run workflow)."

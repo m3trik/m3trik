@@ -3,21 +3,21 @@
 # from m3trik/release_runner/release.yml: edit it there, never in the release repo.
 # Every step is m3trik's: scripts/Invoke-RunnerRelease.ps1 (docs/RELEASE_RUNNER.md).
 name: Release
-run-name: "Release ${{ inputs.packages }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+run-name: "Release ${{ inputs.packages || 'the cascade' }}${{ inputs.dry_run && ' (dry run)' || '' }}"
 
 on:
   workflow_dispatch:
     inputs:
       packages:
-        description: "Cascade packages to release, comma-separated (released in cascade order)"
-        required: true
-        default: "pythontk,uitk,mayatk,blendertk,tentacle"
+        description: "Cascade packages to release, comma-separated (blank: the whole cascade)"
+        required: false
+        default: ""
       reviewed:
-        description: "I reviewed origin/main...origin/dev of each package (records its review receipt)"
-        type: boolean
-        default: false
+        description: "The dev commits you reviewed: package@sha,... (a dry run prints it)"
+        required: false
+        default: ""
       dry_run:
-        description: "Dry run: push.ps1 -DryRun, no suites, nothing merged or published"
+        description: "Dry run: the plan, the cheap gates and who owes a receipt; nothing tested, merged or published"
         type: boolean
         default: false
 
@@ -54,5 +54,5 @@ jobs:
         run: |
           $script = Join-Path $env:M3TRIK_RELEASE_ROOT 'm3trik/scripts/Invoke-RunnerRelease.ps1'
           & $script -Root $env:M3TRIK_RELEASE_ROOT -Packages $env:PACKAGES `
-            -Reviewed:($env:REVIEWED -eq 'true') -DryRun:($env:DRY_RUN -eq 'true')
+            -Reviewed $env:REVIEWED -DryRun:($env:DRY_RUN -eq 'true')
           exit $LASTEXITCODE

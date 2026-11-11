@@ -20,7 +20,7 @@ Shared rules (packs; Claude Code loads them, other agents read them first): [pri
 
 `-UsePR` is the default release form — without it the dev→main merge bypasses branch protection. Auto-merge arms only on a gated PR, and **a settled red check fails in one poll, by name**. Recovery: fix → push dev (auto-merge stays armed) → re-run push.ps1.
 
-**No Maya (cloud)? Release via the [runner](docs/RELEASE_RUNNER.md)**: review, then dispatch `release.yml` on `m3trik/release-runner` with `reviewed=true`; never bypass a gate.
+**No Maya (cloud)? Release via the [runner](docs/RELEASE_RUNNER.md)**: review `origin/dev`, then dispatch `release.yml` on `m3trik/release-runner` with `reviewed=<pkg@sha,...>`; never bypass a gate.
 
 **Push THIS repo first when `scripts/` changed.** Each package's PR runs `check_api_surface.py <pkg> --check` against **m3trik@main**. Enforced: the Strict+Merge pre-pass fails when `m3trik/scripts` differs from `origin/main` (bypass: `-SkipReview`). This repo's CI (siblings' `dev`) reads red until the sibling lands, then clears on a re-run.
 

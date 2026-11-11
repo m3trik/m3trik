@@ -50,7 +50,7 @@
 
 | Script | Does | Notes |
 |:--|:--|:--|
-| `Invoke-RunnerRelease.ps1` | the release runner's run: sync, m3trik main ⇐ dev (fast-forward), full suites → receipts, `push.ps1 -Strict -Merge -UsePR` | Dedicated workspace only; [RELEASE_RUNNER](../docs/RELEASE_RUNNER.md). |
+| `Invoke-RunnerRelease.ps1` | the release runner's run: sync, m3trik main ⇐ dev, preflight, the receipts `push.ps1 -GateReport` says are owed (review pinned to a sha; full suites), release | Dedicated workspace only; [RELEASE_RUNNER](../docs/RELEASE_RUNNER.md). |
 | `Install-ReleaseRunner.ps1` | once, on the Maya machine: private repo, workflow, runner, logon task | `-Uninstall`. |
 
 ## Rules

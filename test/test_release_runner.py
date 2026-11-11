@@ -61,6 +61,11 @@ class TestDriverFunctions(unittest.TestCase):
         )
         self.assertEqual(got, ["pythontk", "mayatk", "tentacle"])
 
+    def test_no_names_is_the_whole_cascade(self):
+        got = self._call(f"Resolve-ReleasePackages ' ' @({','.join(repr(c) for c in CASCADE)})")
+        self.assertEqual(got, CASCADE)
+        self.assertNotIn("uitk", open(DRIVER, encoding="utf-8").read().split("$SUITES = @{")[0])
+
     def test_a_name_outside_the_cascade_is_refused(self):
         code, out = _ps(
             f". {_quote(DRIVER)}; Resolve-ReleasePackages 'pythontk,mayatkk' @({','.join(repr(c) for c in CASCADE)})"
@@ -68,21 +73,26 @@ class TestDriverFunctions(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("Not cascade packages: mayatkk", out)
 
-    def test_only_what_ships_is_an_artifact(self):
-        paths = [
-            "mayatk/light_utils/light_rig.py",
-            "pyproject.toml",
-            "README.md",
-            "test/test_light_rig.py",
-            "docs/light_rig.md",
-            ".github/workflows/tests.yml",
-            "CHANGELOG.md",
-            "AGENTS.md",
+    def test_a_review_is_attested_per_package_at_its_commit(self):
+        sha = "aade873c0ffee0000000000000000000000000000"
+        cases = [
+            ("pythontk@aade873", "pythontk", True),
+            ("mayatk@170be25, pythontk@AADE873C0FFEE", "pythontk", True),
+            ("pythontk@aade874", "pythontk", False),  # another commit
+            ("mayatk@aade873", "pythontk", False),  # another package
+            ("pythontk@aade", "pythontk", False),  # too short to name a commit
+            ("pythontk", "pythontk", False),
+            ("true", "pythontk", False),
+            ("", "pythontk", False),
         ]
-        got = self._call(
-            "@(" + ",".join(repr(p) for p in paths) + ") | ForEach-Object { [bool](Test-ArtifactPath $_) }"
-        )
-        self.assertEqual(got, [True, True, True, False, False, False, False, False])
+        expr = ",".join(f"(Test-Attested {r!r} {p!r} {sha!r})" for r, p, _ in cases)
+        self.assertEqual(self._call(f"@({expr})"), [want for _, _, want in cases])
+
+    def test_the_driver_restates_none_of_push_ps1s_delta_rules(self):
+        text = open(DRIVER, encoding="utf-8").read()
+        self.assertIn("-GateReport", text)
+        for restated in ("CHANGELOG", "'^test/'", ".github", "diff --name-only"):
+            self.assertNotIn(restated, text)
 
     def test_the_workspace_repos_are_the_cascade_the_standalones_and_m3trik(self):
         got = self._call(f"Get-WorkspaceRepos (Read-Manifest {_quote(os.path.dirname(REPO))})")
@@ -126,21 +136,14 @@ class TestDriverRefusals(unittest.TestCase):
         return _ps(f"& {_quote(DRIVER)} -Root {_quote(self.root)} -RemoteBase 'file:///nowhere' " + " ".join(args))
 
     def test_a_root_without_the_marker_is_refused(self):
-        code, out = self._run("-Reviewed")
+        code, out = self._run()
         self.assertEqual(code, 1, out)
         self.assertIn("is not a release-runner workspace", out)
         self.assertEqual(os.listdir(self.root), ["m3trik"])
 
-    def test_an_unreviewed_release_is_refused_before_the_sync(self):
-        open(os.path.join(self.root, ".release-runner"), "w").close()
-        code, out = self._run()
-        self.assertEqual(code, 1, out)
-        self.assertIn("Not reviewed", out)
-        self.assertEqual(sorted(os.listdir(self.root)), [".release-runner", "m3trik"])
-
     def test_a_typo_in_the_package_set_is_refused_before_the_sync(self):
         open(os.path.join(self.root, ".release-runner"), "w").close()
-        code, out = self._run("-Reviewed", "-Packages", "'pythontk,tentacel'")
+        code, out = self._run("-Packages", "'pythontk,tentacel'")
         self.assertEqual(code, 1, out)
         self.assertIn("Not cascade packages: tentacel", out)
         self.assertEqual(sorted(os.listdir(self.root)), [".release-runner", "m3trik"])
@@ -187,14 +190,6 @@ class TestSync(unittest.TestCase):
         code, out = _ps(f". {_quote(DRIVER)}; Sync-ReleaseRepo {_quote(self.root)} {name} {_quote(base)}")
         self.assertEqual(code, 0, out)
         return out.strip().splitlines()[-1]
-
-    def _delta(self, name):
-        code, out = _ps(
-            f". {_quote(DRIVER)}; Get-ArtifactDelta {_quote(os.path.join(self.root, name))} | ConvertTo-Json -Compress"
-        )
-        self.assertEqual(code, 0, out)
-        text = out.strip()
-        return json.loads(text) if text else []
 
     def test_dev_is_checked_out_and_a_repo_without_dev_takes_main(self):
         self._remote("withdev", {"lib/new.py": "y = 2\n"})
@@ -252,13 +247,168 @@ class TestSync(unittest.TestCase):
         self.assertIn("main holds commits dev lacks", out)
         self.assertEqual(self._heads(), before)
 
-    def test_the_delta_lists_what_ships_and_drops_tests_and_docs(self):
-        self._remote("ships", {"lib/new.py": "y = 2\n", "test/test_new.py": "", "docs/new.md": ""})
-        self._remote("tests_only", {"test/test_new.py": "", "CHANGELOG.md": ""})
-        self._sync("ships")
-        self._sync("tests_only")
-        self.assertEqual(self._delta("ships"), "lib/new.py")  # one item: ConvertTo-Json unwraps it
-        self.assertEqual(self._delta("tests_only"), [])
+STUB_PUSH = r"""
+param([string]$Root, [string]$Packages, [switch]$Strict, [switch]$Merge, [switch]$UsePR,
+      [switch]$DryRun, [switch]$SkipReview, [switch]$GateReport, [string]$RecordReceipt)
+$mode = if ($GateReport) { "gate" } elseif ($RecordReceipt) { "record=$RecordReceipt" } elseif ($DryRun) { "dry" } else { "release" }
+Add-Content -LiteralPath (Join-Path $Root "calls.log") "$mode $Packages$(if ($SkipReview) { ' skipreview' })"
+Write-Host "stub push: $mode"
+if ($GateReport) {
+    Write-Output "a line push.ps1 printed before its report"
+    Write-Output (Get-Content -Raw -LiteralPath (Join-Path $Root "gate.json")).Trim()
+    exit 0
+}
+if (Test-Path -LiteralPath (Join-Path $Root "fail_$mode")) { exit 3 }
+exit 0
+"""
+
+STUB_SUITE = """
+import pathlib, sys
+repo = pathlib.Path(__file__).resolve().parents[1]
+with open(repo.parent / "suites.log", "a") as f:
+    f.write(" ".join([repo.name, *sys.argv[1:]]) + "\\n")
+print("suite output of " + repo.name)
+sys.exit(1 if (repo.parent / ("red_" + repo.name)).exists() else 0)
+"""
+
+SHA = {"pythontk": "aade873" + "0" * 33, "mayatk": "170be25" + "1" * 33}
+
+
+@unittest.skipUnless(POWERSHELL and shutil.which("git"), "no PowerShell or git on PATH")
+class TestRun(unittest.TestCase):
+    """The whole run over local bare repos, with push.ps1 and the suites stubbed:
+    what the driver calls, in what order, and what stops it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="release_runner_run_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.remotes = os.path.join(self.tmp, "remotes")
+        self.root = os.path.join(self.tmp, "root")
+        os.makedirs(self.remotes)
+        os.makedirs(self.root)
+        open(os.path.join(self.root, ".release-runner"), "w").close()
+        self._remote("m3trik", {
+            "push.ps1": STUB_PUSH,
+            "workspace.json": json.dumps({"cascade": ["pythontk", "mayatk"], "units": []}),
+        })
+        for name in ("pythontk", "mayatk"):
+            self._remote(name, {"test/run_tests.py": STUB_SUITE, "src.py": "x = 1\n"})
+        # The workflow's first step: m3trik's clone, at dev.
+        _git("clone", "-q", os.path.join(self.remotes, "m3trik"), os.path.join(self.root, "m3trik"), cwd=self.tmp)
+        _git("checkout", "-q", "dev", cwd=os.path.join(self.root, "m3trik"))
+
+    def _remote(self, name, files):
+        work = os.path.join(self.tmp, "work_" + name)
+        os.makedirs(work)
+        _git("init", "-q", "-b", "main", cwd=work)
+        _git("config", "user.email", "test@example.com", cwd=work)
+        _git("config", "user.name", "test", cwd=work)
+        for rel, text in files.items():
+            path = os.path.join(work, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(text)
+        _git("add", "-A", cwd=work)
+        _git("commit", "-q", "-m", "main", cwd=work)
+        _git("branch", "dev", cwd=work)
+        _git("clone", "-q", "--bare", work, os.path.join(self.remotes, name), cwd=self.tmp)
+
+    def _gate(self, **missing):
+        """What the stubbed push.ps1 reports: each package's missing receipts."""
+        rows = [
+            {"package": name, "sha": SHA[name], "hash": "h", "class": "artifact" if owed is not None else "none",
+             "exempt": None if owed is not None else "has nothing to release", "missing": owed or []}
+            for name, owed in missing.items()
+        ]
+        with open(os.path.join(self.root, "gate.json"), "w") as f:
+            json.dump(rows, f)
+
+    def _run(self, *args):
+        import sys
+
+        # No -RemoteBase: the siblings are cloned from beside m3trik's own origin.
+        proc = subprocess.run(
+            [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", DRIVER, "-Root", self.root, *args],
+            capture_output=True, text=True, timeout=300,
+            env={**os.environ, "M3TRIK_PYTHON": sys.executable, "M3TRIK_HYGIENE_DENYLIST": ""},
+        )
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def _log(self, name):
+        path = os.path.join(self.root, name)
+        return open(path).read().split("\n")[:-1] if os.path.exists(path) else []
+
+    def test_a_dry_run_plans_and_names_the_review_it_needs(self):
+        self._gate(pythontk=["review", "tests"], mayatk=["review", "tests"])
+        code, out = self._run("-DryRun")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self._log("calls.log"), ["dry pythontk,mayatk skipreview", "gate pythontk,mayatk skipreview"])
+        self.assertIn("reviewed=pythontk@aade873,mayatk@170be25", out)
+        self.assertIn("pythontk@aade873: owes review + tests", out)
+        self.assertEqual(self._log("suites.log"), [])
+
+    def test_a_reviewed_release_tests_records_and_releases_in_order(self):
+        self._gate(pythontk=["review", "tests"], mayatk=None)
+        code, out = self._run("-Reviewed", "pythontk@aade873")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self._log("calls.log"), [
+            "dry pythontk,mayatk skipreview",
+            "gate pythontk,mayatk",
+            "record=review,tests pythontk",
+            "release pythontk,mayatk",
+        ])
+        self.assertEqual(self._log("suites.log"), ["pythontk"])
+        self.assertIn("suite output of pythontk", out)  # a suite's output reaches the log
+        self.assertIn("mayatk@170be25: has nothing to release", out)
+        self.assertIn("a line push.ps1 printed before its report", out)
+
+    def test_each_package_runs_its_declared_full_suite(self):
+        self._gate(pythontk=["tests"], mayatk=["tests"])
+        code, out = self._run()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self._log("suites.log"), ["pythontk", "mayatk --all"])
+        self.assertEqual(self._log("calls.log")[2:], [
+            "record=tests pythontk", "record=tests mayatk", "release pythontk,mayatk"])
+
+    def test_valid_receipts_run_no_suite_again(self):
+        self._gate(pythontk=[], mayatk=[])
+        code, out = self._run()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self._log("suites.log"), [])
+        self.assertEqual(self._log("calls.log")[2:], ["release pythontk,mayatk"])
+
+    def test_a_dev_that_moved_since_the_review_is_refused_before_any_suite(self):
+        self._gate(pythontk=["review", "tests"], mayatk=["review", "tests"])
+        code, out = self._run("-Reviewed", "pythontk@aade873,mayatk@0ldc0de")
+        self.assertEqual(code, 1, out)
+        self.assertIn("Not reviewed at the commit dev holds: mayatk", out)
+        self.assertEqual(self._log("suites.log"), [])
+        self.assertEqual(self._log("calls.log"), ["dry pythontk,mayatk skipreview", "gate pythontk,mayatk"])
+
+    def test_a_red_suite_records_nothing_and_releases_nothing(self):
+        self._gate(pythontk=["tests"], mayatk=["tests"])
+        open(os.path.join(self.root, "red_pythontk"), "w").close()
+        code, out = self._run()
+        self.assertEqual(code, 1, out)
+        self.assertIn("pythontk's suite is red", out)
+        self.assertEqual(self._log("suites.log"), ["pythontk"])
+        self.assertEqual(self._log("calls.log"), ["dry pythontk,mayatk skipreview", "gate pythontk,mayatk"])
+
+    def test_a_failed_preflight_stops_before_the_gate_and_the_suites(self):
+        self._gate(pythontk=["tests"], mayatk=["tests"])
+        open(os.path.join(self.root, "fail_dry"), "w").close()
+        code, out = self._run()
+        self.assertEqual(code, 1, out)
+        self.assertIn("The preflight failed", out)
+        self.assertEqual(self._log("calls.log"), ["dry pythontk,mayatk skipreview"])
+        self.assertEqual(self._log("suites.log"), [])
+
+    def test_a_failed_release_fails_the_run(self):
+        self._gate(pythontk=[], mayatk=[])
+        open(os.path.join(self.root, "fail_release"), "w").close()
+        code, out = self._run()
+        self.assertEqual(code, 1, out)
+        self.assertIn("The release did not complete", out)
 
 
 @unittest.skipUnless(POWERSHELL, "no PowerShell on PATH")
@@ -308,6 +458,11 @@ class TestWorkflow(unittest.TestCase):
         self.assertIn("runs-on: [self-hosted, Windows, m3trik-release]", self.text)
         self.assertRegex(self.text, r"concurrency:\n\s+group: release\n\s+cancel-in-progress: false")
         self.assertIn("permissions: {}", self.text)
+
+    def test_the_review_input_is_the_commits_reviewed_not_a_checkbox(self):
+        block = re.search(r"      reviewed:\n((?:        .*\n)+)", self.text).group(1)
+        self.assertNotIn("boolean", block)
+        self.assertIn("-Reviewed $env:REVIEWED", self.text)
 
     def test_inputs_reach_the_scripts_as_environment_never_as_code(self):
         for block in re.findall(r"run: \|\n((?:[ \t]{10}.*\n)+)", self.text):

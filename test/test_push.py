@@ -3826,6 +3826,57 @@ else:
             self.assertIn("dev already carries Release 0.1.1", out2)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_gate_report_is_the_gates_verdict_as_data_and_mutates_nothing(self):
+        """-GateReport prints Get-GateVerdict per package as one JSON line: what the
+        release runner reads instead of restating which deltas owe a receipt."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _origin = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            self._git(repo, "checkout", "dev")
+            report = self._push_cmd(
+                root, "-Packages", "pythontk", "-Strict", "-Merge", "-SkipPypiCheck", "-GateReport"
+            )
+
+            def rows():
+                r = self._run(report, cwd=root, timeout=120)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                return json.loads(r.stdout.strip().splitlines()[-1])
+
+            def head():
+                return self._git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            self.assertEqual(
+                [(x["package"], x["exempt"], x["missing"]) for x in rows()],
+                [("pythontk", "has nothing to release", [])],
+            )
+
+            (repo / "test").mkdir()
+            (repo / "test" / "test_x.py").write_text("", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "a test")
+            self._git(repo, "push", "origin", "dev")
+            (row,) = rows()
+            self.assertEqual((row["class"], row["exempt"], row["missing"]), ("must-reach-main", "delta is must-reach-main", []))
+
+            (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-m", "feature")
+            self._git(repo, "push", "origin", "dev")
+            before = head()
+            (row,) = rows()
+            self.assertEqual((row["class"], row["exempt"], row["missing"]), ("artifact", None, ["review", "tests"]))
+            self.assertEqual(row["sha"], before)
+
+            recorded = self._run(
+                self._push_cmd(root, "-RecordReceipt", "tests", "-Packages", "pythontk"), cwd=root, timeout=120
+            )
+            self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+            (row,) = rows()
+            self.assertEqual(row["missing"], ["review"])
+            self.assertEqual(head(), before)
+            self.assertEqual(self._git(repo, "status", "--porcelain").stdout.strip(), "")
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_skip_review_never_manufactures_a_receipt(self):
         """Re-keying carries EXISTING receipts only. A -SkipReview run that
         commits a Release and aborts must leave no receipt behind - otherwise a

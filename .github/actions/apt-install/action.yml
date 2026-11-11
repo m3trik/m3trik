@@ -2,10 +2,11 @@
 # (`uses: m3trik/m3trik/.github/actions/apt-install@main`). A bare
 # `apt-get update && apt-get install` makes CI only as available as the runner's
 # DNS for the Ubuntu hosts: when that resolver stops answering for ubuntu.com
-# while public resolvers still do, every Linux job fails before a test runs.
-# So: fetch only what the image lacks (often nothing), let apt retry, and if it
-# still fails, pin the Ubuntu hosts the runner cannot resolve from public
-# resolvers (Cloudflare, then Quad9) for this job alone, then install once more.
+# while public resolvers still do, every Linux job fails before a test runs,
+# and apt spends minutes timing out on each lookup first. So, before apt runs:
+# fetch only what the image lacks (often nothing), and pin each apt host the
+# runner cannot resolve from a public resolver (Cloudflare over HTTPS, then
+# Quad9) for this job alone. apt then never waits on a failing lookup.
 name: apt-install
 description: Install Ubuntu packages, fetching only the missing ones and surviving a runner DNS outage.
 inputs:
@@ -30,30 +31,31 @@ runs:
           exit 0
         fi
         echo "Installing: ${missing[*]}"
-        install() {
-          sudo apt-get -q -o Acquire::Retries=3 update &&
-            sudo apt-get -q -y -o Acquire::Retries=3 install "${missing[@]}"
+
+        resolves() {  # three tries: a flaky resolver fails some, not all
+          for _ in 1 2 3; do timeout 5 getent hosts "$1" >/dev/null || return 1; done
         }
-        install && exit 0
-        echo "::warning::apt failed; pinning the Ubuntu hosts this runner cannot resolve from public resolvers, then retrying"
-        if ! command -v dig >/dev/null; then
-          echo "::error::dig is missing, so no public resolver can be asked"
-          exit 1
-        fi
-        hosts=$(grep -rhoE 'https?://[^/[:space:]]+' /etc/apt/sources.list /etc/apt/sources.list.d /etc/apt/apt-mirrors.txt 2>/dev/null |
-          sed -E 's#^https?://##' | sort -u)
+        public_ip() {  # Cloudflare over HTTPS by address (curl only), then Quad9 by dig
+          local ip
+          ip=$(curl -fsS --max-time 5 -H 'accept: application/dns-json' "https://1.1.1.1/dns-query?name=$1&type=A" 2>/dev/null |
+            grep -oE '"data":"[0-9.]+"' | head -1 | cut -d'"' -f4)
+          if [ -z "$ip" ] && command -v dig >/dev/null; then
+            ip=$(dig +short +time=3 +tries=2 A "$1" @9.9.9.9 2>/dev/null | grep -E '^[0-9.]+$' | head -1)
+          fi
+          echo "$ip"
+        }
+        hosts=$(grep -rhv '^[[:space:]]*#' /etc/apt/sources.list /etc/apt/sources.list.d /etc/apt/apt-mirrors.txt 2>/dev/null |
+          grep -oE 'https?://[^/[:space:]]+' | sed -E 's#^https?://##' | sort -u)
         for h in $hosts; do
-          getent hosts "$h" >/dev/null && continue
-          ip=""
-          for server in 1.1.1.1 9.9.9.9; do
-            ip=$(dig +short +time=3 +tries=2 A "$h" "@$server" | grep -E '^[0-9.]+$' | head -1)
-            [ -n "$ip" ] && break
-          done
+          resolves "$h" && continue
+          ip=$(public_ip "$h")
           if [ -n "$ip" ]; then
             echo "$ip $h" | sudo tee -a /etc/hosts >/dev/null
-            echo "Pinned $h -> $ip"
+            echo "::warning::The runner's DNS does not resolve $h reliably; pinned it to $ip from a public resolver"
           else
-            echo "::warning::No public resolver answered for $h"
+            echo "::warning::Neither the runner's DNS nor a public resolver answers for $h"
           fi
         done
-        install
+
+        sudo apt-get -q -o Acquire::Retries=3 update &&
+          sudo apt-get -q -y -o Acquire::Retries=3 install "${missing[@]}"

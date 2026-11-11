@@ -4896,6 +4896,44 @@ class TestAbsorbCommitIsNamed(unittest.TestCase):
             self.assertTrue(head[len(stem)] == " ", f"cut mid-word: {subject!r}")
             self.assertEqual(body.strip(), head, "the full headline must survive")
 
+    def test_a_message_quoting_text_commits_whole(self):
+        """Windows PowerShell 5.1 hands a native program an argument's embedded
+        double quotes unescaped, so ``git commit -m $msg`` split a headline that
+        quoted an error into pathspecs ("error: pathspec 'join' did not match";
+        the 2026-11-11 pythontk release stopped there). The message goes
+        through a file, whatever it holds."""
+        pwsh = self._pwsh()
+        if not pwsh:
+            self.skipTest("no PowerShell host available")
+        message = 'a call says why, not "cannot join thread before it is started"'
+        with tempfile.TemporaryDirectory() as td:
+            origin, repo = Path(td) / "origin.git", Path(td) / "pkg"
+            git = lambda *a, cwd=repo: subprocess.run(  # noqa: E731
+                ["git", *a], cwd=cwd, capture_output=True, text=True, check=True
+            ).stdout
+            git("init", "--bare", "-q", str(origin), cwd=td)
+            git("clone", "-q", str(origin), str(repo), cwd=td)
+            git("config", "user.email", "test@example.com")
+            git("config", "user.name", "test")
+            git("checkout", "-q", "-b", "dev")
+            (repo / "a.txt").write_text("one\n", encoding="utf-8")
+            git("add", "-A")
+            git("commit", "-q", "-m", "first")
+            git("push", "-q", "origin", "dev")
+            (repo / "a.txt").write_text("two\n", encoding="utf-8")
+            (Path(td) / "message.txt").write_text(message, encoding="utf-8")
+            common = M3TRIK_DIR / "common.ps1"
+            script = (
+                f". '{common}'; $m = Get-Content -Raw -Encoding UTF8 '{Path(td) / 'message.txt'}'; "
+                f"if (-not (Sync-DevWithOrigin '{repo}' -CommitMessage $m)) {{ exit 1 }}"
+            )
+            r = subprocess.run(
+                [pwsh, "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(git("log", "-1", "--format=%B").strip(), message)
+
     def test_a_short_headline_is_the_whole_message(self):
         with tempfile.TemporaryDirectory() as td:
             repo = self._repo_with_changelog(

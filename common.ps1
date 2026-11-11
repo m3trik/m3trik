@@ -281,7 +281,15 @@ function Sync-DevWithOrigin {
         if ($st) {
             Write-Step "Committing local changes before sync..."
             git add -A
-            git commit -m $CommitMessage | Out-Null
+            # Through a file: Windows PowerShell 5.1 hands git an argument's
+            # embedded double quotes unescaped, so `-m` split a CHANGELOG
+            # headline that quoted text into pathspecs.
+            $messageFile = [IO.Path]::GetTempFileName()
+            try {
+                [IO.File]::WriteAllText($messageFile, $CommitMessage, (New-Object Text.UTF8Encoding $false))
+                git commit -F $messageFile | Out-Null
+            }
+            finally { Remove-Item -LiteralPath $messageFile -ErrorAction SilentlyContinue }
             if ($LASTEXITCODE -ne 0) {
                 Write-Err "Pre-sync commit failed"
                 return $false

@@ -46,6 +46,13 @@
 | `check_version_bump.py <pkg> --published <v>` | an off-chain push to `main` shipping changes unversioned | |
 | `check_js_types.py` | `tsc --checkJs` errors in `PROJECTS` | No compiler = exit 2. |
 
+## Release
+
+| Script | Does | Notes |
+|:--|:--|:--|
+| `Invoke-RunnerRelease.ps1` | the release runner's run: sync, m3trik dev→main, full suites → receipts, `push.ps1 -Strict -Merge -UsePR` | Dedicated workspace only; [RELEASE_RUNNER](../docs/RELEASE_RUNNER.md). |
+| `Install-ReleaseRunner.ps1` | once, on the Maya machine: private repo, workflow, runner, logon task | `-Uninstall`. |
+
 ## Rules
 
 - One-shot maintenance scripts go here; reusable logic in [pythontk](../../pythontk/AGENTS.md).

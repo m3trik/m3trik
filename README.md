@@ -66,7 +66,7 @@ The rules, each with its reasoning, are in the [code standard](docs/CODE_STANDAR
 
 - **[`push.ps1`](push.ps1)** releases the chained packages in dependency order. Every phase is idempotent, so running it again finishes whatever an interrupted run left.
 - **[`scripts/`](scripts/)** holds the checks, generators and parity sweeps.
-- **Agent tooling**: rule packs ([`agents/packs/`](agents/packs/)), size-budgeted and drift-checked, and a Claude Code plugin ([`claude/`](claude/README.md)). [Setup and use](docs/AGENT_INSTRUCTIONS.md).
+- **Agent tooling**: rule packs and the workspace's own rules ([`agents/`](agents/)), size-budgeted and drift-checked, and a Claude Code plugin ([`claude/`](claude/README.md)). [Setup and use](docs/AGENT_INSTRUCTIONS.md).
 - **[`docs/`](docs/)** holds the standards for [code](docs/CODE_STANDARD.md), [docs](docs/DOCS_STANDARD.md), the [context budget](docs/CONTEXT_BUDGET.md) and [test badges](docs/TEST_BADGE_STANDARD.md).
 
 Conventions and usage: [`AGENTS.md`](AGENTS.md).

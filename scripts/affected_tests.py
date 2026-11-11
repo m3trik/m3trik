@@ -280,6 +280,9 @@ GATES: Tuple[Gate, ...] = (
     # Pins every root name against the package's DEFAULT_INCLUDE: no import of
     # the root reaches it as a dependency, so a root change selects it outright.
     Gate("pythontk", ("pythontk/__init__.py",), ("test_surface_snapshot",)),
+    # The m3trik distribution restates the manifest's package set: the suite
+    # that holds it to workspace.json reads the file, and nothing imports it.
+    Gate("m3trik", ("pyproject.toml",), ("test_sync_workspace",)),
 )
 
 

@@ -208,11 +208,13 @@ def scan_repo(repo_dir: str, label: str) -> List[Finding]:
 
 
 def workspace_repos(workspace: str) -> List[str]:
-    """Every child folder holding ``.git``: membership is measured, not listed."""
+    """Every child folder holding ``.git``: membership is measured, not
+    listed. A hidden folder is tooling state (``.claude``'s ledger history),
+    no unit."""
     return sorted(
         name
         for name in os.listdir(workspace)
-        if os.path.exists(os.path.join(workspace, name, ".git"))
+        if not name.startswith(".") and os.path.exists(os.path.join(workspace, name, ".git"))
     )
 
 

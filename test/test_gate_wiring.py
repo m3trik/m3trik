@@ -54,9 +54,16 @@ WIRING_EXEMPT = {
         "package's whole suite instead, so there is no delta for it to plan."
     ),
     "ledger_drift": (
-        "Reads .claude/BACKLOG.md and FUTURE.md, which are not version "
-        "controlled, so a runner has no ledger to check. Called by the /backlog "
-        "skill at SELECT and when stamping a verification."
+        "Reads .claude/BACKLOG.md and FUTURE.md, which sit in no repo a runner "
+        "clones (their history, where kept, is a local repo inside .claude), so "
+        "a runner has no ledger to check. Called by the /backlog skill at SELECT "
+        "and when stamping a verification."
+    ),
+    "setup_workspace": (
+        "A bootstrap a person runs once on a new machine: it clones the repos "
+        "beside m3trik, makes the environment and builds the root's instruction "
+        "files. Nothing for a workflow or a release to check; what it builds is "
+        "held by sync_workspace.py --check."
     ),
     "scaffold_unity_part": (
         "A generator a person or agent runs once to start a Unity part (its "

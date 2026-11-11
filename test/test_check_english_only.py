@@ -99,6 +99,17 @@ class TestLetters(unittest.TestCase):
                 self.assertEqual(gate.offending_runs(text), [])
 
 
+class TestMembership(unittest.TestCase):
+    def test_a_hidden_folder_holding_a_repo_is_no_member(self):
+        """``.claude`` keeps the ledgers' history in a repo of its own: tooling
+        state, never a unit this gate scans."""
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in (".claude", "demo"):
+                os.makedirs(os.path.join(tmp, name, ".git"))
+            os.makedirs(os.path.join(tmp, "plain"))
+            self.assertEqual(gate.workspace_repos(tmp), ["demo"])
+
+
 class _RepoCase(unittest.TestCase):
     """One throwaway git repo inside a throwaway workspace."""
 

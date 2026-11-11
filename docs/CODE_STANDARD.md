@@ -1,6 +1,6 @@
 # Code standard — the rules behind the root one-liners
 
-The packs ([`m3trik/agents/packs/`](../agents/packs/)) and the root [`AGENTS.md`](../../AGENTS.md) state every cross-repo rule in one line because it is paid for on every query. §0 is the shape every unit shares; the rest is the long form: the rationale, the worked shape of each rule, and the rules that are needed less often (style, docstrings, deprecation, vendoring, performance, repo hygiene, dead code, scratch files, export, package architecture, tool behavior). Read it before a refactor, a new module or tool, or a public-API change. Package-specific rules stay in each package's `CLAUDE.md`.
+The packs ([`m3trik/agents/packs/`](../agents/packs/)) and the workspace's rules ([`m3trik/agents/workspace.md`](../agents/workspace.md), rendered to the root `AGENTS.md`) state every cross-repo rule in one line because it is paid for on every query. §0 is the shape every unit shares; the rest is the long form: the rationale, the worked shape of each rule, and the rules that are needed less often (style, docstrings, deprecation, vendoring, performance, repo hygiene, dead code, scratch files, export, package architecture, tool behavior). Read it before a refactor, a new module or tool, or a public-API change. Package-specific rules stay in each package's `AGENTS.md`.
 
 **Nav**: [← m3trik](../AGENTS.md) · [Docs standard](DOCS_STANDARD.md) · [Context budget](CONTEXT_BUDGET.md) · [Test badge standard](TEST_BADGE_STANDARD.md)
 

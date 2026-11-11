@@ -161,6 +161,28 @@ class TestLiveDispatch(unittest.TestCase):
         guard.check_dispatch(rep)
         self.assertEqual([f for f in rep.fails if "DISPATCH" in f], [])
 
+    def test_a_drifted_table_fails_where_it_is_written_and_where_it_is_rendered(self):
+        """The table is held in the workspace rules' source (every checkout)
+        and, where a workspace root exists, in its render too."""
+        sync = guard._sync_workspace()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+
+            def fails(source_drift, render_drift):
+                def answer(path=None):
+                    return render_drift if path is not None else source_drift
+
+                rep = guard.Report()
+                with patch.object(guard, "REPO_ROOT", root), patch.object(sync, "dispatch_drift", answer):
+                    guard.check_dispatch(rep)
+                return rep.fails
+
+            self.assertEqual(fails("source drifted", None), ["DISPATCH: source drifted"])
+            self.assertEqual(fails(None, "render drifted"), [])  # no root here: none to ask
+            (root / "AGENTS.md").write_text("# Root\n", encoding="utf-8")
+            self.assertEqual(fails(None, "render drifted"), ["DISPATCH: render drifted"])
+            self.assertEqual(fails(None, None), [])
+
 
 class TestClaudeAdvisoryCap(unittest.TestCase):
     def test_root_gets_the_larger_advisory_cap(self):

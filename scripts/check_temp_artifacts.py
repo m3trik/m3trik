@@ -214,7 +214,7 @@ WORKSPACE_DIRS_ALLOWED = {
 }
 
 WORKSPACE_FILES_ALLOWED: Dict[str, str] = {
-    "AGENTS.md": "monorepo instruction file; root of the dispatch table",
+    "AGENTS.md": "the workspace's rules, rendered from m3trik/agents/workspace.md",
     "CLAUDE.md": "Claude Code's stub: imports AGENTS.md and the root's packs",
     "_residue_archive_2026-09-16.zip": (
         "one-time recoverable holding the 34 files removed by the 2026-09-16 "

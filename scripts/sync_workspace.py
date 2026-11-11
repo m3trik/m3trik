@@ -15,9 +15,13 @@ Readers take the declaration directly -- ``push.ps1`` (``$RELEASE_ORDER``,
 ``generate_workspace_inventory`` (domains) and ``check_context_budget`` -- so none of
 them spells the package set. What cannot read JSON is checked here:
 
-1. The root ``AGENTS.md`` Dispatch table, rewritten from the manifest. The
-   workspace root is not a repo, so a CI checkout has no such file and that part
-   is reported as skipped there.
+1. The workspace root's ``AGENTS.md``. The root is not a repo, so it holds no
+   source: its rules are written in ``m3trik/agents/workspace.md`` (versioned,
+   links valid where it sits, its Dispatch table rewritten from the manifest)
+   and rendered to the root with each link re-based. ``--check`` builds the
+   root's instruction files in a temporary folder and checks that build, so a
+   CI checkout checks them with no root; where a root exists it must be the
+   build. A lone ``m3trik`` clone writes nothing outside itself.
 2. The ecosystem sibling loops in ``m3trik/.github/workflows/*.yml`` (a
    ``for repo in ...; do`` naming ``pythontk``), which must list
    :func:`ecosystem_packages` in order.
@@ -26,20 +30,25 @@ them spells the package set. What cannot read JSON is checked here:
    current (``pythontk.AgentInstructions``).
 4. Each package's committed operation catalog (``<package>/operations.json``)
    against the declarations it is generated from (``pythontk.OperationCatalog``).
-5. The dependency chain the prose states (:data:`CHAIN_STATEMENTS`: the root
-   ``AGENTS.md`` and ``docs/CODEBASE_MANIFEST.md``) against the ecosystem
+5. The dependency chain the prose states (:data:`CHAIN_STATEMENTS`: the
+   workspace's rules and ``docs/CODEBASE_MANIFEST.md``) against the ecosystem
    packages' pyproject dependencies, each direction, through other packages
-   too; skipped where a statement or a pyproject is absent (a CI checkout).
+   too; skipped where a pyproject is absent (a partial checkout).
+6. The ``m3trik`` distribution (``m3trik/pyproject.toml``): dependencies only,
+   whose closure through the packages' pyprojects is the cascade and the
+   products, and which names nothing else (:func:`meta_drift`).
 
 Usage:
-    python sync_workspace.py            # rewrite the dispatch table (idempotent)
+    python sync_workspace.py            # write every restatement (idempotent)
     python sync_workspace.py --check    # exit 1 on any drift
 """
 
 import argparse
 import json
+import posixpath
 import re
 import sys
+import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
@@ -47,8 +56,15 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 # This file: _scripts/m3trik/scripts/sync_workspace.py
 M3TRIK = Path(__file__).resolve().parents[1]
 WORKSPACE = M3TRIK.parent
+#: This repo's declared unit path: what the workspace's layout names its
+#: folder, whatever a clone or a worktree of it happens to be called.
+UNIT = "m3trik"
 MANIFEST = M3TRIK / "workspace.json"
+#: The workspace's rules, written once: the root ``AGENTS.md`` is its render.
+ROOT_SOURCE = M3TRIK / "agents" / "workspace.md"
 ROOT_AGENTS = WORKSPACE / "AGENTS.md"
+#: The ``m3trik`` distribution: one install of the cascade and the products.
+META = M3TRIK / "pyproject.toml"
 WORKFLOWS = M3TRIK / ".github" / "workflows"
 #: The packs' source: every unit's vendored copy is checked against it.
 PACKS = M3TRIK / "agents" / "packs"
@@ -62,11 +78,17 @@ SIBLING_LOOP = re.compile(r"for repo in ([\w ]+); do")
 #: Where the prose states the dependency chain: (file, anchor). A heading
 #: anchors the line under it; other text, the line it starts.
 CHAIN_STATEMENTS = (
-    (ROOT_AGENTS, "## Ecosystem chain"),
+    (ROOT_SOURCE, "## Ecosystem chain"),
     (M3TRIK / "docs" / "CODEBASE_MANIFEST.md", "The dependency chain is "),
 )
 #: A code span holding an arrow: one stated chain.
 CHAIN_SPAN = re.compile(r"`([^`]*→[^`]*)`")
+#: A Markdown link's target.
+LINK_TARGET = re.compile(r"(\]\()([^)\s]+)(\))")
+#: A target that is no path beside the file: a URL, ``mailto:``, a drive.
+LINK_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
+#: A requirement's distribution name and its extras: ``name[a,b]>=1``.
+REQUIREMENT = re.compile(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[([^\]]*)\])?")
 
 
 def validate(data: dict) -> List[str]:
@@ -154,12 +176,35 @@ def domains(data: Optional[dict] = None) -> Dict[str, str]:
     return {u["path"]: u["domain"] for u in (data or load())["units"]}
 
 
-def render_dispatch(data: Optional[dict] = None) -> str:
-    """The root Dispatch table, one row per unit in manifest order."""
+def _folder(path: Path) -> str:
+    """The folder *path* sits in, as a link names it from the workspace root
+    (``/``-separated). Inside this repo that is its declared unit path
+    (:data:`UNIT`) and the folders under it, whatever a clone or a worktree
+    is called; a file at the workspace root, or anywhere else, is ``""``."""
+    try:
+        inside = path.resolve().parent.relative_to(M3TRIK.resolve()).as_posix()
+    except ValueError:
+        return ""
+    return UNIT if inside == "." else f"{UNIT}/{inside}"
+
+
+def _link(target: str, start: str) -> str:
+    """The workspace-relative *target* as a link written in the folder *start*."""
+    here = [part for part in start.split("/") if part]
+    there = target.split("/")
+    shared = 0
+    while shared < min(len(here), len(there) - 1) and here[shared] == there[shared]:
+        shared += 1
+    return "/".join([".."] * (len(here) - shared) + there[shared:])
+
+
+def render_dispatch(data: Optional[dict] = None, start: str = "") -> str:
+    """The Dispatch table, one row per unit in manifest order, its links
+    written for a file in the folder *start* (default: the workspace root)."""
     rows = ["| Unit | Domain |", "|:---|:---|"]
     for unit in (data or load())["units"]:
         path = unit["path"]
-        rows.append(f"| [`{path}/`]({path}/AGENTS.md) | {unit['domain']} |")
+        rows.append(f"| [`{path}/`]({_link(f'{path}/AGENTS.md', start)}) | {unit['domain']} |")
     return "\n".join(rows)
 
 
@@ -191,11 +236,13 @@ def _read(path: Path) -> Tuple[str, bool]:
     return raw.replace("\r\n", "\n"), "\r\n" in raw
 
 
-def dispatch_drift(path: Path = ROOT_AGENTS) -> Optional[str]:
-    """Why the Dispatch table in *path* disagrees with the manifest, or None."""
+def dispatch_drift(path: Path = ROOT_SOURCE) -> Optional[str]:
+    """Why the Dispatch table in *path* disagrees with the manifest, or None.
+    Its links are held to *path*'s own folder: the workspace's rules where
+    they are written, or their render at the root."""
     text, _ = _read(path)
     try:
-        wanted = splice_dispatch(text, render_dispatch())
+        wanted = splice_dispatch(text, render_dispatch(start=_folder(path)))
     except ValueError as exc:
         return f"{path.name}: {exc}"
     if wanted != text:
@@ -206,14 +253,175 @@ def dispatch_drift(path: Path = ROOT_AGENTS) -> Optional[str]:
     return None
 
 
-def write_dispatch(path: Path = ROOT_AGENTS) -> bool:
+def write_dispatch(path: Path = ROOT_SOURCE) -> bool:
     """Rewrite *path*'s Dispatch table from the manifest; True when it changed."""
     text, crlf = _read(path)
-    wanted = splice_dispatch(text, render_dispatch())
+    wanted = splice_dispatch(text, render_dispatch(start=_folder(path)))
     if wanted == text:
         return False
     path.write_bytes((wanted.replace("\n", "\r\n") if crlf else wanted).encode())
     return True
+
+
+def rebase_links(text: str, start: str) -> str:
+    """*text*, written in the folder *start* (workspace-relative), with each
+    relative Markdown link written from the workspace root instead. A URL, an
+    anchor and a target inside a code span or a fenced block stay as written."""
+
+    def rebase(match: "re.Match[str]") -> str:
+        path, mark, fragment = match.group(2).partition("#")
+        if not path or path.startswith("/") or LINK_SCHEME.match(path):
+            return match.group(0)
+        moved = posixpath.normpath(posixpath.join(start, path))
+        if path.endswith("/"):
+            moved += "/"
+        return f"{match.group(1)}{moved}{mark}{fragment}{match.group(3)}"
+
+    lines, fenced = [], False
+    for line in text.split("\n"):
+        if line.strip().startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            # Odd parts sit inside a code span; a link's own text may hold one.
+            parts = line.split("`")
+            parts[::2] = [LINK_TARGET.sub(rebase, part) for part in parts[::2]]
+            line = "`".join(parts)
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def render_root(source: Path = ROOT_SOURCE) -> str:
+    """The workspace root's ``AGENTS.md`` as *source* renders it: the same
+    rules, each link written from the root."""
+    return rebase_links(_read(source)[0], _folder(source))
+
+
+def _is_render(text: str) -> bool:
+    """Whether *text* is a root ``AGENTS.md`` of this workspace: it links into
+    the folder its source sits in. Another project's never does, so a file
+    that fails this is never overwritten."""
+    return f"]({_folder(ROOT_SOURCE)}/" in text
+
+
+def is_workspace(workspace: Path = WORKSPACE) -> bool:
+    """Whether *workspace* is the workspace: the cascade's first package is
+    checked out beside this repo, or the folder already holds this
+    workspace's root ``AGENTS.md``. Any other folder only happens to hold a
+    clone: nothing is written there, whatever else it holds."""
+    if (workspace / load()["cascade"][0] / ".git").exists():
+        return True
+    root = workspace / "AGENTS.md"
+    return root.is_file() and _is_render(_read(root)[0])
+
+
+def _stub_imports(stub: Path) -> str:
+    """*stub*'s text, to seed a build with (the engine keeps whatever else it
+    imports); ``""`` when there is none.
+
+    Raises:
+        ValueError: It holds rules of its own: they are merged by hand.
+    """
+    if not stub.is_file():
+        return ""
+    text = _read(stub)[0]
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    if lines[:1] != ["@AGENTS.md"] or not all(line.startswith("@") for line in lines):
+        raise ValueError(
+            f"{stub} holds rules of its own: move them into the workspace's rules "
+            f"({_folder(ROOT_SOURCE)}/{ROOT_SOURCE.name}), leave '@AGENTS.md', then sync"
+        )
+    return text
+
+
+def build_root(folder: Path, source: Path = ROOT_SOURCE, stub: str = "") -> Path:
+    """Build the workspace root's instruction files in the empty *folder*: the
+    rendered ``AGENTS.md``, then its pointer block, its stub (seeded with
+    *stub*, a root's current one, so what else that imports is kept) and its
+    packs (``AgentInstructions.sync``). The ``AGENTS.md`` built."""
+    folder.mkdir(parents=True, exist_ok=True)
+    built = folder / "AGENTS.md"
+    built.write_bytes(render_root(source).encode("utf-8"))
+    if stub:
+        (folder / "CLAUDE.md").write_bytes(stub.encode("utf-8"))
+    _instructions().sync(str(folder), str(PACKS), packs=list(load().get("packs", [])), mode="import")
+    return built
+
+
+def _foreign(root: Path) -> str:
+    """Why the ``AGENTS.md`` at *root* is left alone: it is another project's."""
+    return (
+        f"{root}: not this workspace's (it links nothing under {_folder(ROOT_SOURCE)}/), "
+        "so it is never overwritten -- move it aside, then run m3trik/scripts/sync_workspace.py"
+    )
+
+
+def root_problems(workspace: Path = WORKSPACE, source: Path = ROOT_SOURCE) -> List[str]:
+    """Every way the workspace root's instruction files break the layout as
+    their sources build them (in a temporary folder, so a checkout with no
+    root checks them too), and, where *workspace* is the workspace, a root
+    ``AGENTS.md`` that is not that build."""
+    agent = _instructions()
+    with tempfile.TemporaryDirectory() as tmp:
+        built = build_root(Path(tmp) / "root", source)
+        result = agent.check(str(built.parent), source=str(PACKS), standard=str(STANDARD), mode="import")
+        wanted = _read(built)[0]
+    out = [f"the workspace root, as {source.name} builds it: {p['message']}" for p in result["problems"]]
+    root = workspace / "AGENTS.md"
+    if not root.is_file() or not is_workspace(workspace):
+        return out
+    text = _read(root)[0]
+    if not _is_render(text):
+        out.append(_foreign(root))
+    elif text != wanted:
+        out.append(
+            f"{root.name}: the workspace root's is not the render of "
+            f"{_folder(source) or '.'}/{source.name} -- edit that source (never the "
+            "render), then run m3trik/scripts/sync_workspace.py"
+        )
+    return out
+
+
+def write_root(workspace: Path = WORKSPACE, source: Path = ROOT_SOURCE) -> List[str]:
+    """Bring *workspace*'s root instruction files in line with their build:
+    ``AGENTS.md``, the ``CLAUDE.md`` stub (what else it imports is kept) and
+    the packs, each written only where it differs and in the newlines it has;
+    a pack file the root no longer takes is removed. Nothing else is touched:
+    the build is made in a temporary folder and copied over, so no other
+    folder of the workspace is walked or written. The files written and removed.
+
+    Raises:
+        ValueError: *workspace* is not the workspace (:func:`is_workspace`),
+            its ``AGENTS.md`` is another project's, or its ``CLAUDE.md`` holds
+            rules of its own. Nothing is written.
+    """
+    if not is_workspace(workspace):
+        raise ValueError(
+            f"{workspace} is not the workspace (no {load()['cascade'][0]} beside this "
+            "repo): nothing is written outside this repo"
+        )
+    root = workspace / "AGENTS.md"
+    if root.is_file() and not _is_render(_read(root)[0]):
+        raise ValueError(_foreign(root))
+    seed = _stub_imports(workspace / "CLAUDE.md")
+    packs_dir = _instructions().PACKS_DIR
+    changed = []
+    with tempfile.TemporaryDirectory() as tmp:
+        built = build_root(Path(tmp) / "root", source, seed).parent
+        for made in sorted(path for path in built.rglob("*") if path.is_file()):
+            target = workspace / made.relative_to(built)
+            wanted = _read(made)[0]
+            text, crlf = _read(target) if target.is_file() else (None, False)
+            if text == wanted:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((wanted.replace("\n", "\r\n") if crlf else wanted).encode("utf-8"))
+            changed.append(str(target))
+        taken = {path.name for path in (built / packs_dir).glob("*.md")}
+    for stale in sorted((workspace / packs_dir).glob("*.md")):
+        if stale.name not in taken:
+            stale.unlink()
+            changed.append(str(stale))
+    return changed
 
 
 def workflow_drift(workflows: Path = WORKFLOWS) -> List[str]:
@@ -233,11 +441,22 @@ def workflow_drift(workflows: Path = WORKFLOWS) -> List[str]:
     return drift
 
 
+def _units(workspace: Path = WORKSPACE) -> List[dict]:
+    """The declared units to look for in *workspace*: all of them where it is
+    the workspace (:func:`is_workspace`), else this repo's own. A lone clone's
+    parent is someone's folder, and a ``www`` or ``server`` there is theirs:
+    never checked as a unit, never written."""
+    units = load()["units"]
+    if is_workspace(workspace):
+        return list(units)
+    return [unit for unit in units if unit["path"].split("/")[0] == UNIT]
+
+
 def missing_charters(workspace: Path = WORKSPACE) -> List[str]:
     """Declared units present on disk that carry no ``AGENTS.md``."""
     return [
         unit["path"]
-        for unit in load()["units"]
+        for unit in _units(workspace)
         if (workspace / unit["path"]).is_dir()
         and not (workspace / unit["path"] / "AGENTS.md").is_file()
     ]
@@ -245,11 +464,14 @@ def missing_charters(workspace: Path = WORKSPACE) -> List[str]:
 
 def instruction_roots(workspace: Path = WORKSPACE) -> List[Tuple[Path, List[str], str]]:
     """``(folder, packs, mode)`` for each instruction root present: the
-    workspace root (its packs imported once, ``import``) and every declared
-    unit (its packs added by its own hook in a session rooted there, ``hook``)."""
+    workspace root where it holds its ``AGENTS.md`` (its packs imported once,
+    ``import``; :func:`write_root` builds a missing one first) and every
+    declared unit (its packs added by its own hook in a session rooted there,
+    ``hook``). Beside a lone clone, only this repo's own units (:func:`_units`)."""
     data = load()
-    roots = [(workspace, list(data.get("packs", [])), "import")] if workspace.is_dir() else []
-    for unit in data["units"]:
+    rooted = (workspace / "AGENTS.md").is_file() and is_workspace(workspace)
+    roots = [(workspace, list(data.get("packs", [])), "import")] if rooted else []
+    for unit in _units(workspace):
         folder = workspace / unit["path"]
         if folder.is_dir():
             roots.append((folder, list(unit.get("packs", [])), "hook"))
@@ -272,8 +494,6 @@ def instruction_problems(workspace: Path = WORKSPACE) -> List[str]:
     agent = _instructions()
     seen, out = set(), []
     for folder, packs, mode in instruction_roots(workspace):
-        if folder == workspace and not (workspace / "AGENTS.md").is_file():
-            continue  # no workspace root here: a CI runner clones the repos alone
         result = agent.check(str(folder), source=str(PACKS), standard=str(STANDARD), mode=mode)
         for problem in result["problems"]:
             key = (problem["code"], problem["location"])
@@ -287,10 +507,13 @@ def instruction_problems(workspace: Path = WORKSPACE) -> List[str]:
 
 
 def write_instructions(workspace: Path = WORKSPACE) -> List[str]:
-    """Bring every instruction root in line (``AgentInstructions.sync``); the files written."""
+    """Bring every unit's instruction root in line (``AgentInstructions.sync``);
+    the files written. The workspace root's are :func:`write_root`'s."""
     agent = _instructions()
     written = []
     for folder, packs, mode in instruction_roots(workspace):
+        if folder == workspace:
+            continue
         result = agent.sync(str(folder), str(PACKS), packs=packs, mode=mode)
         written += result["written"] + result["removed"]
     return written
@@ -435,13 +658,107 @@ def chain_drift(
     return drift
 
 
+def _requirement(text: str) -> Tuple[str, List[str]]:
+    """A requirement's distribution name (lower case, ``_`` for ``-`` and
+    ``.``) and the extras it asks for."""
+    match = REQUIREMENT.match(text)
+    if not match:
+        return "", []
+    extras = [extra.strip() for extra in (match.group(2) or "").split(",") if extra.strip()]
+    return re.sub(r"[-_.]+", "_", match.group(1)).lower(), extras
+
+
+def meta_drift(
+    meta: Path = META, workspace: Path = WORKSPACE, data: Optional[dict] = None
+) -> List[str]:
+    """Where the ``m3trik`` distribution (*meta*, a pyproject) is not one
+    install of the cascade and the products: a package it leaves out or adds
+    (followed through the packages' pyprojects, each extra it asks for
+    included), a requirement of its own, in an extra too, that is no ecosystem
+    package (it is installed into a host's Python, where a Qt binding would
+    shadow the host's), an extra a package does not declare, or code of its
+    own (it holds dependencies only)."""
+    layers = _layers()
+    data = data or load()
+    table = {}  # distribution name -> (unit, its pyproject)
+    for unit in ecosystem_packages(data):
+        if (workspace / unit / "pyproject.toml").is_file():
+            read = layers.pyproject(workspace / unit)
+            table[_requirement(read.get("project", {}).get("name", unit))[0]] = (unit, read)
+    own = layers.pyproject(meta.parent)
+    drift = []
+    tool = own.get("tool", {}).get("setuptools", {})
+    if tool.get("packages") != [] or tool.get("py-modules") != []:
+        drift.append(
+            f"{meta.name}: the distribution holds dependencies only -- declare "
+            "[tool.setuptools] packages = [] and py-modules = []"
+        )
+    def undeclared(unit: str, read: dict, extras: Sequence[str]) -> List[str]:
+        declared = read.get("project", {}).get("optional-dependencies", {})
+        return [
+            f"{meta.name}: asks {unit} for the extra {extra!r}, which it does not declare"
+            for extra in extras
+            if extra not in declared
+        ]
+
+    for extra, texts in own.get("project", {}).get("optional-dependencies", {}).items():
+        for text in texts:
+            name, asked = _requirement(text)
+            if name in table:
+                drift += undeclared(*table[name], asked)
+            else:
+                drift.append(
+                    f"{meta.name}: its extra {extra!r} requires {text.strip()!r}, no ecosystem package"
+                )
+    installed: Set[str] = set()
+    queue = [(text, None) for text in own.get("project", {}).get("dependencies", [])]
+    while queue:
+        text, parent = queue.pop()
+        name, extras = _requirement(text)
+        if name not in table:
+            if parent is None:
+                drift.append(
+                    f"{meta.name}: requires {text.strip()!r}, no ecosystem package "
+                    "(the distribution adds no dependency of its own)"
+                )
+            continue
+        unit, read = table[name]
+        wanted = (unit, tuple(sorted(extras)))
+        if wanted in installed:
+            continue
+        installed.add(wanted)
+        project = read.get("project", {})
+        optional = project.get("optional-dependencies", {})
+        drift += undeclared(unit, read, extras)
+        queue += [(dep, unit) for dep in project.get("dependencies", [])]
+        queue += [(dep, unit) for extra in extras for dep in optional.get(extra, [])]
+    units = {unit for unit, _extras in installed}
+    expected = set(data["cascade"]) | set(products(data))
+    drift += [
+        f"{meta.name}: does not install {unit} (the cascade and the products)"
+        for unit in sorted(expected - units)
+    ]
+    drift += [
+        f"{meta.name}: installs {unit}, neither a cascade package nor a product"
+        for unit in sorted(units - expected)
+    ]
+    return drift
+
+
 def unclassified(workspace: Path = WORKSPACE) -> List[str]:
-    """Child repos (a folder holding ``.git``) with no manifest entry."""
+    """Child repos (a folder holding ``.git``, not a hidden one: tooling
+    state, like ``.claude``'s ledger history, is no unit) with no manifest
+    entry. None beside a lone clone: the repos there are someone else's."""
+    if not is_workspace(workspace):
+        return []
     declared = {unit["path"] for unit in load()["units"]}
     return sorted(
         child.name
         for child in workspace.iterdir()
-        if child.is_dir() and (child / ".git").exists() and child.name not in declared
+        if child.is_dir()
+        and not child.name.startswith(".")
+        and (child / ".git").exists()
+        and child.name not in declared
     )
 
 
@@ -460,20 +777,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
     failures = []
-    try:
-        if args.check:
-            failures += instruction_problems()
-            failures += catalog_problems()
-        else:
-            for path in write_instructions() + write_catalogs():
-                print(f"[WROTE] {path}")
-    except ImportError as exc:
-        print(f"[SKIP] instructions: pythontk is not importable here ({exc})")
-    except ValueError as exc:
-        failures.append(f"instructions: {exc}")
-    if not ROOT_AGENTS.is_file():
-        print("[SKIP] dispatch: no workspace root AGENTS.md (a CI runner clones repos)")
-    elif args.check:
+    # The Dispatch table first: the root's build renders the file that holds it.
+    if args.check:
         drift = dispatch_drift()
         if drift:
             failures.append(drift)
@@ -481,9 +786,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             changed = write_dispatch()
         except ValueError as exc:
-            failures.append(f"{ROOT_AGENTS.name}: {exc}")
+            failures.append(f"{ROOT_SOURCE.name}: {exc}")
         else:
             print(f"[{'WROTE' if changed else 'OK'}] dispatch table")
+    try:
+        if args.check:
+            failures += root_problems()
+            if not (ROOT_AGENTS.is_file() and is_workspace()):
+                print("[SKIP] root: no workspace root here (its build is checked)")
+            failures += instruction_problems()
+            failures += catalog_problems()
+        else:
+            written = []
+            if is_workspace():
+                written += write_root()
+            else:
+                print("[SKIP] root: this clone stands alone, so nothing is written outside it")
+            for path in written + write_instructions() + write_catalogs():
+                print(f"[WROTE] {path}")
+    except ImportError as exc:
+        print(f"[SKIP] instructions: pythontk is not importable here ({exc})")
+    except ValueError as exc:
+        failures.append(f"instructions: {exc}")
     failures += workflow_drift()
     absent = [p for p in ecosystem_packages() if not (WORKSPACE / p / "pyproject.toml").is_file()]
     for path, anchor in CHAIN_STATEMENTS:
@@ -491,6 +815,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"[SKIP] chain: no {path.name if not path.is_file() else absent} here")
             continue
         failures += chain_drift(path, anchor)
+    if absent or not META.is_file():
+        print(f"[SKIP] m3trik distribution: no {absent or META.name} here")
+    else:
+        failures += meta_drift()
     failures += [
         f"{path}: declared in workspace.json but carries no AGENTS.md (its charter)"
         for path in missing_charters()

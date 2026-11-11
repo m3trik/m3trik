@@ -557,7 +557,8 @@ def run_workspace(
     """
     repos: List[Tuple[str, Path]] = [
         (c.name, c) for c in sorted(ws_root.iterdir())
-        if c.is_dir() and (c / ".git").exists()
+        # A hidden folder is tooling state (``.claude``'s ledger history), no unit.
+        if c.is_dir() and not c.name.startswith(".") and (c / ".git").exists()
     ]
 
     # file -> (ws_rel_label, repo_name, is_generated)

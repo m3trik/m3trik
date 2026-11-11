@@ -641,7 +641,8 @@ def generate_inventory(workspace_root: Path, output_dir: Path) -> tuple[Path, Pa
         [
             child
             for child in workspace_root.iterdir()
-            if child.is_dir() and (child / ".git").exists()
+            # A hidden folder is tooling state (``.claude``'s ledger history), no unit.
+            if child.is_dir() and not child.name.startswith(".") and (child / ".git").exists()
         ],
         key=lambda path: path.name.lower(),
     )

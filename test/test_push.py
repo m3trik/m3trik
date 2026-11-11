@@ -3022,6 +3022,24 @@ else:
             self.assertIn("notes.md", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_hidden_folder_holding_a_repo_is_none_all_processes(self):
+        """``-All`` takes every git repo under the root. ``.claude`` keeps the
+        ledgers' history in a repo of its own (tooling state, with no remote):
+        never a repo a run commits, pushes or releases."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            (root / ".claude" / ".git").mkdir(parents=True)
+            (root / "plain").mkdir()
+            result = self._run_push_functions(
+                root,
+                f"$names = @(Get-MemberRepos '{root}' | ForEach-Object {{ $_.Name }})\n"
+                "Write-Output \"RESULT=$($names -join ',')\"\n",
+            )
+            lines = [line.strip() for line in result.stdout.splitlines() if line.startswith("RESULT=")]
+            self.assertEqual(lines, ["RESULT=pythontk"], result.stdout + result.stderr)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_the_public_hygiene_gate_skips_a_private_repo_a_run_touches(self):
         """``-All`` takes every git repo under the root, private ones too.
 

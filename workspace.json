@@ -1,12 +1,12 @@
 {
   "_doc": [
     "The workspace declared as data: what cannot be measured about each unit (CODE_STANDARD section 0).",
-    "Membership is measured, not listed here: a folder holding .git belongs (check_temp_artifacts.py).",
+    "Membership is measured, not listed here: a folder holding .git belongs (check_temp_artifacts.py); a hidden one is tooling state (.claude's ledger history), never a unit.",
     "cascade: the release order push.ps1 walks; blendertk shares mayatk's tier, after it and before tentacle.",
     "units: every front door with an AGENTS.md, in root dispatch-table order. release is cascade, standalone (own publish.yml) or none; role product marks a unit no other package may import (check_layers.py): tentacle, and extapps. twin names the unit's mirror in another host (mayatk and blendertk), declared on one side; the two may name each other (check_layers.py, names).",
     "line_budget: the ceiling on the ecosystem set's source lines -- non-blank lines of the .py files a release would commit, outside test/ (check_context_budget.py counts them; push.ps1 refuses a release past it). Set 2026-10-26 to the count then; raised or lowered as docs/CONTEXT_BUDGET.md says.",
     "Readers: push.ps1, check_api_surface.py, generate_workspace_inventory.py, check_context_budget.py.",
-    "Restatements (root AGENTS.md dispatch table, CI sibling lists) are checked by scripts/sync_workspace.py --check.",
+    "Restatements (the dispatch table in agents/workspace.md and its render, the root AGENTS.md; CI sibling lists; pyproject.toml, the m3trik distribution: the cascade and the products) are checked by scripts/sync_workspace.py --check.",
     "packs: the agent-instruction packs (m3trik/agents/packs) a unit vendors; the top-level list is the workspace root's, imported once. sync_workspace.py writes and checks them (pythontk's AgentInstructions)."
   ],
   "line_budget": 663576,

@@ -378,6 +378,16 @@ function Invoke-RepoGate {
     return $false
 }
 
+function Get-MemberRepos {
+    # Every repo checked out under *Root*: a child folder holding .git. A hidden
+    # folder is tooling state, never a unit (.claude keeps the ledgers' history in
+    # a repo of its own: workspace.json's membership rule, as the scripts read it).
+    param([string]$Root)
+    return @(Get-ChildItem -Directory $Root | Where-Object {
+        -not $_.Name.StartsWith('.') -and (Test-Path (Join-Path $_.FullName ".git"))
+    })
+}
+
 function Test-PublicHygiene {
     # The public-hygiene gate: scripts/check_public_hygiene.py over $Names. A machine with no
     # private denylist skips the identifier scan (the script reports SKIP) and still fails on a
@@ -2888,7 +2898,7 @@ if ($Strict) {
 $reposToProcess = @()
 
 if ($All) {
-    $reposToProcess = Get-ChildItem -Directory $ROOT | Where-Object { Test-Path (Join-Path $_.FullName ".git") }
+    $reposToProcess = Get-MemberRepos $ROOT
 }
 elseif ($Packages) {
     foreach ($pkg in $Packages) {
@@ -2910,7 +2920,7 @@ if ($reposToProcess.Count -eq 0) {
     } else {
         # Fallback to all if not in a repo and no args
         Write-Host "Current directory is not a git repository. Processing ALL repositories..." -ForegroundColor Yellow
-        $reposToProcess = Get-ChildItem -Directory $ROOT | Where-Object { Test-Path (Join-Path $_.FullName ".git") }
+        $reposToProcess = Get-MemberRepos $ROOT
     }
 }
 

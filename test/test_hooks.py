@@ -66,6 +66,37 @@ class TestSessionStart(_HookCase):
     def _backlog(self, text: str):
         (self.project / ".claude" / "BACKLOG.md").write_text(textwrap.dedent(text), encoding="utf-8")
 
+    def _git(self, *args: str) -> str:
+        done = subprocess.run(
+            ["git", "-C", str(self.project / ".claude"), *args], capture_output=True, text=True, check=True
+        )
+        return done.stdout
+
+    def test_a_ledger_folder_that_is_a_repo_gets_one_local_commit_per_change(self):
+        """``git init`` inside ``.claude/`` makes the ledgers' history: each
+        session start commits what changed since the last, honouring the
+        folder's ``.gitignore``, and commits nothing when nothing changed."""
+        self._git("init", "-q")
+        self._git("config", "user.name", "t")
+        self._git("config", "user.email", "t@t")
+        (self.project / ".claude" / ".gitignore").write_text("receipts.json\n", encoding="utf-8")
+        (self.project / ".claude" / "receipts.json").write_text("{}", encoding="utf-8")
+        self._backlog("# Backlog\n\nNothing open.\n")
+        self.hook("session-start", {})
+        self.assertEqual(self._git("log", "--format=%s").split(), ["Checkpoint"])
+        self.assertEqual(sorted(self._git("ls-files").split()), [".gitignore", "BACKLOG.md"])
+        self.hook("session-start", {})  # nothing changed: no second commit
+        self.assertEqual(len(self._git("log", "--format=%s").split()), 1)
+        self._backlog("# Backlog\n\nAn entry was deleted.\n")
+        self.hook("session-start", {})
+        self.assertEqual(len(self._git("log", "--format=%s").split()), 2)
+        self.assertEqual(self._git("status", "--porcelain"), "")
+
+    def test_a_ledger_folder_that_is_no_repo_is_never_made_one(self):
+        self._backlog("# Backlog\n\nNothing open.\n")
+        self.hook("session-start", {})
+        self.assertFalse((self.project / ".claude" / ".git").exists())
+
     def test_no_backlog_or_no_entry_costs_no_context(self):
         self.assertEqual(self.hook("session-start", {}), {})
         self._backlog("# Backlog\n\nNothing open.\n")

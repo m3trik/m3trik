@@ -47,9 +47,13 @@ class TestNoMachinePath(unittest.TestCase):
             git = ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t"]
             for args in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "x"]):
                 subprocess.run(git + args, check=True, capture_output=True)
+            # A hidden folder holding a repo (``.claude``'s ledger history) is
+            # tooling state: never a row of the inventory.
+            (ws / ".claude" / ".git").mkdir(parents=True)
             md_path, json_path = inv.generate_inventory(ws, ws / "m3trik" / "docs")
             data = json.loads(json_path.read_text(encoding="utf-8"))
             text = md_path.read_text(encoding="utf-8") + json_path.read_text(encoding="utf-8")
+        self.assertNotIn(".claude", text)
         self.assertEqual(data["workspace_root"], "../..")
         for form in (ws.as_posix(), str(ws)):
             self.assertNotIn(form, text)

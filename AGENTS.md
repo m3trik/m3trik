@@ -62,5 +62,11 @@ Bypasses: `-SkipTestsReceipt` waives the `tests` half alone (with a banner); `-S
 - [docs/CODEBASE_MANIFEST.md](docs/CODEBASE_MANIFEST.md) — architecture of record: roles, placement, decisions.
 - [docs/DOCS_STANDARD.md](docs/DOCS_STANDARD.md) · [docs/CONTEXT_BUDGET.md](docs/CONTEXT_BUDGET.md) — markdown wiring + instruction-surface size caps.
 - [docs/AGENT_INSTRUCTIONS.md](docs/AGENT_INSTRUCTIONS.md) — agent instructions (stubs, [packs](agents/packs/)) and operations (CLI, MCP).
+- [agents/workspace.md](agents/workspace.md) — the workspace's rules: the root `AGENTS.md` is its render (`scripts/sync_workspace.py`), so edit the source, never the root.
+
+## The front door
+
+- **A workspace from this clone**: `python scripts/setup_workspace.py` plans, `--apply` makes it (the other repos, the `.venv`, the root's instruction files); what exists is left as it is.
+- **The `m3trik` distribution** ([pyproject.toml](pyproject.toml)): one install of the cascade and the products, dependencies only, held to `workspace.json` by `sync_workspace.py --check`. It adds no requirement of its own (a Qt binding would shadow a host's). Published by hand, on the maintainer's word, never by `push.ps1`.
 
 See [CHANGELOG.md](CHANGELOG.md) for history.

@@ -1,0 +1,59 @@
+# The one way a Linux job installs Ubuntu packages, for every repo's workflows
+# (`uses: m3trik/m3trik/.github/actions/apt-install@main`). A bare
+# `apt-get update && apt-get install` makes CI only as available as the runner's
+# DNS for the Ubuntu hosts: when that resolver stops answering for ubuntu.com
+# while public resolvers still do, every Linux job fails before a test runs.
+# So: fetch only what the image lacks (often nothing), let apt retry, and if it
+# still fails, pin the Ubuntu hosts the runner cannot resolve from public
+# resolvers (Cloudflare, then Quad9) for this job alone, then install once more.
+name: apt-install
+description: Install Ubuntu packages, fetching only the missing ones and surviving a runner DNS outage.
+inputs:
+  packages:
+    description: Space-separated Ubuntu package names.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install ${{ inputs.packages }}
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        set -uo pipefail
+        missing=()
+        for p in $PACKAGES; do
+          dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || missing+=("$p")
+        done
+        if [ ${#missing[@]} -eq 0 ]; then
+          echo "Already installed: $PACKAGES"
+          exit 0
+        fi
+        echo "Installing: ${missing[*]}"
+        install() {
+          sudo apt-get -q -o Acquire::Retries=3 update &&
+            sudo apt-get -q -y -o Acquire::Retries=3 install "${missing[@]}"
+        }
+        install && exit 0
+        echo "::warning::apt failed; pinning the Ubuntu hosts this runner cannot resolve from public resolvers, then retrying"
+        if ! command -v dig >/dev/null; then
+          echo "::error::dig is missing, so no public resolver can be asked"
+          exit 1
+        fi
+        hosts=$(grep -rhoE 'https?://[^/[:space:]]+' /etc/apt/sources.list /etc/apt/sources.list.d /etc/apt/apt-mirrors.txt 2>/dev/null |
+          sed -E 's#^https?://##' | sort -u)
+        for h in $hosts; do
+          getent hosts "$h" >/dev/null && continue
+          ip=""
+          for server in 1.1.1.1 9.9.9.9; do
+            ip=$(dig +short +time=3 +tries=2 A "$h" "@$server" | grep -E '^[0-9.]+$' | head -1)
+            [ -n "$ip" ] && break
+          done
+          if [ -n "$ip" ]; then
+            echo "$ip $h" | sudo tee -a /etc/hosts >/dev/null
+            echo "Pinned $h -> $ip"
+          else
+            echo "::warning::No public resolver answered for $h"
+          fi
+        done
+        install

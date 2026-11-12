@@ -194,6 +194,17 @@ def _load_window_rule():
 
 _window_expired, _MIN_WINDOW_DAYS = _load_window_rule()
 
+
+def _today() -> datetime.date:
+    """The day ``--semver`` holds a removal on: ``Deprecation.today`` from the
+    module :func:`_load_version_key` loaded (the UTC date, the day
+    :func:`_window_expired` judges ``--check`` on), else the UTC date. On the
+    machine's local date the two disagreed between local and UTC midnight
+    (2026-11-11), and neither tree could release."""
+    owner = getattr(sys.modules.get("_ptk_deprecation"), "Deprecation", None)
+    rule = getattr(owner, "today", None)
+    return rule() if rule is not None else datetime.datetime.now(datetime.timezone.utc).date()
+
 #: ``__version__ = "1.2.3"`` in a package root, read with a regex rather than an
 #: import: this script runs on a bare CI box where the package it is walking
 #: is not installed and its dependencies are absent. The optional annotation
@@ -637,7 +648,7 @@ def held_removals(
     naming no release), or a tree with no version, is held by its date
     alone; one naming no date, by its version alone."""
     removals = set(delta.moved_out) | set(delta.retired)
-    today = today or datetime.date.today()
+    today = today or _today()
     held: dict[str, dict] = {}
     rows = {**notices(baseline), **(forms or {})}  # forms: :func:`removed_forms`
     for key, (remove_in, since) in sorted(rows.items()):

@@ -402,7 +402,7 @@ def check_sync_blocks(rows: List[LedgerRow], report: Report) -> None:
             start_line = text[: m.start()].count("\n")
             if start_line < len(fenced) and fenced[start_line]:
                 continue
-            body = "\n".join(l.rstrip() for l in m.group("body").strip("\n").splitlines())
+            body = "\n".join(line.rstrip() for line in m.group("body").strip("\n").splitlines())
             blocks.setdefault(m.group("name"), []).append((row.rel, body))
     for name, entries in blocks.items():
         bodies = {body for _, body in entries}
@@ -505,7 +505,7 @@ def _git_tracked_md(repo: Path) -> Optional[Set[str]]:
         )
     except OSError:
         return None
-    return {str((repo / l).resolve()).lower() for l in r.stdout.splitlines() if l.strip()}
+    return {str((repo / line).resolve()).lower() for line in r.stdout.splitlines() if line.strip()}
 
 
 def _iter_repo_md(repo: Path, repo_name: str) -> Iterable[Path]:
@@ -597,7 +597,7 @@ def run_workspace(
     hand_written.sort()
 
     check_links(
-        [(l, p) for l, p in hand_written if p.name.lower() not in WS_LINKCHECK_EXEMPT_NAMES],
+        [(label, p) for label, p in hand_written if p.name.lower() not in WS_LINKCHECK_EXEMPT_NAMES],
         ws_root.resolve(),
         report,
         versioned=[repo for _, repo in repos] if skip_unversioned else None,

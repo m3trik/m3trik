@@ -839,6 +839,19 @@ class TestSemverHoldsANoticesWindow(_NoticeFixture):
         self.assertEqual(held["mod.py::Widget.spin"]["remove_in"], "0.2.0")
         self.assertEqual(self._held("2026-11-19"), {}, "30 days on, it may go")
 
+    def test_the_hold_is_judged_on_pythontks_utc_day(self):
+        """``--semver`` and ``--check`` read one day, ``Deprecation.today``
+        (UTC, as CI's): on the machine's local date ``--semver`` held a
+        removal ``--check`` in CI called overdue (2026-11-11, US Eastern
+        evening), so neither tree could release."""
+        self._release("0.1.0", self._noticed("0.2.0", "2026-10-20"), "2026-10-20")
+        self._write("0.2.0", self.WITHOUT)
+        for day, held in (("2026-11-18", ["mod.py::Widget.spin"]), ("2026-11-19", [])):
+            with mock.patch.object(g, "_today", return_value=datetime.date.fromisoformat(day)):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    verdict = g.semver_verdict(self.NAME, self.root)
+            self.assertEqual([row["key"] for row in verdict["held"]], held, day)
+
     def test_a_moved_names_row_does_not_lift_the_hold(self):
         """The live case: unitytk's 0.7.0 removals each had a row, and the row
         alone accounted for them."""

@@ -76,11 +76,14 @@ CHECKOUTS = ("pythontk", "uitk", "mayatk")
 #: Seconds the one mayapy run may take.
 TIMEOUT = 900
 #: What the one mayapy's environment adds to the inherited one: its teardown
-#: crashes after the work (the driver's ``os._exit``), and Maya's crash handler
+#: crashed after the work (``os._exit`` still runs every DLL's detach; the
+#: driver now leaves through ``ptk.ProcessExit.hard_exit``), and Maya's crash handler
 #: then saved the open scene as ``<scene>[Recovered-...].ma`` in the user's
 #: temp folder on every run. Maya reads this at launch (measured, Maya 2025: set
 #: from the driver it saves the scene still), so it goes in the child's env.
-CHILD_ENV = {"MAYA_DEBUG_NO_SAVE_ON_CRASH": "1"}
+#: ``MAYA_DISABLE_CER``: a crash that still happens opens no Error Report
+#: dialog for the user to close (measured 2026-11-12, Maya 2025: none, no dump).
+CHILD_ENV = {"MAYA_DEBUG_NO_SAVE_ON_CRASH": "1", "MAYA_DISABLE_CER": "1"}
 #: The exit code of a run that could not answer (no Maya): never green.
 CANNOT_RUN = 2
 SCRIPT = "sync_unity_samples.py"
@@ -187,7 +190,7 @@ for name, path, out in {jobs!r}:
 with open({artifact!r}, "w", encoding="utf-8") as fh:
     json.dump(done, fh)
 sys.stdout.flush()
-os._exit(0)  # the artifact is the verdict: mayapy's teardown may crash after the work
+ptk.ProcessExit.hard_exit(0)  # the artifact is the verdict; TerminateProcess skips Maya's crashing teardown
 '''
 
 

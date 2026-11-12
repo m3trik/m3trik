@@ -38,6 +38,12 @@ class TestUnreleasedChangelogGuard(unittest.TestCase):
         check_docs.run_workspace(self.ws_root, report)
         return [f for f in report.fails if "changelog" in f]
 
+    def test_a_hidden_folder_holding_a_repo_is_not_swept(self):
+        """``.claude`` keeps the ledgers' history in a repo of its own: tooling
+        state, never a unit whose docs are swept."""
+        self._repo(".claude", "# Changelog\n\n## [Unreleased]\n- wip fix\n")
+        self.assertEqual(self._changelog_fails(), [])
+
     def test_unreleased_header_fails(self):
         self._repo(
             "pkgrepo",

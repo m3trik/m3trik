@@ -399,6 +399,17 @@ class TestSelection(_Fixture):
         _, picks = self.picks("pythontk/pythontk/__init__.py")
         self.assertIn("test_surface_snapshot", picks.get("pythontk", set()))
 
+    def test_the_m3trik_distributions_pyproject_selects_the_suite_that_holds_it(self):
+        """The distribution restates the manifest's package set; only the
+        workspace suite reads it, and no import reaches a TOML file."""
+        _write(self.ws, {
+            "m3trik/pyproject.toml": '[project]\nname = "m3trik"\n',
+            "m3trik/test/test_sync_workspace.py": "def test_meta():\n    pass\n",
+        })
+        _clear_caches()
+        _, picks = self.picks("m3trik/pyproject.toml")
+        self.assertIn("test_sync_workspace", picks.get("m3trik", set()))
+
     def test_a_changed_test_no_runner_collects_is_noted_not_run(self):
         """Bug: a suite parked in a folder no runner collects
         (``m3trik/test/unity_e2e/``) was selected by its stem and run as
@@ -915,10 +926,15 @@ class TestRealWorkspace(unittest.TestCase):
         self.addCleanup(_clear_caches)
 
     def test_status_badge_selects_its_own_test_module(self):
-        sel = at.select([at.WORKSPACE / "pythontk/pythontk/core_utils/status_badge.py"])
+        module = at.WORKSPACE / "pythontk/pythontk/core_utils/status_badge.py"
+        if not module.is_file():
+            self.skipTest("no pythontk checkout beside this repo")
+        sel = at.select([module])
         self.assertIn("test_status_badge", sel.picks.get("pythontk", {}))
 
     def test_mayatks_gui_modules_are_read_from_its_runner(self):
+        if not (at.WORKSPACE / "mayatk/test/run_tests.py").is_file():
+            self.skipTest("no mayatk checkout beside this repo")
         self.assertIn("test_shot_manifest", at.gui_required())
 
 

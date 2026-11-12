@@ -1,0 +1,66 @@
+# The `m3trik` distribution: one install of the whole ecosystem, and nothing of
+# its own. It holds no code and pins nothing: tentacle's extras carry the host
+# libraries and the apps at the floors and ranges each release proves
+# (push.ps1 ratchets them), so this file changes only when the set of packages
+# does. `scripts/sync_workspace.py --check` holds it to workspace.json: its
+# closure is the cascade and the products, and every requirement it names is
+# an ecosystem package. Nothing else is ever added here: it is installed into
+# Maya's and Blender's own Python, where a Qt binding would shadow the host's
+# and the MCP SDK's dependency tree has no business (hence the extra).
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "m3trik"
+version = "1.0.0"
+description = "One install of the tech-art ecosystem: pythontk, uitk, mayatk, blendertk, tentacle and extapps."
+requires-python = ">=3.10"
+authors = [{name = "Ryan Simpson", email = "m3trik@outlook.com"}]
+dependencies = [
+    # The product with every host's library and the standalone apps.
+    "tentacletk[maya,blender,apps]",
+]
+
+[project.optional-dependencies]
+# The operations' MCP server (python -m pythontk ops mcp): for the environment
+# that serves an agent, never a host's.
+mcp = ["pythontk[mcp]"]
+
+[project.readme]
+content-type = "text/markdown"
+text = """
+One install of the whole ecosystem: `pythontk`, `uitk`, `mayatk`, `blendertk`,
+`tentacle` (published as `tentacletk`) and `extapps`. It holds no code of its
+own; each package is documented in its repository.
+
+```
+pip install m3trik
+```
+
+Install it into the Python that will run the tools: Maya's `mayapy`, Blender's
+Python, or a virtual environment for scripts. Beyond the six packages it brings
+only what they need (NumPy, Pillow, QtPy) and no Qt binding: Maya and Blender
+provide their own.
+
+For an AI agent, install it with the MCP SDK into the agent's own environment
+and register the two servers. They run each call in a Maya or Blender instance
+launched for it, never in a session a person has open:
+
+```
+pip install "m3trik[mcp]"
+claude mcp add ops -- python -m pythontk ops mcp
+claude mcp add ops-apply -- python -m pythontk ops mcp --apply
+```
+
+Architecture, the developer workspace and the agent tooling:
+https://github.com/m3trik/m3trik
+"""
+
+[project.urls]
+Homepage = "https://github.com/m3trik/m3trik"
+Repository = "https://github.com/m3trik/m3trik"
+
+[tool.setuptools]
+packages = []
+py-modules = []

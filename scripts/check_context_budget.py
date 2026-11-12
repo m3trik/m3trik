@@ -470,19 +470,19 @@ def check_line_budget(
 
 
 def check_dispatch(report: Report) -> None:
+    """The Dispatch table where it is written (``m3trik/agents/workspace.md``,
+    in every checkout) and, where a workspace root exists, in its render."""
+    sync = _sync_workspace()
     root = REPO_ROOT / "AGENTS.md"
-    if not root.exists():
-        report.warn("DISPATCH: root AGENTS.md not found at repo root — skipping (expected when only sub-repos are checked out, e.g. CI)")
-        return
     try:
-        drift = _sync_workspace().dispatch_drift(root)
+        drift = sync.dispatch_drift() or (root.exists() and sync.dispatch_drift(root)) or None
     except Exception as exc:  # noqa: BLE001
         report.fail(f"DISPATCH: cannot read m3trik/workspace.json: {exc}")
         return
     if drift:
         report.fail(f"DISPATCH: {drift}")
     else:
-        report.ok("DISPATCH: root dispatch table matches m3trik/workspace.json")
+        report.ok("DISPATCH: the dispatch table matches m3trik/workspace.json")
 
 
 def check_claude_links(report: Report) -> None:

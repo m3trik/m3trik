@@ -16,6 +16,7 @@
 | `generate_readme_diagrams.py [--check] [--prune]` | `docs/diagrams/`, README `diagram:` blocks | |
 | `build_stingray_ao_presets.py [--check]` | `mayatk/mat_utils/shaderfx/Standard_{Masked,Transparent}_AO.sfx` | Maya's opacity presets + the opaque AO chain, spliced. |
 | `scaffold_unity_part.py <kind> <name>` | a unitytk part: folders, asmdefs, `.meta`s, a failing test | One-off; refuses to overwrite. |
+| `setup_workspace.py [--apply]` | the workspace around a clone of m3trik: the other repos, the `.venv`, the root's instruction files | Plans by default; leaves what exists as it is. |
 
 ## Gates (exit 0 or the build is red)
 
@@ -37,7 +38,7 @@
 | `sync_scene_records.py [--check]` | `ptk.SceneRecords` vs doc table, Unity channels + versions, both PRODUCERS; emits `records.js`, `*.g.cs` | |
 | `sync_operation_contract.py [--check]` | drift between pythontk's operation payloads and unitytk's core `*.g.cs` | |
 | `sync_job_queue.py [--check]` | drift between pythontk's `JobQueue` layout and extapps' Unity Scripts `QueueLayout.g.cs` | |
-| `sync_workspace.py [--check]` | `../workspace.json` vs root Dispatch, CI loops, charters; instruction tree + packs; `operations.json`; the stated dependency chain | §0. |
+| `sync_workspace.py [--check]` | `../workspace.json` vs the Dispatch table, CI loops, charters; the workspace root's files vs their build from `../agents/workspace.md`; instruction tree + packs; `operations.json`; the stated dependency chain; the `m3trik` distribution's package set | §0. Builds the root; a lone clone writes nothing outside itself. |
 | `sync_github_about.py [--check]` / `--apply` | a repo's GitHub About (description, topics, PyPI homepage) vs its pyproject | `--apply` needs a `gh` login. |
 | `check_layers.py [--check]` / `--update` | undeclared ecosystem import; import up `[tool.m3trik.layers]`; a product or `roles`-forbidden import; an asmdef reference against its `csharp` order (C# without it fails); a name above it or in `[tool.m3trik.names] forbid` | Baselined. |
 | `check_csharp.py [--check]` / `--update` | editor code bypassing the `kernel` (`Undo`, progress bars, `Debug.Log`); an assembly with no `Prior art:`; a `*.g.cs` its generator did not write | `*.g.cs`: strict. |

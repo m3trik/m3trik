@@ -12,7 +12,7 @@ Set them up once per machine; every session then has them.
 
 ## Set up
 
-From the workspace root (Windows paths shown).
+From the workspace root (Windows paths shown). On a new machine, clone `m3trik` into an empty folder first: `python m3trik/scripts/setup_workspace.py` prints what that folder lacks (the other repos, the `.venv`, the root's instruction files) and `--apply` makes it, each only where it is missing. That covers step 1; the rest configure your own tools, so they stay yours.
 
 1. **Python.** The workspace `.venv`, Python 3.10 or later (the MCP servers need it; the packages run on 3.9), with every package installed editable. Installing is what registers each package's operations and host runner: entry points are install metadata, so a folder on `PYTHONPATH` alone registers nothing.
 
@@ -50,7 +50,7 @@ From the workspace root (Windows paths shown).
 
 ### Elsewhere
 
-- **A repo cloned alone** carries its own rules and the shared packs: `AGENTS.md`, a `CLAUDE.md` stub, its packs and a SessionStart hook that adds them to a session rooted in it. The hook runs `python` with no shell: a virtual environment provides it, as does `python-is-python3` on Debian and Ubuntu; without it the packs are not added, and `AGENTS.md` still links them. The workspace's rules (the root `AGENTS.md`: operations, release, workspace specifics, the backlog) and the links from one repo to another resolve only in the workspace. For the agents, `/backlog` and the MCP servers there too, add the plugin from that clone (step 4, pointing at a checkout of `m3trik`).
+- **A repo cloned alone** carries its own rules and the shared packs: `AGENTS.md`, a `CLAUDE.md` stub, its packs and a SessionStart hook that adds them to a session rooted in it. The hook runs `python` with no shell: a virtual environment provides it, as does `python-is-python3` on Debian and Ubuntu; without it the packs are not added, and `AGENTS.md` still links them. The workspace's rules ([`agents/workspace.md`](../agents/workspace.md), rendered to the root `AGENTS.md`: operations, release, workspace specifics, the backlog) and the links from one repo to another resolve only in the workspace, which `setup_workspace.py` builds around a clone of `m3trik`. For the agents, `/backlog` and the MCP servers there too, add the plugin from that clone (step 4, pointing at a checkout of `m3trik`).
 - **Any other project** gets the operations and the whole API of the packages it installs, with no workspace and no plugin (Python 3.10 or later, in the environment that has them):
 
   ```powershell
@@ -72,7 +72,7 @@ From the workspace root (Windows paths shown).
 | `m3trik:reviewer` | an independent, read-only review of one change, briefed with the diff, never the author's conclusions | each release-sized change (Sonnet first pass, Opus verifies) |
 | `m3trik:sweep` | a read-only inventory across the repos (callers of a name, saved names, parity) | a broad search whose conclusion you act on |
 | `/m3trik:backlog` | works `.claude/BACKLOG.md`: picks the next entry, re-measures it, critiques its fix, then stops for approval | "what's next on the backlog" |
-| SessionStart hook | grades the backlog in one line: open entries, expired ones, those awaiting a decision | each session start |
+| SessionStart hook | grades the backlog in one line: open entries, expired ones, those awaiting a decision; commits the ledgers' changes where `.claude/` keeps their history ([below](#keep-the-ledgers-history)) | each session start |
 | Stop hook | after a turn that changed files, asks for one critique pass verified by `affected_tests.py` | each turn that edits |
 | `ops` / `ops-apply` | the operations as MCP tools: reads and plans on `ops`, changes and code on `ops-apply`, Maya, Blender, Unity and Python calls in this session's own instances; `api_search` / `api_describe` find any function, `*_python_exec` runs code there, `*_scene_view` shows the scene | instead of writing a script |
 
@@ -140,7 +140,11 @@ A panel calls the library function itself, never through an operation.
 
 ### Change a rule
 
-Edit its pack in [`m3trik/agents/packs/`](../agents/packs/) (a rule every repo shares) or the `AGENTS.md` it belongs to, plus CODE_STANDARD and the [README](../README.md)'s pitch where it describes the rule, then run `python m3trik/scripts/sync_workspace.py` ([Keeping it in line](#keeping-it-in-line)).
+Edit its pack in [`m3trik/agents/packs/`](../agents/packs/) (a rule every repo shares), [`m3trik/agents/workspace.md`](../agents/workspace.md) (the workspace's: the root `AGENTS.md` is its render and is never edited) or the repo `AGENTS.md` it belongs to, plus CODE_STANDARD and the [README](../README.md)'s pitch where it describes the rule, then run `python m3trik/scripts/sync_workspace.py` ([Keeping it in line](#keeping-it-in-line)).
+
+### Keep the ledgers' history
+
+`.claude/BACKLOG.md`, `FUTURE.md` and the hygiene denylist sit in no repo: they may name clients, and every repo here publishes or may. Their history is a repository of their own, made once by hand: `git init` inside `.claude/`, with a `.gitignore` there for what is no ledger (`receipts.json`, `settings.local.json`, `*.lock`, `worktrees/`). The SessionStart hook then commits what changed at each session start, after it has written the backlog's line, locally and nowhere else (it needs a git identity, `user.name` and `user.email`; without one it commits nothing, silently), and `git -C .claude log -S "<words>"` finds an entry a session deleted. A hidden folder is no unit, so no gate scans it, `push.ps1 -All` never takes it and the manifest never lists it.
 
 ### Troubleshooting
 
@@ -160,7 +164,7 @@ Edit its pack in [`m3trik/agents/packs/`](../agents/packs/) (a rule every repo s
 
 | File | Holds | Read by |
 |:---|:---|:---|
-| `AGENTS.md` | a folder's rules, at every level that has any (a nested one scopes its rules to its folder) | every agent (the open convention) |
+| `AGENTS.md` | a folder's rules, at every level that has any (a nested one scopes its rules to its folder); the workspace root's is a render of [`m3trik/agents/workspace.md`](../agents/workspace.md) | every agent (the open convention) |
 | `CLAUDE.md` | a stub, `@AGENTS.md` (the workspace root's also imports its packs) | Claude Code, which reads `AGENTS.md` only while no `CLAUDE.md` exists at or above the session root |
 | `.agents/packs/<name>.md` | a vendored pack: rules several repos share | the pack hook, the root stub, and any agent following the pointer block |
 | `.claude/rules/<name>.md` | a path-scoped pack (`paths:` frontmatter), or a repo's own rule for one kind of file | Claude Code, only when a matching file is touched |
@@ -180,7 +184,7 @@ The three layers are principles (packs, shared), spellings (one pack per languag
 
 ### How a session gets them (measured, Claude Code)
 
-- **In the workspace**, the root stub imports the root's packs, so they load once however many repos a session touches. A repo's hook never fires there: only the session root's settings run, and a session rooted in a repo inside the workspace finds the root's packs above and adds none.
+- **In the workspace**, the root stub imports the root's packs, so they load once however many repos a session touches. A repo's hook never fires there: only the session root's settings run, and a session rooted in a repo inside the workspace finds the root's packs above and adds none. It knows them by their `.agents/packs` folder, which is why the root vendors its packs and never imports their source.
 - **In a standalone clone** (local, cloud, CI), the repo's hook adds its packs at session start and after compaction.
 - **A path-scoped pack** loads natively when a matching file is touched, in any layout.
 - **Another agent** reads `AGENTS.md`, whose pointer block names the packs.
@@ -188,6 +192,8 @@ The three layers are principles (packs, shared), spellings (one pack per languag
 ### Keeping it in line
 
 [`m3trik/workspace.json`](../workspace.json) declares each unit's packs (and the root's). [`sync_workspace.py`](../scripts/sync_workspace.py) applies the declaration through `AgentInstructions.sync` (moving a `CLAUDE.md`'s rules into `AGENTS.md`, writing stubs, vendoring packs, the pointer block, the hook) and `--check` holds it: stubs, packs against their source, pointer blocks, hooks, `§N` citations against [CODE_STANDARD](CODE_STANDARD.md), dated lines, and every package's `operations.json` against its declarations. To change a shared rule, edit its pack in `m3trik/agents/packs/`, then run `python m3trik/scripts/sync_workspace.py`.
+
+Every instruction file is a source or a render. The workspace root is not a repository, so it holds only renders: its `AGENTS.md` is [`m3trik/agents/workspace.md`](../agents/workspace.md) with each link re-based (the source's links are valid where it sits, its Dispatch table rewritten from the manifest), its stub and packs written by the same sync. `--check` builds the root in a temporary folder and checks that build, so CI holds the workspace's rules with no root to read; where a root exists, it must be the build. The write copies that build over the root's own files (`AGENTS.md`, the stub, the packs) and touches nothing else: no other folder is walked, and an `AGENTS.md` there that is another project's stops it, never overwritten. A folder is the workspace when the cascade's first package is checked out beside this repo; a lone clone of `m3trik` writes nothing outside itself and treats no neighbouring folder as a unit.
 
 The same engine is a set of operations any codebase can use:
 

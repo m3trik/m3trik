@@ -2,6 +2,7 @@
 """The workspace plugin's hooks: one stdlib script for every event it answers.
 
     hooks.py session-start   SessionStart: the backlog, graded in one line of context
+                             (and the ledgers' own history, one local commit)
     hooks.py edit            PostToolUse (async): note a file the turn changed
     hooks.py stop            Stop: after a turn that changed repo files, one critique pass
 
@@ -92,11 +93,42 @@ def _date(text: str):
         return None
 
 
+def _checkpoint(folder: Path) -> None:
+    """Commit what changed in *folder* since the last session, when it is a git
+    repository of its own (``git init`` inside ``.claude/``, a person's choice).
+    The ledgers sit in no package's repo, so this is their history: an entry a
+    session deleted is found again with ``git log -S``. Local only: nothing is
+    pushed, what the folder's ``.gitignore`` names stays out, and a commit that
+    cannot be made (another session holds the lock, no git, no git identity)
+    is skipped."""
+    if not (folder / ".git").exists():
+        return
+    git = ["git", "-C", str(folder)]
+    try:  # three calls, together inside the hook's 15 seconds
+        dirty = subprocess.run(git + ["status", "--porcelain"], capture_output=True, text=True, timeout=4)
+        if dirty.returncode or not dirty.stdout.strip():
+            return
+        subprocess.run(git + ["add", "-A"], capture_output=True, timeout=4)
+        subprocess.run(git + ["commit", "-q", "-m", "Checkpoint"], capture_output=True, timeout=4)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def session_start(data: dict, today: datetime.date = None) -> None:
+    """The backlog's line (:func:`_grade`), then the ledgers' history where the
+    folder keeps one (:func:`_checkpoint`): the line is written out before git
+    is asked anything, so a slow or stuck commit never costs the session it."""
+    try:
+        _grade(today or datetime.date.today())
+    finally:
+        sys.stdout.flush()
+        _checkpoint(_project() / ".claude")
+
+
+def _grade(today: datetime.date) -> None:
     """One line on ``.claude/BACKLOG.md``: how many entries are open, how many are
     S1 and actionable, wait on a decision, have expired (no measurement in
     ``TTL_DAYS``) or carry a malformed heading; nothing when it has none."""
-    today = today or datetime.date.today()
     backlog = _project() / ".claude" / "BACKLOG.md"
     try:
         lines = backlog.read_text(encoding="utf-8-sig").splitlines()

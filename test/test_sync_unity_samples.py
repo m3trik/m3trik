@@ -753,7 +753,18 @@ class TestExport(unittest.TestCase):
             self.assertEqual(s.export([], Path(tmp), "mayapy"), {})
         env = seen["env"] or {}
         self.assertEqual(env.get("MAYA_DEBUG_NO_SAVE_ON_CRASH"), "1")
+        self.assertEqual(env.get("MAYA_DISABLE_CER"), "1", "no Error Report dialog to close")
         self.assertIn("PATH", {k.upper() for k in env}, "the inherited environment, with it added")
+
+    def test_the_driver_leaves_without_maya_s_teardown(self):
+        """``os._exit`` still runs every DLL's detach on Windows, where Maya's
+        nCloth class cleanup faults: each release's run filed a crash report and
+        opened Maya's crash dialog for the user to close. The driver ends through
+        ``ptk.ProcessExit.hard_exit`` (``TerminateProcess``), its last line.
+        Added: 2026-11-12"""
+        lines = [line for line in s.DRIVER.splitlines() if line.strip()]
+        self.assertNotIn("os._exit(", s.DRIVER)
+        self.assertTrue(lines[-1].startswith("ptk.ProcessExit.hard_exit(0)"), lines[-1])
 
 
 class TestMain(unittest.TestCase):

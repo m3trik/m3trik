@@ -281,8 +281,11 @@ jobs:
       # cascade, the ecosystem set and every unit's domain line, read directly by
       # push.ps1 and the generators. This checks what cannot read it: the sibling
       # loops in these workflows, every declared unit's AGENTS.md and instruction
-      # tree, and each package's committed operations.json. The root
-      # Dispatch table is checked too where a workspace root exists (SKIP here).
+      # tree, and each package's committed operations.json. The workspace
+      # root is no repo, so there is none here: its instruction files are built
+      # from agents/workspace.md in a temporary folder and that build is
+      # checked (stub, packs, pointer block, section citations), as are the
+      # Dispatch table and the m3trik distribution's package set.
       - name: Workspace manifest and its restatements in sync
         run: python m3trik/scripts/sync_workspace.py --check
 

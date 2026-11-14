@@ -1176,7 +1176,7 @@ HOST_PACKAGES = ("mayatk", "blendertk")
 #: Files another drift guard already compares, by path under each package's
 #: source dir (a trailing ``/`` holds a folder), with that guard's path: the rule
 #: leaves them to it.
-_VENDOR_SYNC = "extapps/test/test_vendor_sync.py"
+_VENDOR_SYNC = "extapps/tests/test_vendor_sync.py"
 GUARDED_ELSEWHERE: Dict[str, str] = {
     # mirrored from m3trik/pm_doctor.py, the SSoT, beside package-manager.bat
     "env_utils/pm_doctor.py": "m3trik/scripts/sync_shared_bat.py",

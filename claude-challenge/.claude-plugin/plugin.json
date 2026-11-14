@@ -1,0 +1,9 @@
+{
+  "name": "challenge",
+  "version": "0.1.0",
+  "description": "Challenge a design, plan or proposal with independent agents: critics attack it from named seats, advocates argue rival designs, scenarios are walked through every design, findings are verified and a judge scores. No hooks, so it installs at user scope and works in any project.",
+  "author": {
+    "name": "m3trik"
+  },
+  "repository": "https://github.com/m3trik/m3trik"
+}

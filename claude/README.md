@@ -7,7 +7,7 @@ The ecosystem's Claude Code machinery, versioned here instead of living only in 
 | [`agents/reviewer.md`](agents/reviewer.md) | `m3trik:reviewer` | an independent review of one change |
 | [`agents/sweep.md`](agents/sweep.md) | `m3trik:sweep` | read-only inventories across the repos |
 | [`skills/backlog/`](skills/backlog/SKILL.md) | `/m3trik:backlog` | works `.claude/BACKLOG.md` as a gated pipeline |
-| `hooks/` | SessionStart, PostToolUse, Stop | grades the project's backlog; the auto-critique of a turn's edits (`hooks.py`, stdlib Python run through `uv` with no shell, so on every OS; the edit marker is async, so no tool call waits on it) |
+| `hooks/` | SessionStart, PostToolUse, Stop | grades the project's backlog; after a turn's edits, lints them, plans their affected tests and runs a small plain-Python selection itself (never an application), then asks for one critique of what is left, nothing after a docs-only turn, each decision logged (`hooks.py`, stdlib Python run through `uv` with no shell, so on every OS; the edit marker is async, so no tool call waits on it) |
 | `.mcp.json` | `plugin:m3trik:ops`, `plugin:m3trik:ops-apply` | the operations' MCP servers: reads and plans, and only the tools that make changes; Maya, Blender and plain-Python calls run in this session's own instances, `api_search` / `api_describe` find any function and `python_exec` / `maya_python_exec` / `blender_python_exec` run code there |
 
 ## Editing it

@@ -270,8 +270,7 @@ function Sync-DevWithOrigin {
         $devExists = git branch --list dev
         if (-not $devExists) { return $true }
 
-        git checkout dev --quiet 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        if (-not (Switch-GitBranch dev)) {
             Write-Err "Checkout dev failed (pre-sync)"
             return $false
         }
@@ -318,6 +317,32 @@ function Sync-DevWithOrigin {
     }
 }
 
+function Switch-GitBranch {
+    # `git checkout <branch>` in the current folder; $true when it took.
+    #
+    # Another git process holding the index -- an editor's status refresh right
+    # after our own commit -- makes checkout fail with "index.lock ... File
+    # exists". That lock goes within a moment, so the checkout is tried again,
+    # briefly. Any other failure, and a lock that outlives the tries, is said in
+    # git's own words: they were discarded, so the run read a bare "Checkout dev
+    # failed" (2026-11-14: uitk, straight after its Release commit; the re-run
+    # went through).
+    param(
+        [string]$Branch,
+        [int]$Tries = 5,
+        [int]$WaitSeconds = 2
+    )
+    $output = ""
+    for ($try = 1; $try -le $Tries; $try++) {
+        $output = (git checkout $Branch --quiet 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) { return $true }
+        if ($output -notmatch 'index\.lock') { break }
+        if ($try -lt $Tries) { Start-Sleep -Seconds $WaitSeconds }
+    }
+    if ($output) { Write-Host "    $output" -ForegroundColor DarkGray }
+    return $false
+}
+
 function Push-DevBranch {
     param([string]$RepoPath)
     
@@ -331,8 +356,7 @@ function Push-DevBranch {
         $branch = "dev"
         if (-not (git branch --list dev)) { $branch = git rev-parse --abbrev-ref HEAD }
 
-        git checkout $branch --quiet 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        if (-not (Switch-GitBranch $branch)) {
             Write-Err "Checkout $branch failed"
             return $false
         }

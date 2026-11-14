@@ -4193,6 +4193,43 @@ else:
             self.assertIn("No review receipt for the current tree of: pythontk@", out)
 
     @unittest.skipUnless(_have_git.__func__(), "git is required")
+    def test_a_checkout_waits_out_a_held_index_and_says_why_it_failed(self):
+        """Another git process holding the index (an editor's status refresh
+        right after our own commit) fails a checkout with "index.lock ... File
+        exists". The lock goes within a moment, so the checkout is tried again;
+        a failure is said in git's own words, which were discarded (2026-11-14:
+        a release stopped at a bare "Checkout dev failed")."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo, _ = self._init_dummy_repo(root, "pythontk", "0.1.0", ["qtpy"])
+            body = (
+                self._PUSH_CONSTANTS + f"$repo = '{repo}'\n"
+                "Push-Location $repo\n"
+                "$lock = Join-Path $repo '.git\\index.lock'\n"
+                # held, then released while the helper waits
+                "Set-Content -LiteralPath $lock -Value ''\n"
+                "function Start-Sleep { Remove-Item -LiteralPath $lock -Force }\n"
+                '"RESULT:released=$(Switch-GitBranch dev)"\n'
+                # held for good: every try fails, and git's words are shown
+                "Set-Content -LiteralPath $lock -Value ''\n"
+                "function Start-Sleep { }\n"
+                '"RESULT:held=$(Switch-GitBranch dev -Tries 2)"\n'
+                "Remove-Item -LiteralPath $lock -Force\n"
+                # no lock involved: no second try, git's reason shown
+                '"RESULT:missing=$(Switch-GitBranch no-such-branch)"\n'
+                "Pop-Location\n"
+            )
+            result = self._run_push_functions(root, body)
+            out = result.stdout + result.stderr
+            self.assertEqual(
+                self._results(result),
+                {"released": "True", "held": "False", "missing": "False"},
+                out,
+            )
+            self.assertIn("index.lock", out)
+            self.assertIn("no-such-branch", out)
+
+    @unittest.skipUnless(_have_git.__func__(), "git is required")
     def test_a_moved_tree_is_judged_again_by_the_gate(self):
         """Assert-GatedTree re-applies the gate's own rule, not a stricter one:
         a tree that moved stays committable while the gate would still pass it

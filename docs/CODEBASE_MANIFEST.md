@@ -65,7 +65,7 @@ Each part of the shape has a check, so the rule it holds is stated once, in the 
 | Part of the shape | Check |
 |:--|:--|
 | Layer order; no library imports a product; a Slots module imports no host | `check_layers.py` (layer and role rules) |
-| Written once; bindings never override | `check_dcc_twins.py` (+ `extapps/test/test_vendor_sync.py` for the one sanctioned vendored copy) |
+| Written once; bindings never override | `check_dcc_twins.py` (+ `extapps/tests/test_vendor_sync.py` for the one sanctioned vendored copy) |
 | Every `self.tk` call a shared panel makes exists in both libraries | `compare_panel_surface.py` |
 | A user's saved widget and record names survive every move | `check_saved_names.py` |
 | A removed public name names its new home | `check_api_surface.py --semver` and each package's `MOVED_NAMES` |

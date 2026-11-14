@@ -22,7 +22,7 @@ Checks
             ecosystem package its pyproject.toml declares (hand-written nav
             must not lag the declared dependency graph).
   LINES     the ecosystem set's source lines against workspace.json's
-            line_budget: non-blank lines of the .py files outside test/.
+            line_budget: non-blank lines of the .py files outside tests/.
             Reported here (WARN past it) over every working tree; the release
             gate is ``--line-budget <pkg ...>``, which push.ps1 runs per
             package and which exits 1 past it, so growth is a decision with a
@@ -397,7 +397,7 @@ def _working_lines(repo: Path) -> int:
     return sum(
         _non_blank((repo / rel).read_bytes())
         for rel in listed
-        if rel and rel.split("/")[0] != "test" and (repo / rel).is_file()
+        if rel and rel.split("/")[0] != "tests" and (repo / rel).is_file()
     )
 
 
@@ -411,7 +411,7 @@ def _committed_lines(repo: Path) -> int:
         meta, _, rel = entry.partition("\t")
         parts = meta.split()
         if len(parts) == 3 and parts[1] == "blob" and rel.endswith(".py"):
-            if rel.split("/")[0] != "test":
+            if rel.split("/")[0] != "tests":
                 oids.append(parts[2])
     if not oids:
         return 0
@@ -431,7 +431,7 @@ def source_lines(
     workspace: Path = REPO_ROOT, released: Iterable[str] | None = None
 ) -> dict[str, int]:
     """Non-blank lines of each ecosystem-set package's ``.py`` files outside its
-    ``test/``: a package in *released* (default: every one) as the release
+    ``tests/``: a package in *released* (default: every one) as the release
     would commit it, any other as committed."""
     released = None if released is None else set(released)
     counts = {}

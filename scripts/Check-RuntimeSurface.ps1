@@ -74,7 +74,7 @@ try {
     if ($mayapy) {
         $art = Join-Path $RepoRoot 'mayatk\API_RUNTIME.json'
         Remove-Item $art -ErrorAction SilentlyContinue
-        & $mayapy.FullName (Join-Path $RepoRoot 'mayatk\test\dump_runtime_surface.py') | Out-Null
+        & $mayapy.FullName (Join-Path $RepoRoot 'mayatk\tests\dump_runtime_surface.py') | Out-Null
         Invoke-Verify 'mayatk' @('--runtime', $art)
     } else { Record 'SKIP' 'mayatk' 'mayapy not found' }
 
@@ -84,7 +84,7 @@ try {
     if ($blender) {
         $art = Join-Path $RepoRoot 'blendertk\API_RUNTIME.json'
         Remove-Item $art -ErrorAction SilentlyContinue
-        & $blender.FullName --background --factory-startup --python (Join-Path $RepoRoot 'blendertk\test\dump_runtime_surface.py') | Out-Null
+        & $blender.FullName --background --factory-startup --python (Join-Path $RepoRoot 'blendertk\tests\dump_runtime_surface.py') | Out-Null
         Invoke-Verify 'blendertk' @('--runtime', $art)
     } else { Record 'SKIP' 'blendertk' 'blender not found' }
 }

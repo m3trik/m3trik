@@ -8,6 +8,11 @@
       "name": "m3trik",
       "source": "./claude",
       "description": "Agents, skills, hooks and the operations MCP servers for this workspace's packages."
+    },
+    {
+      "name": "challenge",
+      "source": "./claude-challenge",
+      "description": "Challenge a design, plan or proposal with independent agents: attack, rivals, scenarios, verification, judgement. No hooks; install at user scope for every project."
     }
   ]
 }

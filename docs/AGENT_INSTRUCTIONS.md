@@ -62,6 +62,18 @@ From the workspace root (Windows paths shown). On a new machine, clone `m3trik` 
   Name that environment's `python` by its full path, so the servers start in it whatever the client's working directory. Permissions as in step 5 (`mcp__ops__*`, `mcp__ops-apply__*`).
 - **Another agent** (Copilot, Codex, Cursor) reads `AGENTS.md`, whose pointer block names the packs. For the operations, register the same two commands as stdio MCP servers in its configuration, or call the command line.
 
+### The challenge plugin
+
+A second plugin in this marketplace, [`m3trik/claude-challenge/`](../claude-challenge/skills/challenge/SKILL.md): `/challenge` (`/challenge:challenge` where another skill shares the name) stress-tests a design, plan or proposal with independent agents. Critics attack it from named seats, advocates argue rival designs, scenarios are walked through every design, findings are verified and a judge scores. It has no hooks and names nothing of this workspace, so it installs at user scope and works in every project:
+
+```
+claude plugin install challenge@m3trik --scope user
+```
+
+The marketplace is declared for this workspace (step 4), so in another project add it at user scope first: `claude plugin marketplace add <path of the m3trik checkout> --scope user`.
+
+Every reviewer is told to use no tools. Where a frame sets `critic_agent`, the reviewers on the critic model run as the [`critic`](../claude-challenge/agents/critic.md) agent, which holds the Read tool alone; reviewers on the session's model keep its tools. The `plan` and `stub` modes spend nothing; a `run` is a workflow and needs the user's opt-in.
+
 ## Use
 
 ### What a Claude Code session has
@@ -73,7 +85,7 @@ From the workspace root (Windows paths shown). On a new machine, clone `m3trik` 
 | `m3trik:sweep` | a read-only inventory across the repos (callers of a name, saved names, parity) | a broad search whose conclusion you act on |
 | `/m3trik:backlog` | works `.claude/BACKLOG.md`: picks the next entry, re-measures it, critiques its fix, then stops for approval | "what's next on the backlog" |
 | SessionStart hook | grades the backlog in one line: open entries, expired ones, those awaiting a decision; commits the ledgers' changes where `.claude/` keeps their history ([below](#keep-the-ledgers-history)) | each session start |
-| Stop hook | after a turn that changed files, asks for one critique pass verified by `affected_tests.py` | each turn that edits |
+| Stop hook | after a turn that changed files: lints them, plans their affected tests and runs the selection itself when it is small and plain Python, never an application (a pass costs the model nothing, a failure arrives with its output), then asks for one critique pass; nothing after a turn that changed only docs; logs each decision | each turn that edits |
 | `ops` / `ops-apply` | the operations as MCP tools: reads and plans on `ops`, changes and code on `ops-apply`, Maya, Blender, Unity and Python calls in this session's own instances; `api_search` / `api_describe` find any function, `*_python_exec` runs code there, `*_scene_view` shows the scene | instead of writing a script |
 
 ### Run an operation

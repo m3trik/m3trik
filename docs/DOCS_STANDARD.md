@@ -41,7 +41,7 @@ These are emitted by tooling; the sweep never lints them (but links *from* them 
 | `tentacle/docs/PARITY_SURFACE.md` | `m3trik/scripts/compare_panel_surface.py --all --write` |
 | `tentacle/docs/PARITY_AUDIT.md` | `m3trik/scripts/generate_parity_audit.py` |
 | `m3trik/docs/workspace_repo_inventory.md` | `m3trik/scripts/generate_workspace_inventory.py` |
-| `server/docs/README.md` | `server/test/run-tests.ps1 -UpdateReadme` (templates: `ReadmeTemplates.ps1`) |
+| `server/docs/README.md` | `server/tests/run-tests.ps1 -UpdateReadme` (templates: `ReadmeTemplates.ps1`) |
 | `<!-- diagram:<name> -->` blocks in any README; `m3trik/docs/diagrams/*.svg` | `m3trik/scripts/generate_readme_diagrams.py` (`--check` in CI) |
 
 **Diagrams.** A README picture of how parts relate is a generated diagram: place a `<!-- diagram:<name> -->` marker pair and run the generator, which draws it from the declared facts (the ecosystem from `workspace.json` and the pyprojects, a flow from its `FLOWS`) as light and dark SVGs. Never Mermaid or a hand-drawn image in a README that ships to PyPI: PyPI shows Mermaid as code, and a drawing drifts. Mermaid stays fine in a doc only GitHub renders.

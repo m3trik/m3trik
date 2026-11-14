@@ -131,11 +131,11 @@ jobs:
           # test_push.py is excluded here and runs in its own Windows job: it
           # makes 16 unguarded `subprocess.run(["powershell", ...])` calls with
           # no platform skip, so on ubuntu it fails for the wrong reason.
-          # test/unity_e2e is excluded too: its twins launch Maya, Blender and
+          # tests/unity_e2e is excluded too: its twins launch Maya, Blender and
           # Unity on a machine that has them (affected_tests.py runs it, alone).
           # Stream via tee, not a capture: a buffered capture shows nothing in
           # the log while a suite is hung.
-          pytest --tb=short -v test/ --ignore=test/test_push.py --ignore=test/unity_e2e 2>&1 | tee pytest_out.txt
+          pytest --tb=short -v tests/ --ignore=tests/test_push.py --ignore=tests/unity_e2e 2>&1 | tee pytest_out.txt
           # PIPESTATUS, not $?: tee always exits 0 and would turn every failure
           # green.
           RC=${PIPESTATUS[0]}
@@ -222,7 +222,7 @@ jobs:
           PYTHONPATH: pythontk:uitk
         run: |
           set +e
-          python -m pytest extapps/test/test_vendor_sync.py -q -rs -p no:cacheprovider 2>&1 | tee vendor_sync_out.txt
+          python -m pytest extapps/tests/test_vendor_sync.py -q -rs -p no:cacheprovider 2>&1 | tee vendor_sync_out.txt
           RC=${PIPESTATUS[0]}
           if [ "$RC" -ne 0 ]; then
             echo "::error::test_vendor_sync exited $RC"
@@ -244,7 +244,7 @@ jobs:
           PYTHONPATH: pythontk:uitk
         run: |
           set +e
-          python -m pytest tentacle/test/test_package.py -q -rs -p no:cacheprovider -k launched_name 2>&1 | tee launch_names_out.txt
+          python -m pytest tentacle/tests/test_package.py -q -rs -p no:cacheprovider -k launched_name 2>&1 | tee launch_names_out.txt
           RC=${PIPESTATUS[0]}
           if [ "$RC" -ne 0 ]; then
             echo "::error::the launched-name check exited $RC"
@@ -489,7 +489,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          pytest --tb=short -v test/test_push.py 2>&1 | tee push_out.txt
+          pytest --tb=short -v tests/test_push.py 2>&1 | tee push_out.txt
           RC=${PIPESTATUS[0]}
           SUMMARY=$(grep -E '^=+ .* in [0-9.]+s.*=+$' push_out.txt | tail -1)
           FAILED=$(echo "$SUMMARY" | grep -oE '[0-9]+ failed' | head -1 | cut -d' ' -f1)

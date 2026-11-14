@@ -56,7 +56,7 @@ class TestAnchoring(unittest.TestCase):
 
     def test_the_test_harness_anchors_too(self):
         """Entries about the runners name harness code (mayatk's suite driver)."""
-        entry = "## 2026-10-21 | mayatk | S2 | ready | x\n- Where: mayatk `test/_suite_driver.py` `_module_suite`\n"
+        entry = "## 2026-10-21 | mayatk | S2 | ready | x\n- Where: mayatk `tests/_suite_driver.py` `_module_suite`\n"
         self.assertTrue((ld.stamp_line(entry) or "").startswith("- Anchors: _module_suite@"))
 
     def test_an_entry_without_anchors_reports_nothing(self):

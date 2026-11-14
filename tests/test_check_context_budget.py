@@ -272,7 +272,7 @@ class TestLiveNavDeps(unittest.TestCase):
 class TestLineBudget(unittest.TestCase):
     """The ecosystem's source lines against workspace.json's ``line_budget``:
     the guard reports the headroom, and the release gate refuses growth past
-    it. Counted: non-blank lines of the .py files outside each repo's test/,
+    it. Counted: non-blank lines of the .py files outside each repo's tests/,
     a released package's as the release would commit them (tracked, or new
     and not ignored) and every other package's as committed."""
 
@@ -281,14 +281,14 @@ class TestLineBudget(unittest.TestCase):
         self.root = Path(self._td.name)
         repo = self.root / "pythontk"
         (repo / "pythontk").mkdir(parents=True)
-        (repo / "test").mkdir()
+        (repo / "tests").mkdir()
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
         _write(repo / "pythontk", "a.py", "x = 1\n\n\ny = 2\n")  # 2 counted
         _write(repo / "pythontk", "b.py", "z = 3\n")  # new, untracked: counted
-        _write(repo / "test", "test_a.py", "t = 1\n" * 50)  # test/: never counted
+        _write(repo / "tests", "test_a.py", "t = 1\n" * 50)  # tests/: never counted
         _write(repo, ".gitignore", "gen_ui.py\n")
         _write(repo / "pythontk", "gen_ui.py", "g = 1\n" * 50)  # ignored
-        subprocess.run(["git", "-C", str(repo), "add", "pythontk/a.py", "test"], check=True)
+        subprocess.run(["git", "-C", str(repo), "add", "pythontk/a.py", "tests"], check=True)
         subprocess.run(
             ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t",
              "commit", "-q", "-m", "a"],

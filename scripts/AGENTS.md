@@ -57,5 +57,5 @@
 ## Rules
 
 - One-shot maintenance scripts go here; reusable logic in [pythontk](../../pythontk/AGENTS.md).
-- Maintenance CLIs: flat `def`s + `main()` are fine (encapsulation-exempt); tests live in `m3trik/test/`.
+- Maintenance CLIs: flat `def`s + `main()` are fine (encapsulation-exempt); tests live in `m3trik/tests/`.
 - New gate ⇒ wire it into the workflow or weekly task that owns it, and name it in the standard it enforces.

@@ -51,11 +51,11 @@ $RUNNER_MARKER = ".release-runner"
 #: Each cascade package's FULL suite, relative to the workspace root: what a tests
 #: receipt asserts ran green against the tree being published (m3trik/AGENTS.md).
 $SUITES = @{
-    "pythontk"  = @("pythontk/test/run_tests.py")
-    "uitk"      = @("uitk/test/run_tests.py")
-    "mayatk"    = @("mayatk/test/run_tests.py", "--all")
-    "blendertk" = @("blendertk/test/run_tests.py")
-    "tentacle"  = @("tentacle/test/run_tests.py", "--in-maya")
+    "pythontk"  = @("pythontk/tests/run_tests.py")
+    "uitk"      = @("uitk/tests/run_tests.py")
+    "mayatk"    = @("mayatk/tests/run_tests.py", "--all")
+    "blendertk" = @("blendertk/tests/run_tests.py")
+    "tentacle"  = @("tentacle/tests/run_tests.py", "--in-maya")
 }
 
 #: The PowerShell running this, for push.ps1's child runs.

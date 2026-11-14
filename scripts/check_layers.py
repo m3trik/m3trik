@@ -81,7 +81,7 @@ and are exempt, as ruff already treats them.
 
 6. **Names.** Knowledge points down as imports do (CODE_STANDARD section 0,
    Parts): a package's code, tests and shipped files (its package folder,
-   ``test/``, and the ``[tool.m3trik.layers.csharp]`` root) name no ecosystem
+   ``tests/``, and the ``[tool.m3trik.layers.csharp]`` root) name no ecosystem
    package it does not depend on, directly or through another
    (``pyproject.toml`` dependencies and extras), save its twin
    (``workspace.json`` ``"twin"``: mayatk and blendertk). A package may also
@@ -897,7 +897,7 @@ def ecosystem_closure(workspace: Path, ecosystem: Sequence[str]) -> Dict[str, Se
 
 def name_roots(repo: Path, package: str, data: dict) -> List[Path]:
     """The folders rule 6 reads: the package, its tests, its Unity package."""
-    roots = [repo / package, repo / "test"]
+    roots = [repo / package, repo / "tests"]
     declared_cs = csharp(data)
     if declared_cs and declared_cs.get("root"):
         roots.append(repo / declared_cs["root"])

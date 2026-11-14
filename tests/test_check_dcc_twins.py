@@ -429,7 +429,7 @@ class WrittenOnceTest(unittest.TestCase):
         )
         body = "def tail(count):\n" + self.LOGIC
         vendored = {
-            "extapps/test/test_vendor_sync.py": guard,
+            "extapps/tests/test_vendor_sync.py": guard,
             "extapps/extapps/marmoset_scripts/toolbag_log.py": body,
             "mayatk/mayatk/mat_utils/marmoset_bridge/toolbag_log.py": body,
             "blendertk/blendertk/mat_utils/marmoset_bridge/toolbag_log.py": body,
@@ -438,7 +438,7 @@ class WrittenOnceTest(unittest.TestCase):
         stray = dict(vendored, **{"extapps/extapps/look_match/slots.py": body})
         self.assertEqual(len(gate.written_once_violations(self.tree(stray))), 1)
         unlisted = dict(vendored)
-        unlisted["extapps/test/test_vendor_sync.py"] = guard.replace('"toolbag_log.py", ', "")
+        unlisted["extapps/tests/test_vendor_sync.py"] = guard.replace('"toolbag_log.py", ', "")
         self.assertEqual(len(gate.written_once_violations(self.tree(unlisted))), 1)
 
     def test_the_whole_vendored_substance_slice_is_no_copy(self):
@@ -453,7 +453,7 @@ class WrittenOnceTest(unittest.TestCase):
         )
         body = "def plan(count):\n" + self.LOGIC
         vendored = {
-            "extapps/test/test_vendor_sync.py": guard,
+            "extapps/tests/test_vendor_sync.py": guard,
             "extapps/extapps/substance_scripts/connection.py": body,
             "extapps/extapps/substance_scripts/substance_rpc/client.py": body.replace("plan", "ask"),
             "mayatk/mayatk/mat_utils/substance_bridge/connection.py": body,
@@ -746,7 +746,7 @@ class HostCopiesTest(unittest.TestCase):
     def test_a_file_a_guard_names_but_never_compares_is_held_by_none(self):
         """Read from the guards: vendor-sync names the Rizom registry as a
         host half it never compares, and compares the Unity one."""
-        if not os.path.isdir(os.path.join(gate.REPO, "extapps", "test")):
+        if not os.path.isdir(os.path.join(gate.REPO, "extapps", "tests")):
             self.skipTest("extapps not checked out")
         compared = gate.compared_elsewhere(gate.REPO)
         held = compared[gate._VENDOR_SYNC]

@@ -28,7 +28,7 @@ What a changed file selects, in its own package:
 - anything under a ``GATES`` pattern (tentacle ``ui/`` / ``slots/``, a blendertk
   panel ``.ui``): also that package's structural suites, which read the files
   themselves so no import reaches them -- plus a note naming the host-only manual
-  checks (tentacle ``test/blender``) that import the change's stem family;
+  checks (tentacle ``tests/blender``) that import the change's stem family;
 - a module that defines a declared operation's function (the class or function
   a committed ``operations.json`` target names), or a package's ``operations.py``:
   also the suite that rebuilds every catalog (``CATALOG_SUITE``), since an
@@ -40,11 +40,11 @@ What a changed file selects, in its own package:
   samples select its Edit Mode tests in the owned project (``ProjectBuilder.test``,
   through unitytk's runner), a sample's recipe or its exporter the samples check
   (``sync_unity_samples.py --check``, an owned headless mayapy), and a file of the
-  end-to-end suite (``m3trik/test/unity_e2e/``) that suite; a file an MSBuild
+  end-to-end suite (``m3trik/tests/unity_e2e/``) that suite; a file an MSBuild
   project compiles or copies (``Runner.project``), or the Python reference its
   golden cases come from (``ptk.Conformance.PROVIDERS``, by the case names its
   C# asks for), its ``dotnet test`` run: the C# ports' conformance suites
-  (unitytk ``test/core_dotnet``, ``test/models_dotnet``);
+  (unitytk ``tests/core_dotnet``, ``tests/models_dotnet``);
 - a source module such a suite's readers import or name (``Runner.reads``: the
   samples' recipes and the twins name the producer API they export through), or
   one its few importers do: that suite, run whole, too;
@@ -58,14 +58,14 @@ Downstream packages (a ``mayatk`` test that names a ``pythontk`` class) are
 counted, and selected only with ``--downstream``: a core edit reaches hundreds of
 DCC modules, which is the full suite's job at review time.
 
-Each package runs through its own ``test/run_tests.py``: the runner stays the
+Each package runs through its own ``tests/run_tests.py``: the runner stays the
 execution contract (sandboxing, fresh DCC processes, mayatk's GUI pass); this
 script only picks the modules. ``--run`` runs them one package at a time (never
 two suites at once), headless (``QT_QPA_PLATFORM=offscreen``) -- a GUI session
 starts only where the runner requires one (mayatk's ``GUI_REQUIRED`` modules,
 tentacle's Maya-hosted suites: those reading ``_host.MAYA_AVAILABLE`` or importing
 the Maya host, ``Runner.host_modules``) -- never stamps a badge, and keeps each
-runner's full output in ``<repo>/test/temp_tests/affected_<time>.log``. A run
+runner's full output in ``<repo>/tests/temp_tests/affected_<time>.log``. A run
 whose tally shows no test executed (every one skipped) reads RAN NOTHING, not PASS.
 On Windows each runner runs on pythontk's private desktop, so no window a test
 opens (a tkinter probe, a console, a GUI Maya) takes the user's focus or input;
@@ -136,7 +136,7 @@ GENERATED = re.compile(r"(^|/)(PARITY_[A-Z_]+\.md|CHANGELOG\.md)$")
 # ---------------------------------------------------------------- packages
 @dataclass
 class Package:
-    """One unit with a ``test/`` directory."""
+    """One unit with a ``tests/`` directory."""
 
     name: str
     repo: Path
@@ -146,7 +146,7 @@ class Package:
 
     @property
     def test_dir(self) -> Path:
-        return self.repo / "test"
+        return self.repo / "tests"
 
 
 @dataclass
@@ -164,7 +164,7 @@ class Runner:
     host_modules: Tuple[str, ...] = ()
     #: A suite run whole, never by module: the files that select it (``fnmatch``
     #: on the workspace-relative path; ``*`` crosses ``/``), what it is, and the
-    #: unit whose ``test/temp_tests`` keeps its log. Empty: a package's runner.
+    #: unit whose ``tests/temp_tests`` keeps its log. Empty: a package's runner.
     selects: Tuple[str, ...] = ()
     label: str = ""
     unit: str = ""
@@ -193,22 +193,22 @@ class Runner:
 #: Each runner's subset contract. A package missing here runs its test files
 #: through pytest (m3trik, www, comfyui, server, androidtk).
 RUNNERS: Dict[str, Runner] = {
-    "pythontk": Runner(("pythontk/test/run_tests.py",)),
-    "uitk": Runner(("uitk/test/run_tests.py",), modules_flag="--modules"),
-    "mayatk": Runner(("mayatk/test/run_tests.py",)),
-    "blendertk": Runner(("blendertk/test/run_tests.py",), k_flag=None),
+    "pythontk": Runner(("pythontk/tests/run_tests.py",)),
+    "uitk": Runner(("uitk/tests/run_tests.py",), modules_flag="--modules"),
+    "mayatk": Runner(("mayatk/tests/run_tests.py",)),
+    "blendertk": Runner(("blendertk/tests/run_tests.py",), k_flag=None),
     # ``_host.MAYA_AVAILABLE`` is the suite's shared probe. No module is the Maya
     # host any more (one launcher, ``Tcl.build("maya")``), so a Maya-only test
     # reads the probe.
-    "tentacle": Runner(("tentacle/test/run_tests.py",), maya_flag="--in-maya",
+    "tentacle": Runner(("tentacle/tests/run_tests.py",), maya_flag="--in-maya",
                        host_probes=("MAYA_AVAILABLE",)),
-    "unitytk": Runner(("unitytk/test/run_tests.py",)),
-    "extapps": Runner(("extapps/test/run_tests.py",)),
+    "unitytk": Runner(("unitytk/tests/run_tests.py",)),
+    "extapps": Runner(("extapps/tests/run_tests.py",)),
     # No Python test reads the package's C#, assets or samples: its Edit Mode
     # tests do, in a batch editor on the owned project (refused while an editor
     # has it open). ``-k`` is Unity's ``-testFilter``.
     "unity_edit_mode": Runner(
-        ("unitytk/test/run_tests.py", "--edit-mode"), extra=(), unit="unitytk",
+        ("unitytk/tests/run_tests.py", "--edit-mode"), extra=(), unit="unitytk",
         selects=("unitytk/com.m3trik.unitytk/*",),
         label="the package's Edit Mode tests, in the owned project",
     ),
@@ -225,15 +225,15 @@ RUNNERS: Dict[str, Runner] = {
     # come from, select it. ``-k`` is ``dotnet test --filter`` (a bare value
     # matches inside the test's full name).
     "unity_core_dotnet": Runner(
-        ("test", "unitytk/test/core_dotnet"), k_flag="--filter", extra=("--nologo",),
+        ("test", "unitytk/tests/core_dotnet"), k_flag="--filter", extra=("--nologo",),
         unit="unitytk", executable="dotnet", python_env="UNITYTK_PYTHON",
-        project="unitytk/test/core_dotnet/Unitytk.Core.Tests.csproj",
+        project="unitytk/tests/core_dotnet/Unitytk.Core.Tests.csproj",
         label="the engine-free core under dotnet test, held to its Python references",
     ),
     "unity_models_dotnet": Runner(
-        ("test", "unitytk/test/models_dotnet"), k_flag="--filter", extra=("--nologo",),
+        ("test", "unitytk/tests/models_dotnet"), k_flag="--filter", extra=("--nologo",),
         unit="unitytk", executable="dotnet", python_env="UNITYTK_PYTHON",
-        project="unitytk/test/models_dotnet/Unitytk.Models.Tests.csproj",
+        project="unitytk/tests/models_dotnet/Unitytk.Models.Tests.csproj",
         label="the features' engine-free models under dotnet test, held to their Python references",
     ),
     # The DCC-to-Unity suite: each twin a sample delivered again by another
@@ -241,10 +241,10 @@ RUNNERS: Dict[str, Runner] = {
     # m3trik's module runner and the CI gate suite leave it out (it launches
     # Maya, Blender and Unity where they are installed): only this row runs it.
     "unity_e2e": Runner(
-        ("-m", "pytest", "-q", "m3trik/test/unity_e2e"), extra=(), unit="m3trik",
-        selects=("m3trik/test/unity_e2e/*",),
+        ("-m", "pytest", "-q", "m3trik/tests/unity_e2e"), extra=(), unit="m3trik",
+        selects=("m3trik/tests/unity_e2e/*",),
         label="the samples' twins, delivered by Maya and Blender, in the e2e Unity project",
-        reads=("m3trik/scripts/unity_samples/*.py", "m3trik/test/unity_e2e/twins/*.py"),
+        reads=("m3trik/scripts/unity_samples/*.py", "m3trik/tests/unity_e2e/twins/*.py"),
     ),
 }
 
@@ -272,9 +272,9 @@ GATES: Tuple[Gate, ...] = (
     Gate("tentacle", ("tentacle/ui/*", "tentacle/slots/*"),
          ("test_slot_method_coverage", "test_ui_integrity", "test_slot_integrity",
           "test_dcc_invariants", "test_ui_footers"),
-         host_checks="test/blender/*_check.py", host="Blender",
+         host_checks="tests/blender/*_check.py", host="Blender",
          host_headless="blender --background",
-         host_command="python tentacle/test/run_tests.py {stem} --in-blender"),
+         host_command="python tentacle/tests/run_tests.py {stem} --in-blender"),
     # Loads every co-located tool panel's .ui through BlenderUiHandler and wires its slots.
     Gate("blendertk", ("blendertk/*.ui",), ("test_blender_ui_handler",)),
     # Pins every root name against the package's DEFAULT_INCLUDE: no import of
@@ -370,14 +370,14 @@ def runner_inputs(runner: Runner, workspace: Path = WORKSPACE) -> Tuple[Tuple[st
 
 @lru_cache(maxsize=None)
 def packages(workspace: Path = WORKSPACE) -> Dict[str, Package]:
-    """Every declared unit that has a ``test/`` dir, keyed by name."""
+    """Every declared unit that has a ``tests/`` dir, keyed by name."""
     found: Dict[str, Package] = {}
     names = set()
     for unit in sync_workspace.load()["units"]:
         names.add(unit["path"].split("/")[0])
     for name in sorted(names):
         repo = workspace / name
-        if not (repo / "test").is_dir():
+        if not (repo / "tests").is_dir():
             continue
         source = repo / name if (repo / name / "__init__.py").is_file() else None
         import_root = repo
@@ -611,7 +611,7 @@ def _walk(root: Path, pattern: str) -> Iterable[Path]:
 
 @lru_cache(maxsize=None)
 def test_files(name: str, workspace: Path = WORKSPACE) -> Tuple[FileInfo, ...]:
-    """A package's runnable test modules: ``test/test_*.py`` plus the subdirs
+    """A package's runnable test modules: ``tests/test_*.py`` plus the subdirs
     its runner reaches by name (mayatk ``mock_tests``/``extended``, tentacle
     ``slots``)."""
     pkg = packages(workspace)[name]
@@ -941,7 +941,7 @@ def _select_one(sel: Selection, pkg: Package, path: Path, workspace: Path, downs
     if in_tests:
         if path.name.startswith("test_") and path.suffix == ".py":
             # Only a suite the runner collects runs by its stem; one parked in a
-            # folder outside the roots (``test/unity_e2e/``) would resolve to a
+            # folder outside the roots (``tests/unity_e2e/``) would resolve to a
             # file that is not there.
             if any(t.path.resolve() == path for t in test_files(name, workspace)):
                 sel.add(name, path.stem, "changed test")
@@ -1088,7 +1088,7 @@ def _select_source(sel: Selection, pkg: Package, path: Path, workspace: Path,
 @lru_cache(maxsize=None)
 def gui_required(workspace: Path = WORKSPACE) -> Set[str]:
     """mayatk's ``GUI_REQUIRED`` keys, read statically (no import)."""
-    path = workspace / "mayatk" / "test" / "run_tests.py"
+    path = workspace / "mayatk" / "tests" / "run_tests.py"
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
@@ -1108,7 +1108,7 @@ _RESULT_LINE = re.compile(r"^(test_\w+): [A-Z][A-Z ]+?\[(\d+(?:\.\d+)?)s\]", re.
 @lru_cache(maxsize=None)
 def last_seconds(workspace: Path = WORKSPACE, files: int = 40) -> Dict[str, float]:
     """mayatk module -> seconds, the newest observation in its results files."""
-    temp = workspace / "mayatk" / "test" / "temp_tests"
+    temp = workspace / "mayatk" / "tests" / "temp_tests"
     seen: Dict[str, float] = {}
     try:
         results = sorted(temp.glob("test_results_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -1174,9 +1174,9 @@ def commands(sel: Selection, k: Optional[str] = None, gui: bool = True,
             if runner.maya_flag and gui and maya_gated(name, group[0], workspace):
                 argv.append(runner.maya_flag)
             if name == "mayatk":
-                if any((workspace / "mayatk" / "test" / "mock_tests" / f"{m}.py").is_file() for m in group):
+                if any((workspace / "mayatk" / "tests" / "mock_tests" / f"{m}.py").is_file() for m in group):
                     argv.append("--mocks")
-                if any((workspace / "mayatk" / "test" / "extended" / f"{m}.py").is_file() for m in group):
+                if any((workspace / "mayatk" / "tests" / "extended" / f"{m}.py").is_file() for m in group):
                     argv.append("--extended")
                 if not gui:  # its GUI_REQUIRED modules then report NOT RUN (exit 2), honestly
                     argv.append("--no-gui-pass")

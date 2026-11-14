@@ -13,7 +13,7 @@ the mirror up so the wrapper's sibling-path handoff resolves post-install.
 The mirrors are committed (not generated at build time) so the wheel ships them
 regardless of the build path — unlike the runtime-regenerated ``*_ui.py`` files,
 nothing recreates a mirror on load. Drift is caught by ``--check`` (CI gate) and
-by ``m3trik/test/test_sync_shared_bat.py``.
+by ``m3trik/tests/test_sync_shared_bat.py``.
 
 Usage:
     python sync_shared_bat.py            # write mirrors (idempotent)

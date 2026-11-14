@@ -359,7 +359,7 @@
   "tests/check_cmds_syntax.py names tentacle (names)",
   "tests/mock_tests/test_bridge_host_scope.py names tentacle (names)",
   "tests/mock_tests/test_marmoset_rpc.py names tentacle (names)",
-  "tests/mock_tests/test_maya_ui_handler.py names tentacle (names)",
+  "tests/mock_tests/test_maya_ui_handler_mock.py names tentacle (names)",
   "tests/mock_tests/test_mesh_diag.py names tentacle (names)",
   "tests/mock_tests/test_telescope_rig.py names tentacle (names)",
   "tests/run_tests.py names tentacle (names)",

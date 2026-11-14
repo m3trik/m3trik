@@ -2694,8 +2694,7 @@ function Invoke-PreparePhase {
     if (-not $preHash) { $preHash = Get-TreeHash $RepoPath }
     Push-Location $RepoPath
     try {
-        git checkout dev --quiet 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { Write-Err "Checkout dev failed (prepare)"; return $null }
+        if (-not (Switch-GitBranch dev)) { Write-Err "Checkout dev failed (prepare)"; return $null }
 
         $changed = $false
         if (Set-PackageVersion $RepoPath $version) {

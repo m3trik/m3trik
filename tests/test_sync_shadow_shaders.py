@@ -2,7 +2,7 @@
 # coding=utf-8
 """Tests for sync_shadow_shaders.py -- where its mirrors are found.
 
-The mirrors' content is pinned by ``pythontk/test/test_sync_shadow_shaders.py``;
+The mirrors' content is pinned by ``pythontk/tests/test_sync_shadow_shaders.py``;
 this holds :func:`mirrors` to the workspace it is handed: a fixture workspace
 finds its own mirrors, the Unity package's by its declared root.
 """

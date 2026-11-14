@@ -43,8 +43,8 @@ produced no results is the worst reading of the four, so every implementation (P
 shell alike) tests this case first.
 
 - Label is `Tests` (capital T), alt text is `Tests`, and the badge links to the repo's
-  `test/` directory — resolved **relative to the README's own location**, so
-  `docs/README.md` yields `../test/` and a moved README can't break the link.
+  `tests/` directory — resolved **relative to the README's own location**, so
+  `docs/README.md` yields `../tests/` and a moved README can't break the link.
 - Shields **style** (`?style=flat-square` vs the plain `.svg` suffix) is a per-README
   cosmetic choice — match the rest of that README's badge row. `server` and `comfyui`
   use `flat-square`; the Python packages use `.svg`.
@@ -92,23 +92,23 @@ It replaces an existing badge in place (matching any alt text or label casing, l
 bare, so legacy badges migrate rather than duplicate), and on first use inserts at the end
 of the README's leading badge block — or above the title when there is none.
 
-Tests: [`pythontk/test/test_status_badge.py`](../../pythontk/test/test_status_badge.py).
+Tests: [`pythontk/tests/test_status_badge.py`](../../pythontk/tests/test_status_badge.py).
 
 ## Who writes what
 
 | Repo | Runner | Unit counted |
 |:--|:--|:--|
-| `pythontk` · `uitk` · `tentacle` | `test/run_tests.py` | unittest test cases |
-| `mayatk` | `test/run_tests.py` (chunked mayapy + GUI pass) | unittest test cases, aggregated across chunks |
-| `blendertk` | `test/run_tests.py` (fresh headless Blender per suite) | the suite's own `===RESULT: … === (ok/attempted)` sentinel, else its `OK` / `FAIL` check lines |
-| `unitytk` | `test/run_tests.py` | unittest test cases |
-| `extapps` | `test/run_tests.py` (pytest) | pytest test cases, subtests not counted |
-| `server` | `test/run-tests.ps1` → `.github/workflows/daily-tests.yml` | per-check `Items` across the five categories |
-| `comfyui` | `test/test-desktop-install.ps1` → `.github/workflows/ci.yml` | per-check `[PASS]` / `[FAIL]` markers |
+| `pythontk` · `uitk` · `tentacle` | `tests/run_tests.py` | unittest test cases |
+| `mayatk` | `tests/run_tests.py` (chunked mayapy + GUI pass) | unittest test cases, aggregated across chunks |
+| `blendertk` | `tests/run_tests.py` (fresh headless Blender per suite) | the suite's own `===RESULT: … === (ok/attempted)` sentinel, else its `OK` / `FAIL` check lines |
+| `unitytk` | `tests/run_tests.py` | unittest test cases |
+| `extapps` | `tests/run_tests.py` (pytest) | pytest test cases, subtests not counted |
+| `server` | `tests/run-tests.ps1` → `.github/workflows/daily-tests.yml` | per-check `Items` across the five categories |
+| `comfyui` | `tests/test-desktop-install.ps1` → `.github/workflows/ci.yml` | per-check `[PASS]` / `[FAIL]` markers |
 
 The two CI-driven repos write their badge from shell, so they reimplement the wording
 above rather than importing `StatusBadge` — keep them in step with this page when the
-format changes. `server/test/run-tests.ps1` prints a machine-readable
+format changes. `server/tests/run-tests.ps1` prints a machine-readable
 `TESTS: <n> passed, <m> failed` line unconditionally (a `-Quiet` run must stay parseable);
 the workflow reads that line rather than grepping display markers.
 

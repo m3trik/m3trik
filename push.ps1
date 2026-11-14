@@ -36,7 +36,7 @@ re-run after ANY abort resumes at the right place instead of re-doing or skippin
              as a deliberate minor/major bump.
 - Push       dev -> origin/dev when ahead.
 - Merge      dev -> main via PR (-UsePR) or direct. A MUST-REACH-MAIN delta (.github/**,
-             test/**, docs/** except the wheel's readme, the agent instructions:
+             tests/**, docs/** except the wheel's readme, the agent instructions:
              AGENTS.md, CLAUDE.md, .agents/**, .claude/**) merges WITHOUT a version:
              publish.yml is paths-filtered so nothing publishes. A RIDES-ALONG delta
              (CHANGELOG) skips the merge and lands with the next
@@ -1390,7 +1390,7 @@ function Update-InternalPins {
 # The agent instructions (the repo's AGENTS.md, its CLAUDE.md stub, the vendored packs and
 # hook in .agents/, .claude/) ship in no wheel; sync_workspace.py rewrites them in every
 # repo at once, and read as artifacts one pack edit cut a release of each package.
-$MUST_REACH_MAIN_PATHS = @('.github/', 'test/', 'docs/', 'AGENTS.md', 'CLAUDE.md', '.agents/', '.claude/')
+$MUST_REACH_MAIN_PATHS = @('.github/', 'tests/', 'docs/', 'AGENTS.md', 'CLAUDE.md', '.agents/', '.claude/')
 $ARTIFACT_EXCEPTIONS = @('docs/README.md')
 $RIDES_ALONG_PATHS = @('CHANGELOG.md')
 

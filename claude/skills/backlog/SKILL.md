@@ -99,7 +99,7 @@ State which entry was picked and why in one line before moving on.
 Reproduce before touching anything. Do not trust the entry's `Symptom` line, its line
 numbers (they drift), or its claim that a sibling fix "already landed".
 
-- Write a probe under the package's `test/temp_tests/` and run it in a **fresh** DCC.
+- Write a probe under the package's `tests/temp_tests/` and run it in a **fresh** DCC.
 - Verify the entry's **premise**, not just its symptom. An entry can describe a real
   symptom with a wrong cause - which then makes its prescribed fix wrong too.
 - When an entry says a defect is discarded/dropped/ignored, force the condition

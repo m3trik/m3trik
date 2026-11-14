@@ -3,7 +3,7 @@
 """Tests for check_version_bump.py -- the off-chain publish.yml's bump gate.
 
 Each case builds a throwaway git repo shaped like unitytk/extapps (a package
-dir, pyproject.toml, CHANGELOG.md, docs/, test/), makes one "push" on top of a
+dir, pyproject.toml, CHANGELOG.md, docs/, tests/), makes one "push" on top of a
 base commit, and asks the gate what that push means. The 2026-09-18 extapps
 case -- shipped source changed at the version PyPI already has -- is the one
 that must fail; a deliberate hold and a non-shipping push must not.
@@ -119,7 +119,7 @@ class TestCheckVersionBump(unittest.TestCase):
 
     def test_non_shipping_push_passes_without_publishing(self):
         self._append("docs/notes.md", "more\n")
-        self._write("test/test_x.py", "pass\n")
+        self._write("tests/test_x.py", "pass\n")
         self._write(".github/workflows/x.yml", "on: push\n")
         self._append("CHANGELOG.md", "- docs only.\n")
         self._commit("docs")

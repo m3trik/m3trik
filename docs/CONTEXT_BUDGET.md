@@ -32,7 +32,7 @@ The API is never a file to read: a search returns the few symbols asked for.
 - Root dispatch table matches `m3trik/workspace.json` (`sync_workspace.py`).
 - Every relative markdown link in an `AGENTS.md` resolves (no broken nav).
 - Every ecosystem-set package's `AGENTS.md` **Nav `Deps:`** line names each ecosystem package its `pyproject.toml` depends on (the hand-maintained line must not lag the declared dependency).
-- The ecosystem set's source lines ≤ `line_budget` in `m3trik/workspace.json`: non-blank `.py` lines outside each repo's `test/`. Enforced at release, not in the build (the guard's full run only warns): `push.ps1` gates each package it releases (`check_context_budget.py --line-budget <pkg>`), counting that package as the release would commit it and every other one as committed, so work in progress elsewhere never stops a release. Growth is a decision: the change that grows past the ceiling raises `line_budget` to the new count, with a CHANGELOG line naming the growth; a change that shrinks the code may lower it.
+- The ecosystem set's source lines ≤ `line_budget` in `m3trik/workspace.json`: non-blank `.py` lines outside each repo's `tests/`. Enforced at release, not in the build (the guard's full run only warns): `push.ps1` gates each package it releases (`check_context_budget.py --line-budget <pkg>`), counting that package as the release would commit it and every other one as committed, so work in progress elsewhere never stops a release. Growth is a decision: the change that grows past the ceiling raises `line_budget` to the new count, with a CHANGELOG line naming the growth; a change that shrinks the code may lower it.
 
 ## Soft budgets (WARN — advisory, flag for cleanup)
 

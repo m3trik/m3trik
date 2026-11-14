@@ -406,7 +406,7 @@ def _collect_repo_inventory(
         package_roots=package_roots,
         code_roots=code_roots,
         has_docs=(repo_root / "docs").exists(),
-        has_tests=(repo_root / "test").exists(),
+        has_tests=(repo_root / "tests").exists(),
         has_examples=(repo_root / "examples").exists(),
         tracked_code_files=tracked_code_files,
         tracked_total_lines=tracked_total_lines,

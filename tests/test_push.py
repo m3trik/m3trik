@@ -3768,9 +3768,9 @@ else:
             (wf / "tests.yml").write_text(
                 "name: Tests\non: [pull_request]\n", encoding="utf-8"
             )
-            # test/ and docs/ (other than the wheel's readme) never ship either.
-            (repo / "test").mkdir()
-            (repo / "test" / "test_x.py").write_text(
+            # tests/ and docs/ (other than the wheel's readme) never ship either.
+            (repo / "tests").mkdir()
+            (repo / "tests" / "test_x.py").write_text(
                 "def test_x():\n    pass\n", encoding="utf-8"
             )
             (repo / "docs").mkdir()
@@ -3868,8 +3868,8 @@ else:
                 [("pythontk", "has nothing to release", [])],
             )
 
-            (repo / "test").mkdir()
-            (repo / "test" / "test_x.py").write_text("", encoding="utf-8")
+            (repo / "tests").mkdir()
+            (repo / "tests" / "test_x.py").write_text("", encoding="utf-8")
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-m", "a test")
             self._git(repo, "push", "origin", "dev")
@@ -4206,8 +4206,8 @@ else:
                 f"$repo = '{repo}'\n"
                 "$GATED_TREES['pythontk'] = Get-TreeHash $repo\n"
                 '"RESULT:unchanged=$(Assert-GatedTree pythontk $repo $null)"\n'
-                "New-Item -ItemType Directory -Force (Join-Path $repo 'test') | Out-Null\n"
-                "Set-Content -LiteralPath (Join-Path $repo 'test\\test_new.py') -Value 'x = 1'\n"
+                "New-Item -ItemType Directory -Force (Join-Path $repo 'tests') | Out-Null\n"
+                "Set-Content -LiteralPath (Join-Path $repo 'tests\\test_new.py') -Value 'x = 1'\n"
                 '"RESULT:exempt=$(Assert-GatedTree pythontk $repo $null)"\n'
                 "Set-Content -LiteralPath (Join-Path $repo 'pythontk\\late.py') -Value 'x = 2'\n"
                 '"RESULT:unreceipted=$(Assert-GatedTree pythontk $repo $null)"\n'
@@ -4372,7 +4372,7 @@ else:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo, origin, failing_head, env = self._failed_release_on_main(
-                root, "test/test_runner_only.py"
+                root, "tests/test_runner_only.py"
             )
             self._install_stub_workflow(root, origin, failing_head)
 
@@ -4393,7 +4393,7 @@ else:
             self.assertIn("GitHub Release v0.1.1 created", out)
             self.assertIn("pythontk - Released", out)
             tree = self._git(origin, "ls-tree", "-r", "--name-only", "main").stdout
-            self.assertIn("test/test_runner_only.py", tree, out)
+            self.assertIn("tests/test_runner_only.py", tree, out)
             main_init = self._git(origin, "show", "main:pythontk/__init__.py").stdout
             self.assertIn('__version__ = "0.1.1"', main_init, out)  # no version step
             self.assertIn("v0.1.1", self._git(origin, "tag", "--list").stdout)
@@ -4853,7 +4853,7 @@ class TestAbsorbCommitIsNamed(unittest.TestCase):
                 Path(td),
                 "# pkg - Changelog\n\n## 2026\n\n"
                 "- **2026-09-20 -- the exporter stops renaming what it exports "
-                "(`env_utils/exporter.py`, `test/test_exporter.py`).** Body.\n\n"
+                "(`env_utils/exporter.py`, `tests/test_exporter.py`).** Body.\n\n"
                 "- **2026-09-19 -- an older entry nobody wants (`x.py`).** Body.\n",
             )
             self.assertEqual(

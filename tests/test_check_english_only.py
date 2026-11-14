@@ -144,9 +144,9 @@ class _RepoCase(unittest.TestCase):
 
 class TestScan(_RepoCase):
     def test_a_tracked_file_is_reported_at_its_line(self):
-        self.write("test/test_a.py", f"ok = 'café'\nname = '{CYRILLIC}'\n")
+        self.write("tests/test_a.py", f"ok = 'café'\nname = '{CYRILLIC}'\n")
         self.assertEqual(
-            self.scan(), [gate.Finding(self.REPO, "test/test_a.py", 2, CYRILLIC)]
+            self.scan(), [gate.Finding(self.REPO, "tests/test_a.py", 2, CYRILLIC)]
         )
 
     def test_a_crlf_file_reports_the_same_lines(self):

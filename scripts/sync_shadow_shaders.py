@@ -27,7 +27,7 @@ the marked region is written, so a host's own code is never touched.
 
 **Never hand-edit between the markers** — edit the ``.glsl`` and re-run this.
 Drift is caught by ``--check`` (CI gate) and by
-``pythontk/test/test_sync_shadow_shaders.py``.
+``pythontk/tests/test_sync_shadow_shaders.py``.
 
 Usage:
     python sync_shadow_shaders.py            # write mirrors (idempotent)

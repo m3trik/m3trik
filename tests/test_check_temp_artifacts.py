@@ -203,7 +203,7 @@ class TempNamingTest(_ScanCase):
 class ScopeTest(_ScanCase):
     def test_test_directories_are_skipped(self):
         self.write(
-            "test/test_thing.py",
+            "tests/test_thing.py",
             "import tempfile\n\ndef f():\n    return tempfile.mkdtemp()\n",
         )
         self.assertEqual(self.scan(), [])
@@ -359,7 +359,7 @@ class StrayArtifactTest(_ScanCase):
     def test_skipped_directories_are_not_swept(self):
         self.declare(manifest="recursive-include fakepkg *.ui")
         self.write("__pycache__/module.cpython-311.pyc", "bytecode")
-        self.write("test/fixture.bin", "fixture")
+        self.write("tests/fixture.bin", "fixture")
         self.assertEqual(self.strays(), [])
 
     def test_extensionless_file_at_the_repo_root_is_flagged(self):

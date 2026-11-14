@@ -91,7 +91,7 @@ class TestDriverFunctions(unittest.TestCase):
     def test_the_driver_restates_none_of_push_ps1s_delta_rules(self):
         text = open(DRIVER, encoding="utf-8").read()
         self.assertIn("-GateReport", text)
-        for restated in ("CHANGELOG", "'^test/'", ".github", "diff --name-only"):
+        for restated in ("CHANGELOG", "'^tests/'", ".github", "diff --name-only"):
             self.assertNotIn(restated, text)
 
     def test_the_workspace_repos_are_the_cascade_the_standalones_and_m3trik(self):
@@ -118,8 +118,8 @@ class TestDriverFunctions(unittest.TestCase):
     def test_every_cascade_package_has_a_full_suite(self):
         got = self._call("$SUITES.Keys | Sort-Object")
         self.assertEqual(got, sorted(CASCADE))
-        self.assertEqual(self._call("$SUITES['mayatk']"), ["mayatk/test/run_tests.py", "--all"])
-        self.assertEqual(self._call("$SUITES['tentacle']"), ["tentacle/test/run_tests.py", "--in-maya"])
+        self.assertEqual(self._call("$SUITES['mayatk']"), ["mayatk/tests/run_tests.py", "--all"])
+        self.assertEqual(self._call("$SUITES['tentacle']"), ["tentacle/tests/run_tests.py", "--in-maya"])
 
 
 @unittest.skipUnless(POWERSHELL, "no PowerShell on PATH")
@@ -292,7 +292,7 @@ class TestRun(unittest.TestCase):
             "workspace.json": json.dumps({"cascade": ["pythontk", "mayatk"], "units": []}),
         })
         for name in ("pythontk", "mayatk"):
-            self._remote(name, {"test/run_tests.py": STUB_SUITE, "src.py": "x = 1\n"})
+            self._remote(name, {"tests/run_tests.py": STUB_SUITE, "src.py": "x = 1\n"})
         # The workflow's first step: m3trik's clone, at dev.
         _git("clone", "-q", os.path.join(self.remotes, "m3trik"), os.path.join(self.root, "m3trik"), cwd=self.tmp)
         _git("checkout", "-q", "dev", cwd=os.path.join(self.root, "m3trik"))

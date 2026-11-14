@@ -16,7 +16,7 @@ Shared rules (packs; Claude Code loads them, other agents read them first): [pri
 .\m3trik\push.ps1 -Packages pythontk,uitk -Strict -Merge -UsePR
 ```
 
-**Phases `Finalize → Prepare → Push → Merge → Finalize`, all idempotent** (full contract: push.ps1's header). An **artifact** delta (anything that ships, or a floor that must ratchet) becomes ONE commit `Release X.Y.Z` — version stepped from what is **published** (PyPI ∪ `v*` tags; a hand-edited `__version__` above it is honored as a deliberate minor/major), floors. `dev == main` after a release. `.github/**`, `test/**`, `docs/**` (not the wheel's readme) merge **without** a version; a CHANGELOG-only delta skips the merge. **Re-running push.ps1 completes anything merged-but-unpublished or published-but-untagged.** Release notes = CHANGELOG bullets dated on or after the previous tag.
+**Phases `Finalize → Prepare → Push → Merge → Finalize`, all idempotent** (full contract: push.ps1's header). An **artifact** delta (anything that ships, or a floor that must ratchet) becomes ONE commit `Release X.Y.Z` — version stepped from what is **published** (PyPI ∪ `v*` tags; a hand-edited `__version__` above it is honored as a deliberate minor/major), floors. `dev == main` after a release. `.github/**`, `tests/**`, `docs/**` (not the wheel's readme) merge **without** a version; a CHANGELOG-only delta skips the merge. **Re-running push.ps1 completes anything merged-but-unpublished or published-but-untagged.** Release notes = CHANGELOG bullets dated on or after the previous tag.
 
 `-UsePR` is the default release form — without it the dev→main merge bypasses branch protection. Auto-merge arms only on a gated PR, and **a settled red check fails in one poll, by name**. Recovery: fix → push dev (auto-merge stays armed) → re-run push.ps1.
 
@@ -57,7 +57,7 @@ Bypasses: `-SkipTestsReceipt` waives the `tests` half alone (with a banner); `-S
 
 ## Cross-repo standards (this repo owns them)
 
-- [docs/TEST_BADGE_STANDARD.md](docs/TEST_BADGE_STANDARD.md) — README **Tests** badges count *individual test cases* (never suites or modules), skips excluded. One writer: `ptk.StatusBadge`. Read it before touching a `test/run_tests.py` or a CI badge step.
+- [docs/TEST_BADGE_STANDARD.md](docs/TEST_BADGE_STANDARD.md) — README **Tests** badges count *individual test cases* (never suites or modules), skips excluded. One writer: `ptk.StatusBadge`. Read it before touching a `tests/run_tests.py` or a CI badge step.
 - [docs/CODE_STANDARD.md](docs/CODE_STANDARD.md) — the long form of the root one-line rules.
 - [docs/CODEBASE_MANIFEST.md](docs/CODEBASE_MANIFEST.md) — architecture of record: roles, placement, decisions.
 - [docs/DOCS_STANDARD.md](docs/DOCS_STANDARD.md) · [docs/CONTEXT_BUDGET.md](docs/CONTEXT_BUDGET.md) — markdown wiring + instruction-surface size caps.

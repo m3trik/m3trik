@@ -115,12 +115,12 @@ class TestScan(_RepoCase):
                 )
 
     def test_a_path_that_names_a_client_is_reported_without_a_line(self):
-        self.write("test/test_zork_widget_case.py", "clean\n")
+        self.write("tests/test_zork_widget_case.py", "clean\n")
         self.assertEqual(
             self.scan(),
             [
                 gate.Finding(
-                    "pubrepo", "test/test_zork_widget_case.py", None, "zork_widget"
+                    "pubrepo", "tests/test_zork_widget_case.py", None, "zork_widget"
                 )
             ],
         )
@@ -237,16 +237,16 @@ class TestMachinePaths(_RepoCase):
         sdist): a Maya-written fixture FBX named the workspace's own drive
         folders while the gate searched ``Samples~`` alone. Text is the
         denylist's. Widened: 2026-11-08"""
-        self.write("test/assets/fixture.bin", b"\x00D:\\work\\repo\\test_assets\\x.png\x00")
+        self.write("tests/assets/fixture.bin", b"\x00D:\\work\\repo\\test_assets\\x.png\x00")
         self.write("pkg/Samples~/README.md", "C:\\Users\\someone\\x.png\n")
         found = gate.scan_machine_paths(self.repo, "pubrepo")
-        self.assertEqual([f.path for f in found], ["test/assets/fixture.bin"], found)
+        self.assertEqual([f.path for f in found], ["tests/assets/fixture.bin"], found)
 
     def test_a_drive_letter_by_chance_in_compressed_bytes_is_no_path(self):
         """Measured in two committed PNGs' compressed streams: ``K:/9/j8`` and
         ``i:\\./KmN``. A folder of a path is a name of two characters or more."""
         self.write(
-            "test/assets/noise.png",
+            "tests/assets/noise.png",
             b"\x89PNG\r\n\x1a\n\x00K:/9/j8\x00i:\\./KmN\x00",
         )
         self.assertEqual(gate.scan_machine_paths(self.repo, "pubrepo"), [])
@@ -281,7 +281,7 @@ class TestPersonalPaths(_RepoCase):
     def test_each_spelling_of_the_roots_matches_and_a_neighbour_does_not(self):
         pattern = gate.personal_paths(workspace="D:/Work/Code/_ws", home="C:/Users/jdoe")
         for text in (
-            r"D:\Work\Code\_ws\pythontk\test",
+            r"D:\Work\Code\_ws\pythontk\tests",
             "d:/work/code/_ws",
             "/d/Work/Code/_ws/x.py",
             r'"D:\\Work\\Code\\_ws"',

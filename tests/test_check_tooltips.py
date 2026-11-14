@@ -158,7 +158,7 @@ class TestResetControls(unittest.TestCase):
 
     def test_tests_and_the_primitives_are_exempt(self):
         src = "state.reset_all()\n"
-        self.assertEqual(self._scan(src, "mayatk/test/test_curtain.py"), [])
+        self.assertEqual(self._scan(src, "mayatk/tests/test_curtain.py"), [])
         self.assertEqual(self._scan(src, "uitk/uitk/managers/reset_gesture.py"), [])
 
     def test_a_ui_button_needs_its_own_slots_to_wire_it(self):

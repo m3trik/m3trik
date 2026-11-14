@@ -21,7 +21,7 @@ extapps' Substance Scripts vendors mayatk's ``substance_rpc`` payload
 The mirrors are committed rather than generated at install time, for the same
 reason ``sync_shared_bat.py``'s are: the payload has to be complete on disk before
 anything copies it, and a symlink install serves the repo tree verbatim. Drift is
-caught by ``--check`` (CI gate) and by ``pythontk/test/test_sync_rpc_core.py``.
+caught by ``--check`` (CI gate) and by ``pythontk/tests/test_sync_rpc_core.py``.
 
 **Never hand-edit a staged ``_rpc_core.py``** — edit the source and re-run this.
 

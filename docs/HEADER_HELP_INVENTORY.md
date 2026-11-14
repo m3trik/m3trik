@@ -117,7 +117,7 @@ button doesn't fit the UI model. Leave as-is.
 
 ## Tests
 
-[`uitk/test/test_header.py`](../../uitk/test/test_header.py) →
+[`uitk/tests/test_header.py`](../../uitk/tests/test_header.py) →
 `TestHeaderHelpButton` covers:
 
 - Help button is absent by default.

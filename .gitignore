@@ -47,5 +47,5 @@ desktop.ini
 # Local artifacts
 *.log
 *.rar
-test/temp_tests/
+tests/temp_tests/
 projects/_mostly_working/

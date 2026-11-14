@@ -714,7 +714,7 @@ class TestNames(unittest.TestCase):
 
         package("pythontk", '[project]\nname = "pythontk"\n', {
             "pythontk/handoff.py": "# the bridge uitk's panels call\n",
-            "test/test_handoff.py": "# launches tentacle\n",
+            "tests/test_handoff.py": "# launches tentacle\n",
             "pythontk/CHANGELOG.md": "uitk and mayatk read this now\n",
             "pythontk/templates/run.py": "import mayatk\n",
         })
@@ -749,7 +749,7 @@ class TestNames(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(names["pythontk"], [
             "pythontk/handoff.py names uitk (names)",
-            "test/test_handoff.py names tentacle (names)",
+            "tests/test_handoff.py names tentacle (names)",
         ])
         self.assertEqual(names["uitk"], [])
         self.assertEqual(names["mayatk"], [])  # its twin and what sits below

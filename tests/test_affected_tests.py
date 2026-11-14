@@ -52,7 +52,7 @@ def _commit(repo: Path) -> None:
 
 #: tentacle's structural suites, as fixture files (the gate selects them by stem).
 _STRUCTURAL = {
-    f"tentacle/test/{stem}.py": "def test_s():\n    pass\n"
+    f"tentacle/tests/{stem}.py": "def test_s():\n    pass\n"
     for stem in ("test_slot_method_coverage", "test_ui_integrity", "test_slot_integrity",
                  "test_dcc_invariants", "test_ui_footers")
 }
@@ -70,26 +70,26 @@ class _Fixture(unittest.TestCase):
             "from ._helper import _h\n\nclass FeatureThing:\n    def go(self):\n        return _h()\n"
         ),
         "pythontk/pythontk/core_utils/lonely.py": "class NobodyTestsMe:\n    pass\n",
-        "pythontk/test/run_tests.py": "",
-        "pythontk/test/test_run_tests.py": "def test_x():\n    pass\n",
-        "pythontk/test/test_badge.py": (
+        "pythontk/tests/run_tests.py": "",
+        "pythontk/tests/test_run_tests.py": "def test_x():\n    pass\n",
+        "pythontk/tests/test_badge.py": (
             "from pythontk.core_utils.badge import StatusBadge\n\ndef test_a():\n    pass\n"
         ),
-        "pythontk/test/test_reexport.py": (
+        "pythontk/tests/test_reexport.py": (
             "from pythontk.core_utils import StatusBadge\n\ndef test_b():\n    pass\n"
         ),
-        "pythontk/test/test_named.py": (
+        "pythontk/tests/test_named.py": (
             "import pythontk as ptk\n\ndef test_c():\n    ptk.StatusBadge()\n"
         ),
-        "pythontk/test/test_generic.py": (
+        "pythontk/tests/test_generic.py": (
             "def test_d():\n    d = {}\n    d.update({})\n"
         ),
-        "pythontk/test/test_feature_user.py": (
+        "pythontk/tests/test_feature_user.py": (
             "import pythontk as ptk\n\ndef test_e():\n    ptk.FeatureThing().go()\n"
         ),
         "mayatk/pyproject.toml": '[project]\nname = "mayatk"\ndependencies = ["pythontk>=1"]\n',
         "mayatk/mayatk/__init__.py": "",
-        "mayatk/test/test_uses_badge.py": (
+        "mayatk/tests/test_uses_badge.py": (
             "import pythontk as ptk\n\ndef test_f():\n    ptk.StatusBadge()\n"
         ),
     }
@@ -126,7 +126,7 @@ class TestOperationCatalogs(_Fixture):
                 '{"id": "feature.go", "target": "pythontk.core_utils.feature:FeatureThing.go"}]}'
             ),
             "m3trik/scripts/sync_workspace.py": "",
-            "m3trik/test/test_sync_workspace.py": "def test_s():\n    pass\n",
+            "m3trik/tests/test_sync_workspace.py": "def test_s():\n    pass\n",
         },
     )
 
@@ -154,7 +154,7 @@ class TestSelection(_Fixture):
     def test_a_test_using_its_own_same_named_constant_is_not_selected(self):
         _write(self.ws, {
             "pythontk/pythontk/core_utils/limits.py": "MAX_SPAN_FRAMES = 9\n",
-            "pythontk/test/test_own_constant.py": (
+            "pythontk/tests/test_own_constant.py": (
                 "MAX_SPAN_FRAMES = 3\n\ndef test_h():\n    assert MAX_SPAN_FRAMES == 3\n"
             ),
         })
@@ -165,7 +165,7 @@ class TestSelection(_Fixture):
     def test_a_class_attribute_constant_of_the_same_name_is_not_ours_either(self):
         _write(self.ws, {
             "pythontk/pythontk/core_utils/limits.py": "MAX_SPAN_FRAMES = 9\n",
-            "pythontk/test/test_class_constant.py": (
+            "pythontk/tests/test_class_constant.py": (
                 "import unittest\n\nclass T(unittest.TestCase):\n    MAX_SPAN_FRAMES = 3\n\n"
                 "    def test_i(self):\n        assert self.MAX_SPAN_FRAMES == 3\n"
             ),
@@ -188,8 +188,8 @@ class TestSelection(_Fixture):
                 "from .base_dialog import BaseDialogThing\n\n"
                 "class SubDialogThing(BaseDialogThing):\n    pass\n"
             ),
-            "pythontk/test/test_base_dialog.py": "def test_k():\n    pass\n",
-            "pythontk/test/test_sub_dialog_user.py": (
+            "pythontk/tests/test_base_dialog.py": "def test_k():\n    pass\n",
+            "pythontk/tests/test_sub_dialog_user.py": (
                 "import pythontk as ptk\n\ndef test_l():\n    ptk.SubDialogThing()\n"
             ),
         })
@@ -210,8 +210,8 @@ class TestSelection(_Fixture):
         _write(self.ws, {
             "pythontk/MANIFEST.in": "include LICENSE\n",
             "pythontk/pyproject.toml": '[project]\nname = "pythontk"\n',
-            "pythontk/test/test_packaging_metadata.py": "def test_m():\n    pass\n",
-            "pythontk/test/test_shot_manifest.py": "def test_n():\n    pass\n",
+            "pythontk/tests/test_packaging_metadata.py": "def test_m():\n    pass\n",
+            "pythontk/tests/test_shot_manifest.py": "def test_n():\n    pass\n",
         })
         _clear_caches()
         for rel in ("pythontk/MANIFEST.in", "pythontk/pyproject.toml"):
@@ -221,7 +221,7 @@ class TestSelection(_Fixture):
     def test_a_license_text_selects_nothing_and_says_so(self):
         _write(self.ws, {
             "mayatk/COPYING.LESSER": "text\n",
-            "mayatk/test/test_copying_tool.py": "def test_o():\n    pass\n",
+            "mayatk/tests/test_copying_tool.py": "def test_o():\n    pass\n",
         })
         _clear_caches()
         sel, picks = self.picks("mayatk/COPYING.LESSER")
@@ -229,23 +229,23 @@ class TestSelection(_Fixture):
         self.assertIn("license text, no tests: mayatk/COPYING.LESSER", sel.notes)
 
     def test_a_changed_test_selects_itself(self):
-        _, picks = self.picks("pythontk/test/test_generic.py")
+        _, picks = self.picks("pythontk/tests/test_generic.py")
         self.assertEqual(picks, {"pythontk": {"test_generic"}})
 
     def test_the_harness_selects_the_runners_own_tests(self):
-        sel, picks = self.picks("pythontk/test/run_tests.py")
+        sel, picks = self.picks("pythontk/tests/run_tests.py")
         self.assertEqual(picks, {"pythontk": {"test_run_tests"}})
         self.assertEqual(sel.harness, {"pythontk": ["run_tests.py"]})
 
     def test_a_test_helper_selects_the_tests_that_import_it(self):
         _write(self.ws, {
-            "pythontk/test/_probe_helpers.py": "def make():\n    return 1\n",
-            "pythontk/test/test_uses_helper.py": (
+            "pythontk/tests/_probe_helpers.py": "def make():\n    return 1\n",
+            "pythontk/tests/test_uses_helper.py": (
                 "from _probe_helpers import make\n\ndef test_j():\n    assert make() == 1\n"
             ),
         })
         _clear_caches()
-        _, picks = self.picks("pythontk/test/_probe_helpers.py")
+        _, picks = self.picks("pythontk/tests/_probe_helpers.py")
         self.assertEqual(picks, {"pythontk": {"test_uses_helper"}})
 
     def test_docs_select_nothing_and_report_as_one_note(self):
@@ -297,7 +297,7 @@ class TestSelection(_Fixture):
         module = repo / "pythontk/core_utils/text.py"
         _write(self.ws, {
             "pythontk/pythontk/core_utils/text.py": "def fold_lines(s):\n    return s\n",
-            "pythontk/test/test_old_caller.py": (
+            "pythontk/tests/test_old_caller.py": (
                 "from pythontk.core_utils import fold_lines\n\ndef test_g():\n    fold_lines('x')\n"
             ),
         })
@@ -331,12 +331,12 @@ class TestSelection(_Fixture):
             "tentacle/tentacle/tcl.py": "class Tcl:\n    pass\n",
             "tentacle/tentacle/ui/materials.ui": "<ui/>\n",
             "tentacle/tentacle/slots/blender/materials.py": "class MaterialsSlots:\n    pass\n",
-            "tentacle/test/test_materials_blender.py": "def test_m():\n    pass\n",
-            "tentacle/test/test_tcl.py": "from tentacle.tcl import Tcl\n\ndef test_t():\n    Tcl()\n",
-            "tentacle/test/blender/deepened_slots_check.py": (
+            "tentacle/tests/test_materials_blender.py": "def test_m():\n    pass\n",
+            "tentacle/tests/test_tcl.py": "from tentacle.tcl import Tcl\n\ndef test_t():\n    Tcl()\n",
+            "tentacle/tests/blender/deepened_slots_check.py": (
                 "def run():\n    from tentacle.slots.blender.materials import MaterialsSlots\n"
             ),
-            "tentacle/test/blender/uv_slot_check.py": (
+            "tentacle/tests/blender/uv_slot_check.py": (
                 "def run():\n    from tentacle.slots.blender.uv import UvSlots\n"
             ),
             **_STRUCTURAL,
@@ -349,7 +349,7 @@ class TestSelection(_Fixture):
             report = at.report(sel, [], explain=False, workspace=self.ws)
             hosts = [ln for ln in report.splitlines() if "host-only" in ln]
             self.assertEqual(len(hosts), 1, report)
-            self.assertIn("tentacle/test/blender/deepened_slots_check.py", hosts[0])
+            self.assertIn("tentacle/tests/blender/deepened_slots_check.py", hosts[0])
             self.assertNotIn("uv_slot_check", hosts[0])
         # Outside ui/ and slots/ the gate stays out of it.
         _, picks = self.picks("tentacle/tentacle/tcl.py")
@@ -363,7 +363,7 @@ class TestSelection(_Fixture):
             "tentacle/tentacle/__init__.py": "",
             "tentacle/tentacle/ui/materials.ui": "<ui/>\n",
             "tentacle/tentacle/slots/blender/materials.py": "class MaterialsSlots:\n    pass\n",
-            "tentacle/test/blender/deepened_slots_check.py": (
+            "tentacle/tests/blender/deepened_slots_check.py": (
                 '"""Run: blender --background --factory-startup --python deepened_slots_check.py"""\n'
                 "def run():\n    from tentacle.slots.blender.materials import MaterialsSlots\n"
             ),
@@ -374,14 +374,14 @@ class TestSelection(_Fixture):
         report = at.report(sel, [], explain=False, workspace=self.ws)
         hosts = [ln for ln in report.splitlines() if "host-only" in ln]
         self.assertEqual(len(hosts), 1, report)
-        self.assertIn("python tentacle/test/run_tests.py deepened_slots --in-blender", hosts[0])
+        self.assertIn("python tentacle/tests/run_tests.py deepened_slots --in-blender", hosts[0])
         self.assertNotIn("by hand", hosts[0])
 
     def test_a_blendertk_panel_ui_selects_its_panel_load_suite(self):
         _write(self.ws, {
             "blendertk/blendertk/__init__.py": "",
             "blendertk/blendertk/edit_utils/mirror.ui": "<ui/>\n",
-            "blendertk/test/test_blender_ui_handler.py": "def test_load():\n    pass\n",
+            "blendertk/tests/test_blender_ui_handler.py": "def test_load():\n    pass\n",
         })
         _clear_caches()
         _, picks = self.picks("blendertk/blendertk/edit_utils/mirror.ui")
@@ -393,7 +393,7 @@ class TestSelection(_Fixture):
         went red at release. Fixed: 2026-10-27"""
         _write(self.ws, {
             "pythontk/pythontk/__init__.py": "DEFAULT_INCLUDE = {}\n",
-            "pythontk/test/test_surface_snapshot.py": "def test_names():\n    pass\n",
+            "pythontk/tests/test_surface_snapshot.py": "def test_names():\n    pass\n",
         })
         _clear_caches()
         _, picks = self.picks("pythontk/pythontk/__init__.py")
@@ -404,7 +404,7 @@ class TestSelection(_Fixture):
         workspace suite reads it, and no import reaches a TOML file."""
         _write(self.ws, {
             "m3trik/pyproject.toml": '[project]\nname = "m3trik"\n',
-            "m3trik/test/test_sync_workspace.py": "def test_meta():\n    pass\n",
+            "m3trik/tests/test_sync_workspace.py": "def test_meta():\n    pass\n",
         })
         _clear_caches()
         _, picks = self.picks("m3trik/pyproject.toml")
@@ -412,14 +412,14 @@ class TestSelection(_Fixture):
 
     def test_a_changed_test_no_runner_collects_is_noted_not_run(self):
         """Bug: a suite parked in a folder no runner collects
-        (``m3trik/test/unity_e2e/``) was selected by its stem and run as
-        ``test/<stem>.py``, which does not exist, so pytest exited 4.
+        (``m3trik/tests/unity_e2e/``) was selected by its stem and run as
+        ``tests/<stem>.py``, which does not exist, so pytest exited 4.
         Fixed: 2026-11-04"""
         _write(self.ws, {
-            "pythontk/test/parked/test_parked.py": "def test_x():\n    pass\n",
+            "pythontk/tests/parked/test_parked.py": "def test_x():\n    pass\n",
         })
         _clear_caches()
-        sel, picks = self.picks("pythontk/test/parked/test_parked.py")
+        sel, picks = self.picks("pythontk/tests/parked/test_parked.py")
         self.assertNotIn("test_parked", picks.get("pythontk", set()))
         self.assertTrue(any("test_parked.py" in n for n in sel.notes), sel.notes)
 
@@ -436,8 +436,8 @@ class TestWholeSuites(_Fixture):
         _Fixture.FILES,
         **{
             "unitytk/unitytk/__init__.py": "",
-            "unitytk/test/run_tests.py": "",
-            "unitytk/test/test_unity_host.py": "def test_h():\n    pass\n",
+            "unitytk/tests/run_tests.py": "",
+            "unitytk/tests/test_unity_host.py": "def test_h():\n    pass\n",
             "unitytk/com.m3trik.unitytk/Core/Json.cs": "class Json {}\n",
             "unitytk/com.m3trik.unitytk/Core/M3trik.Unitytk.Core.asmdef": "{}\n",
             "unitytk/com.m3trik.unitytk/Samples~/Shots/Shots.fbx": "fbx\n",
@@ -445,24 +445,24 @@ class TestWholeSuites(_Fixture):
             "unitytk/com.m3trik.unitytk/README.md": "# Package\n",
             "m3trik/scripts/sync_unity_samples.py": "def main():\n    pass\n",
             "m3trik/scripts/unity_samples/shots.py": "RECORDS = ('animation',)\n",
-            "m3trik/test/test_sync_unity_samples.py": (
+            "m3trik/tests/test_sync_unity_samples.py": (
                 "import sync_unity_samples\n\ndef test_s():\n    sync_unity_samples.main()\n"
             ),
-            "m3trik/test/unity_e2e/test_sample_twins.py": "def test_t():\n    pass\n",
-            "m3trik/test/unity_e2e/twins/_assembly.py": "ORDER = []\n",
-            "m3trik/test/unity_e2e/twins/blender_shots.py": "NAME = 'BlenderShots'\n",
+            "m3trik/tests/unity_e2e/test_sample_twins.py": "def test_t():\n    pass\n",
+            "m3trik/tests/unity_e2e/twins/_assembly.py": "ORDER = []\n",
+            "m3trik/tests/unity_e2e/twins/blender_shots.py": "NAME = 'BlenderShots'\n",
         },
     )
 
     def test_the_end_to_end_suite_and_its_twins_select_it_whole(self):
-        """Bug: a change under ``m3trik/test/unity_e2e/`` selected no test --
+        """Bug: a change under ``m3trik/tests/unity_e2e/`` selected no test --
         its suite sits in a folder no runner collects, so its own module was
         "a test no runner collects" and a twin "a test-dir file no test
         imports". Fixed: 2026-11-08"""
         for rel in (
-            "m3trik/test/unity_e2e/test_sample_twins.py",
-            "m3trik/test/unity_e2e/twins/_assembly.py",
-            "m3trik/test/unity_e2e/twins/blender_shots.py",
+            "m3trik/tests/unity_e2e/test_sample_twins.py",
+            "m3trik/tests/unity_e2e/twins/_assembly.py",
+            "m3trik/tests/unity_e2e/twins/blender_shots.py",
         ):
             with self.subTest(rel=rel):
                 sel, picks = self.picks(rel)
@@ -470,7 +470,7 @@ class TestWholeSuites(_Fixture):
                 self.assertEqual(sel.notes, [])
                 (name, argv, _), = at.commands(sel, workspace=self.ws)
                 self.assertEqual(
-                    (name, argv[1:]), ("unity_e2e", ["-m", "pytest", "-q", "m3trik/test/unity_e2e"])
+                    (name, argv[1:]), ("unity_e2e", ["-m", "pytest", "-q", "m3trik/tests/unity_e2e"])
                 )
 
     def test_the_packages_csharp_and_samples_select_its_edit_mode_run(self):
@@ -486,7 +486,7 @@ class TestWholeSuites(_Fixture):
                 self.assertEqual(sel.notes, [])
                 (name, argv, _), = at.commands(sel, workspace=self.ws)
                 self.assertEqual(
-                    (name, argv[1:]), ("unity_edit_mode", ["unitytk/test/run_tests.py", "--edit-mode"])
+                    (name, argv[1:]), ("unity_edit_mode", ["unitytk/tests/run_tests.py", "--edit-mode"])
                 )
 
     def test_a_deleted_csharp_file_still_selects_it(self):
@@ -526,7 +526,7 @@ class TestWholeSuites(_Fixture):
             code = at.run(fake, workspace=self.ws)
         self.assertEqual(code, 0, out.getvalue())
         self.assertIn("unity_edit_mode: PASS", out.getvalue())
-        self.assertTrue(list((self.ws / "unitytk/test/temp_tests").glob("affected_*_unity_edit_mode.log")))
+        self.assertTrue(list((self.ws / "unitytk/tests/temp_tests").glob("affected_*_unity_edit_mode.log")))
 
 
 _CORE_CSPROJ = """\
@@ -562,17 +562,17 @@ class TestDotnetSuites(_Fixture):
         **{
             "unitytk/unitytk/__init__.py": "",
             "unitytk/unitytk/editor_operations.json": "{}\n",
-            "unitytk/test/run_tests.py": "",
+            "unitytk/tests/run_tests.py": "",
             "unitytk/com.m3trik.unitytk/Core/Json.cs": "class Json {}\n",
             "unitytk/com.m3trik.unitytk/Features/ShadowPlane/Model/ShadowHorizonBaker.cs": "class B {}\n",
             "unitytk/com.m3trik.unitytk/Features/ShadowPlane/Editor/ShadowPlaneImporter.cs": "class I {}\n",
-            "unitytk/test/core_dotnet/Unitytk.Core.Tests.csproj": _CORE_CSPROJ,
-            "unitytk/test/core_dotnet/RecordNamesTests.cs": (
+            "unitytk/tests/core_dotnet/Unitytk.Core.Tests.csproj": _CORE_CSPROJ,
+            "unitytk/tests/core_dotnet/RecordNamesTests.cs": (
                 'class T { void S() { Conformance.Cases("record_names", 5, "{}"); } }\n'
             ),
-            "unitytk/test/models_dotnet/Unitytk.Models.Tests.csproj": _MODELS_CSPROJ,
-            "unitytk/test/models_dotnet/Conformance.cs": "static class Conformance {}\n",
-            "unitytk/test/models_dotnet/ShadowHorizonBakerTests.cs": (
+            "unitytk/tests/models_dotnet/Unitytk.Models.Tests.csproj": _MODELS_CSPROJ,
+            "unitytk/tests/models_dotnet/Conformance.cs": "static class Conformance {}\n",
+            "unitytk/tests/models_dotnet/ShadowHorizonBakerTests.cs": (
                 'class T { void S() { var d = Conformance.Cases("shadow_horizon", Seed, Options); } }\n'
             ),
             "pythontk/pythontk/core_utils/conformance.py": (
@@ -611,9 +611,9 @@ class TestDotnetSuites(_Fixture):
                 {self.MODELS, self.EDIT},
             ),
             ("unitytk/com.m3trik.unitytk/Features/ShadowPlane/Editor/ShadowPlaneImporter.cs", {self.EDIT}),
-            ("unitytk/test/models_dotnet/ShadowHorizonBakerTests.cs", {self.MODELS}),
-            ("unitytk/test/models_dotnet/Conformance.cs", both),
-            ("unitytk/test/core_dotnet/Unitytk.Core.Tests.csproj", {self.CORE}),
+            ("unitytk/tests/models_dotnet/ShadowHorizonBakerTests.cs", {self.MODELS}),
+            ("unitytk/tests/models_dotnet/Conformance.cs", both),
+            ("unitytk/tests/core_dotnet/Unitytk.Core.Tests.csproj", {self.CORE}),
             ("unitytk/unitytk/editor_operations.json", {self.CORE}),
         ):
             with self.subTest(rel=rel):
@@ -641,11 +641,11 @@ class TestDotnetSuites(_Fixture):
                 self.assertEqual(Path(argv[name][0]).stem.lower(), "dotnet")
                 self.assertEqual(
                     argv[name][1:],
-                    ["test", f"unitytk/test/{folder}", "--filter", "Bake", "--nologo"],
+                    ["test", f"unitytk/tests/{folder}", "--filter", "Bake", "--nologo"],
                 )
         text = at.report(sel, at.commands(sel, workspace=self.ws), explain=False, workspace=self.ws)
         self.assertIn(f"{self.MODELS}: {at.RUNNERS[self.MODELS].label}, run whole", text)
-        self.assertIn("$ dotnet test unitytk/test/models_dotnet --nologo", text)
+        self.assertIn("$ dotnet test unitytk/tests/models_dotnet --nologo", text)
 
     def test_a_run_gives_the_suite_this_python_and_reads_its_tally(self):
         """Its golden cases come from ``UNITYTK_PYTHON`` (else ``python`` on the
@@ -659,7 +659,7 @@ class TestDotnetSuites(_Fixture):
                 code = at.run([(self.MODELS, [sys.executable, "-c", script], ["x"])], workspace=self.ws)
         self.assertEqual(code, 0, out.getvalue())
         self.assertIn(f"{self.MODELS}: PASS", out.getvalue())
-        log = next((self.ws / "unitytk/test/temp_tests").glob(f"affected_*_{self.MODELS}.log"))
+        log = next((self.ws / "unitytk/tests/temp_tests").glob(f"affected_*_{self.MODELS}.log"))
         self.assertIn(sys.executable, log.read_text(encoding="utf-8"))
 
     def test_a_dotnet_run_that_executed_nothing_is_not_a_pass(self):
@@ -695,8 +695,8 @@ class TestWholeSuitesReadingProducers(_Fixture):
                 "def build(out_dir):\n    import mayatk as mtk\n"
                 "    return mtk.SceneExporter().export()\n"
             ),
-            "m3trik/test/unity_e2e/test_sample_twins.py": "def test_t():\n    pass\n",
-            "m3trik/test/unity_e2e/twins/blender_shots.py": (
+            "m3trik/tests/unity_e2e/test_sample_twins.py": "def test_t():\n    pass\n",
+            "m3trik/tests/unity_e2e/twins/blender_shots.py": (
                 "from unity_samples import shots as recipe\n\nNAME = 'BlenderShots'\n"
                 "SAMPLE = recipe.NAME\n\ndef build(out_dir):\n"
                 "    import pythontk as ptk\n    return ptk.FeatureThing().go()\n"
@@ -731,13 +731,13 @@ class TestCommands(_Fixture):
         for pkg, mod in (("uitk", "test_a"), ("mayatk", "test_b"), ("blendertk", "test_c"), ("pythontk", "test_d")):
             sel.add(pkg, mod, "x")
         out = {name: argv[1:] for name, argv, _ in at.commands(sel, k="foo", workspace=self.ws)}
-        self.assertEqual(out["uitk"], ["uitk/test/run_tests.py", "--modules", "test_a", "-k", "foo", "--no-badge"])
-        self.assertEqual(out["mayatk"], ["mayatk/test/run_tests.py", "test_b", "-k", "foo", "--no-badge"])
-        self.assertEqual(out["blendertk"], ["blendertk/test/run_tests.py", "test_c", "--no-badge"])  # no -k there
-        self.assertEqual(out["pythontk"], ["pythontk/test/run_tests.py", "test_d", "-k", "foo", "--no-badge"])
+        self.assertEqual(out["uitk"], ["uitk/tests/run_tests.py", "--modules", "test_a", "-k", "foo", "--no-badge"])
+        self.assertEqual(out["mayatk"], ["mayatk/tests/run_tests.py", "test_b", "-k", "foo", "--no-badge"])
+        self.assertEqual(out["blendertk"], ["blendertk/tests/run_tests.py", "test_c", "--no-badge"])  # no -k there
+        self.assertEqual(out["pythontk"], ["pythontk/tests/run_tests.py", "test_d", "-k", "foo", "--no-badge"])
 
     def test_a_runner_without_k_says_so_instead_of_dropping_it_silently(self):
-        _write(self.ws, {"blendertk/test/test_c.py": "def test_c():\n    pass\n"})
+        _write(self.ws, {"blendertk/tests/test_c.py": "def test_c():\n    pass\n"})
         _clear_caches()
         sel = at.Selection()
         sel.add("blendertk", "test_c", "x")
@@ -762,7 +762,7 @@ class TestCommands(_Fixture):
         _write(self.ws, {
             "tentacle/tentacle/__init__.py": "",
             "tentacle/tentacle/tcl_maya.py": "class TclMaya:\n    pass\n",
-            "tentacle/test/test_menu_gui.py": (
+            "tentacle/tests/test_menu_gui.py": (
                 "import unittest\n\n"
                 "def _can_run_menu_tests():\n"
                 "    try:\n        import maya.cmds\n    except ImportError:\n        return False\n"
@@ -772,7 +772,7 @@ class TestCommands(_Fixture):
                 "    def test_menu(self):\n"
                 "        from tentacle.tcl_maya import TclMaya\n        TclMaya()\n"
             ),
-            "tentacle/test/test_widgets_anywhere.py": (
+            "tentacle/tests/test_widgets_anywhere.py": (
                 "def _can_create_widgets():\n"
                 "    try:\n        import maya.cmds as cmds\n    except ImportError:\n        return True\n"
                 "    return not cmds.about(batch=True)\n\n"
@@ -804,7 +804,7 @@ class TestCommands(_Fixture):
     def test_a_run_that_executed_no_test_is_not_a_pass(self):
         """Bug: a selected run whose every test skipped (no host) printed PASS
         and exited 0 -- nothing was verified. Fixed: 2026-10-24"""
-        _write(self.ws, {"m3trik/test/test_tool.py": "def test_z():\n    pass\n"})
+        _write(self.ws, {"m3trik/tests/test_tool.py": "def test_z():\n    pass\n"})
         _clear_caches()
 
         def fake(text):
@@ -828,7 +828,7 @@ class TestCommands(_Fixture):
         """No window a test opens -- a tkinter probe, a console, a GUI Maya -- may
         take the user's focus or input: each runner runs on pythontk's private
         desktop, and everything it starts with it."""
-        _write(self.ws, {"m3trik/test/test_tool.py": "def test_z():\n    pass\n"})
+        _write(self.ws, {"m3trik/tests/test_tool.py": "def test_z():\n    pass\n"})
         _clear_caches()
         report = (
             "import ctypes; u = ctypes.windll.user32; "
@@ -871,13 +871,13 @@ class TestCommands(_Fixture):
         self.assertIn("[WARNING] 1 module(s) contributed only skips: test_gui", at.digest(text, failed=False))
 
     def test_a_package_without_a_runner_goes_through_pytest(self):
-        _write(self.ws, {"m3trik/test/test_tool.py": "def test_z():\n    pass\n"})
+        _write(self.ws, {"m3trik/tests/test_tool.py": "def test_z():\n    pass\n"})
         _clear_caches()
         sel = at.Selection()
         sel.add("m3trik", "test_tool", "x")
         (name, argv, mods), = at.commands(sel, workspace=self.ws)
         self.assertEqual(argv[1:4], ["-m", "pytest", "-q"])
-        self.assertTrue(argv[-1].replace("\\", "/").endswith("m3trik/test/test_tool.py"))
+        self.assertTrue(argv[-1].replace("\\", "/").endswith("m3trik/tests/test_tool.py"))
 
     def test_a_passing_digest_is_the_tally_not_the_slowest_list(self):
         mayatk_tail = (
@@ -933,7 +933,7 @@ class TestRealWorkspace(unittest.TestCase):
         self.assertIn("test_status_badge", sel.picks.get("pythontk", {}))
 
     def test_mayatks_gui_modules_are_read_from_its_runner(self):
-        if not (at.WORKSPACE / "mayatk/test/run_tests.py").is_file():
+        if not (at.WORKSPACE / "mayatk/tests/run_tests.py").is_file():
             self.skipTest("no mayatk checkout beside this repo")
         self.assertIn("test_shot_manifest", at.gui_required())
 

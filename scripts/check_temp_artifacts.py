@@ -679,9 +679,9 @@ def main() -> int:
             """
 Nothing imports or ships these, so they are residue -- a profile dump, a .bak,
 an experiment saved beside the module it was testing. Delete them. Scratch
-belongs in test/temp_tests/ (gitignored, swept when done), so give the tool that
+belongs in tests/temp_tests/ (gitignored, swept when done), so give the tool that
 wrote it an explicit destination there rather than a bare -o:
-    python -m cProfile -o test/temp_tests/<name>.prof -m <module>
+    python -m cProfile -o tests/temp_tests/<name>.prof -m <module>
 If a file genuinely belongs, DECLARE it (pyproject package-data / MANIFEST.in)
 so the wheel actually ships it -- an undeclared data file is simply missing at
 runtime for every installed user. Last resort: STRAY_ALLOWLIST."""

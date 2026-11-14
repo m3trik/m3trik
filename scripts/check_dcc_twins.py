@@ -553,11 +553,18 @@ LEDGER: List[TwinSpec] = [
             "RizomUVBridge.rizom_version",
             "RizomUVBridge.list_template_modes",
             "RizomUVBridge._no_save_diagnosis",
+            "RizomUVBridge._CRASH_CODES",
+            "RizomUVBridge._CRASH_HINT",
+            "RizomUVBridge._TOKEN_RE",
+            "RizomUVBridge._refuse_unresolved_tokens",
+            "RizomUVBridge._announce_handoff",
         ),
         note=(
             "4 shared methods (2026-10-29, the written-once rule's first pass; "
-            "_no_save_diagnosis took mayatk's line wrapping). Export, send and "
-            "the round trip read each host's scene."
+            "_no_save_diagnosis took mayatk's line wrapping), and the crash "
+            "codes and hint, the unresolved-token refusal and the hand-off "
+            "summary (2026-11-14, the release review: written twice, unguarded). "
+            "Export, send and the round trip read each host's scene."
         ),
     ),
     TwinSpec(
@@ -858,15 +865,30 @@ def extract_symbols(path: str, rel: str) -> Dict[str, List[str]]:
     out: Dict[str, List[str]] = {}
 
     def _add(key, fn):
-        start = min([d.lineno for d in fn.decorator_list] + [fn.lineno])
+        start = min([d.lineno for d in getattr(fn, "decorator_list", ())] + [fn.lineno])
         block = textwrap.dedent("\n".join(raw[start - 1 : fn.end_lineno]))
         out[key] = twin_normalized(block.splitlines(), rel)
 
     # A class as a whole too -- decorators, fields and every method -- for a
     # twin that is one small type (a dataclass both packages return) rather
-    # than a few shared methods of a larger class.
+    # than a few shared methods of a larger class. And a constant its body
+    # assigns (``Class.NAME``): data both hosts spell the same is as shared as
+    # a method (a crash-code table, a token pattern).
     for key, node in _named_defs(tree, nested=False):
         _add(key, node)
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for item in node.body:
+            if isinstance(item, ast.Assign):
+                targets = item.targets
+            elif isinstance(item, ast.AnnAssign):
+                targets = [item.target]
+            else:
+                continue
+            for target in targets:
+                name = f"{key}.{target.id}" if isinstance(target, ast.Name) else None
+                if name and name not in out:
+                    _add(name, item)
     return out
 
 

@@ -220,6 +220,17 @@ def %s():
             fh.write("    rects: dict = None\n")
         self.assertEqual(gate.compare(self.spec(symbols=["R"]))[0], "drift")
 
+    def test_a_class_constant_is_a_symbol(self):
+        """Data both hosts spell the same (a crash-code table, a token pattern)
+        is as shared as a method: ``K.CODES`` compares its assignment (the
+        RizomUV bridges' were unguarded, found in the 2026-11-14 review)."""
+        body = "class K:\n    CODES = {codes}\n    def f(self):\n        return 1\n"
+        for pkg in ("mayatk", "blendertk"):
+            self.write(pkg, body.format(codes="(1, 2)"))
+        self.assertEqual(gate.compare(self.spec(symbols=["K.CODES"]))[0], "ok")
+        self.write("blendertk", body.format(codes="(1, 3)"))
+        self.assertEqual(gate.compare(self.spec(symbols=["K.CODES"]))[0], "drift")
+
 
     PROPERTY = (
         "class P:\n"

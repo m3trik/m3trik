@@ -153,6 +153,42 @@ class TestLinkChecker(unittest.TestCase):
         self.assertNotIn("#anchor", broken)        # pure anchor skipped
 
 
+class TestInstructionFiles(unittest.TestCase):
+    """The instruction files measured are those a commit would hold: a copy its
+    repository ignores (a build's, a virtual environment's) is never one."""
+
+    def test_a_copy_its_repository_ignores_is_not_measured(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo = root / "pythontk"
+            (repo / "pythontk").mkdir(parents=True)
+            (repo / "build" / "lib" / "pythontk").mkdir(parents=True)
+            (repo / "builder").mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            _write(repo, ".gitignore", "build/\n")
+            _write(root, "AGENTS.md", "# root\n")  # the workspace root is no repository
+            _write(repo, "AGENTS.md", "# pythontk\n")
+            _write(repo / "pythontk", "AGENTS.md", "# part\n")  # new, not ignored
+            _write(repo / "builder", "AGENTS.md", "# a name holding a skipped one\n")
+            _write(repo / "build" / "lib" / "pythontk", "AGENTS.md", "[up](../../../../../AGENTS.md)\n")
+            with patch.object(guard, "REPO_ROOT", root):
+                found = [p.relative_to(root).as_posix() for p in guard._claude_files()]
+        self.assertEqual(
+            found, ["AGENTS.md", "pythontk/AGENTS.md", "pythontk/builder/AGENTS.md", "pythontk/pythontk/AGENTS.md"]
+        )
+
+    def test_a_directory_is_skipped_by_its_name_not_a_name_holding_it(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / ".github").mkdir()
+            (root / "node_modules" / "x").mkdir(parents=True)
+            _write(root / ".github", "AGENTS.md", "# workflows\n")
+            _write(root / "node_modules" / "x", "AGENTS.md", "# vendored\n")
+            with patch.object(guard, "REPO_ROOT", root):
+                found = [p.relative_to(root).as_posix() for p in guard._claude_files()]
+        self.assertEqual(found, [".github/AGENTS.md"])
+
+
 class TestLiveDispatch(unittest.TestCase):
     def test_dispatch_covers_ecosystem_packages(self):
         """The live root dispatch table must reference every ECOSYSTEM_PACKAGES

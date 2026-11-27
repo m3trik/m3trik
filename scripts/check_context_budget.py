@@ -209,15 +209,16 @@ def check_memory(memory_dir: Path, report: Report) -> None:
 
 
 def _claude_files() -> list[Path]:
+    """The instruction files a commit would hold: each repository's tracked or
+    new ones it does not ignore (never a build's or a virtual environment's
+    copy), and the workspace root's own."""
     out: list[Path] = []
-    skip = (".archive", "node_modules", ".git", "site-packages")
+    skip = {".archive", "node_modules", ".git", "site-packages"}
     # os.walk instead of Path.rglob: a broken cloud-VFS placeholder anywhere
     # in the tree makes rglob raise OSError mid-traversal and kill the whole
     # check; os.walk lets us skip unreadable entries and keep scanning.
     for dirpath, dirnames, filenames in os.walk(REPO_ROOT, onerror=lambda e: None):
-        if any(seg in dirpath for seg in skip):
-            dirnames[:] = []  # prune the subtree
-            continue
+        dirnames[:] = [d for d in dirnames if d not in skip]  # prune by name
         for name in ("AGENTS.md", "CLAUDE.md"):
             if name not in filenames:
                 continue
@@ -229,7 +230,38 @@ def _claude_files() -> list[Path]:
             if name == "CLAUDE.md" and all(w.startswith("@") for w in text.split()):
                 continue  # a stub importing AGENTS.md: the rules are measured there
             out.append(p)
-    return sorted(out)
+    return sorted(_not_ignored(out))
+
+
+def _not_ignored(paths: list[Path]) -> list[Path]:
+    """*paths* less those their repository ignores, one ``git check-ignore`` a
+    repository; a file outside any (the workspace root's), or in one git
+    cannot read, is kept."""
+    by_repo: dict[Path | None, list[Path]] = {}
+    for p in paths:
+        by_repo.setdefault(_repo_of(p), []).append(p)
+    kept = list(by_repo.pop(None, []))
+    for repo, files in by_repo.items():
+        rels = [f.relative_to(repo).as_posix() for f in files]
+        try:
+            done = _git(repo, "check-ignore", "-z", "--stdin", ok=(0, 1),
+                        input="\0".join(rels) + "\0", text=True, encoding="utf-8")
+        except UnreadableRepo:
+            kept += files
+            continue
+        ignored = set(filter(None, done.stdout.split("\0")))
+        kept += [f for f, rel in zip(files, rels) if rel not in ignored]
+    return kept
+
+
+def _repo_of(path: Path) -> Path | None:
+    """The repository holding *path*, the workspace root at most; None outside any."""
+    for folder in path.parents:
+        if (folder / ".git").exists():
+            return folder
+        if folder == REPO_ROOT:
+            return None
+    return None
 
 
 def _instruction_file(folder: Path) -> Path:

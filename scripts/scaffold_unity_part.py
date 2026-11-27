@@ -13,6 +13,7 @@ Edit Mode test:
     python m3trik/scripts/scaffold_unity_part.py contract IRigPose [--editor]
     python m3trik/scripts/scaffold_unity_part.py door Lighting URP com.unity.render-pipelines.universal 17.3.0
     python m3trik/scripts/scaffold_unity_part.py tool Lighting
+    python m3trik/scripts/scaffold_unity_part.py kit Training
 
 It refuses to write over anything that exists. ``--root`` names the package
 folder (default: unitytk's ``[tool.m3trik.layers.csharp] root``).
@@ -107,10 +108,13 @@ class UnityScaffold:
         if (self.root / base).exists():
             raise SystemExit(f"{self.root / base} exists: split today's code into it by hand (docs/parts/feature.md)")
         core = ["M3trik.Unitytk.Core", "M3trik.Unitytk.Contracts"]
+        # The actions class is the feature's plural, or <Feature>Actions where the
+        # name is plural already (docs/parts/feature.md: RenderEffectsActions).
+        actions = f"{feature}Actions" if feature.endswith("s") else f"{feature}s"
         self.asmdef(f"{base}/Runtime", f"M3trik.Unitytk.{feature}", core)
         self.asmdef(f"{base}/Editor", f"M3trik.Unitytk.{feature}.Editor",
                     core + ["M3trik.Unitytk.Kernel", "M3trik.Unitytk.Contracts.Editor", f"M3trik.Unitytk.{feature}"], editor=True)
-        self.file(f"{base}/Editor/{feature}s.cs", f'''using M3trik.Unitytk.Kernel;
+        self.file(f"{base}/Editor/{actions}.cs", f'''using M3trik.Unitytk.Kernel;
 
 namespace M3trik.Unitytk.{feature}
 {{
@@ -124,7 +128,7 @@ namespace M3trik.Unitytk.{feature}
     /// and packages, an open standard, a maintained library), and why each was or
     /// was not adopted. check_csharp.py refuses the TODO.
     /// </remarks>
-    public static class {feature}s
+    public static class {actions}
     {{
     }}
 }}
@@ -133,7 +137,7 @@ namespace M3trik.Unitytk.{feature}
                     ["M3trik.Unitytk.Core", "M3trik.Unitytk.Kernel", f"M3trik.Unitytk.{feature}", f"M3trik.Unitytk.{feature}.Editor"] + TEST_REFS,
                     tests=True, defines=["UNITY_INCLUDE_TESTS", "UNITYTK_TEST_FRAMEWORK"],
                     version_defines=[{"name": "com.unity.test-framework", "expression": "1.6.0", "define": "UNITYTK_TEST_FRAMEWORK"}])
-        self.file(f"{base}/Tests/{feature}sTests.cs", f'''using M3trik.Unitytk.Kernel;
+        self.file(f"{base}/Tests/{actions}Tests.cs", f'''using M3trik.Unitytk.Kernel;
 using NUnit.Framework;
 
 namespace M3trik.Unitytk.{feature}.Tests
@@ -143,12 +147,12 @@ namespace M3trik.Unitytk.{feature}.Tests
     /// a run restores the scene, the dry run's plan names every change the run makes,
     /// and a second run plans nothing.
     /// </summary>
-    public class {feature}sTests
+    public class {actions}Tests
     {{
         [Test]
         public void The_first_action_is_planned_undone_and_converges()
         {{
-            Assert.Fail("write the first action's test, then the action ({feature}s.cs)");
+            Assert.Fail("write the first action's test, then the action ({actions}.cs)");
         }}
     }}
 }}
@@ -180,6 +184,54 @@ namespace M3trik.Unitytk.{feature}.Tests
                     ["M3trik.Unitytk.Core", f"M3trik.Unitytk.{feature}"], auto=False, defines=[define],
                     version_defines=[{"name": package, "expression": version, "define": define}])
 
+    def kit(self, kit: str) -> None:
+        """A kit: recipes over several features' actions (its editor assembly,
+        which names each feature it composes as it starts using it) and a
+        failing test. A kit is the only part that may reference several
+        features: it composes them, through their public API alone."""
+        base = f"Kits/{kit}"
+        if (self.root / base).exists():
+            raise SystemExit(f"{self.root / base} exists: a scaffold never writes over a part")
+        ns = f"M3trik.Unitytk.Kits.{kit}"
+        self.asmdef(f"{base}/Editor", f"{ns}.Editor", ["M3trik.Unitytk.Core", "M3trik.Unitytk.Kernel"], editor=True)
+        self.file(f"{base}/Editor/{kit}Kit.cs", f'''using M3trik.Unitytk.Kernel;
+
+namespace {ns}
+{{
+    /// <summary>
+    /// The {kit} kit's recipes: short scripts over the features' actions that put
+    /// several features together. Each takes an optional <see cref="OpContext"/>:
+    /// a dry run plans, a menu's run is one undo step, and none just runs.
+    /// </summary>
+    /// <remarks>
+    /// Prior art: TODO -- what was weighed, and why each was or was not adopted.
+    /// check_csharp.py refuses the TODO.
+    /// </remarks>
+    public static class {kit}Kit
+    {{
+    }}
+}}
+''')
+        self.asmdef(f"{base}/Tests", f"{ns}.Tests",
+                    ["M3trik.Unitytk.Core", "M3trik.Unitytk.Kernel", f"{ns}.Editor"] + TEST_REFS,
+                    tests=True, defines=["UNITY_INCLUDE_TESTS", "UNITYTK_TEST_FRAMEWORK"],
+                    version_defines=[{"name": "com.unity.test-framework", "expression": "1.6.0", "define": "UNITYTK_TEST_FRAMEWORK"}])
+        self.file(f"{base}/Tests/{kit}KitTests.cs", f'''using NUnit.Framework;
+
+namespace {ns}.Tests
+{{
+    /// <summary>The {kit} kit's recipes, each held to the kernel's three checks.</summary>
+    public class {kit}KitTests
+    {{
+        [Test]
+        public void The_first_recipe_is_planned_undone_and_converges()
+        {{
+            Assert.Fail("write the first recipe's test, then the recipe ({kit}Kit.cs)");
+        }}
+    }}
+}}
+''')
+
     def tool(self, feature: str) -> None:
         self.asmdef(f"Tools/{feature}", f"M3trik.Unitytk.Tools.{feature}",
                     ["M3trik.Unitytk.Kernel", f"M3trik.Unitytk.{feature}.Editor"], editor=True, auto=False)
@@ -199,7 +251,7 @@ namespace M3trik.Unitytk.Tools.{feature}
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("kind", choices=("feature", "contract", "door", "tool"))
+    parser.add_argument("kind", choices=("feature", "contract", "door", "tool", "kit"))
     parser.add_argument("names", nargs="+")
     parser.add_argument("--editor", action="store_true", help="contract: an editor contract (Contracts/Editor)")
     parser.add_argument("--root", type=Path, help="the package folder (default: unitytk's declared root)")
@@ -216,6 +268,8 @@ def main(argv=None) -> int:
         if len(args.names) != 4:
             parser.error("door takes <Feature> <Door> <package> <version>")
         scaffold.door(*args.names)
+    elif args.kind == "kit":
+        scaffold.kit(args.names[0])
     else:
         scaffold.tool(args.names[0])
     for rel in scaffold.written:

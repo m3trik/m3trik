@@ -271,6 +271,19 @@ jobs:
       - name: Operation contract C# types in sync
         run: python m3trik/scripts/sync_operation_contract.py --check
 
+      # The editor's icons: uitk's SVGs, copied into unitytk's editor kernel
+      # (the Unity Manifest draws what the Shot Manifest draws). A copy is
+      # held to its source; needs uitk and unitytk side by side.
+      - name: unitytk's icon copies in sync with uitk's
+        run: python m3trik/scripts/sync_unity_icons.py --check
+
+      # unitytk's own contracts: its sheet plan (unitytk.sheets.sheet_plan)
+      # and the effect-recipe defaults pythontk declares, generated as the
+      # package's C# (SheetPlan.g.cs, EffectRecipeDefaults.g.cs). Needs
+      # pythontk and unitytk side by side, as the steps above do.
+      - name: unitytk contracts C# in sync
+        run: python m3trik/scripts/sync_unity_contracts.py --check
+
       # The job-queue layout: pythontk's JobQueue file names restated as the
       # C# constants of extapps' Unity Scripts editor package (QueueLayout.g.cs),
       # which serves that queue in a person's open Unity editor.

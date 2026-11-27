@@ -1,7 +1,7 @@
 {
   "name": "challenge",
-  "version": "0.1.0",
-  "description": "Challenge a design, plan or proposal with independent agents: critics attack it from named seats, advocates argue rival designs, scenarios are walked through every design, findings are verified and a judge scores. No hooks, so it installs at user scope and works in any project.",
+  "version": "0.4.0",
+  "description": "Challenge a design, plan or proposal with independent agents: critics attack it from named seats, advocates argue rival designs, scenarios are walked through every design, findings are verified and a judge scores. Its one hook, the usage gate, stops any session from launching agents (subagents, workflows, headless claude -p) that the account's usage windows cannot finish. It names nothing of any workspace, so it installs at user scope and works in every project.",
   "author": {
     "name": "m3trik"
   },

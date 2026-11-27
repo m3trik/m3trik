@@ -1,6 +1,6 @@
 ---
 name: critic
-description: Judges a proposal from the text it is handed and nothing else. No web, no shell, no search. The challenge workflow uses it for the frame check, the seats, the advocates and the scenario walkers.
+description: Judges a proposal from the text it is handed and nothing else. No web, no shell, no search. The challenge runner gives its text to every reviewer as the system prompt; a session can also call it as an agent.
 tools: Read
 model: sonnet
 ---

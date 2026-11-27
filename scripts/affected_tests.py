@@ -1085,20 +1085,26 @@ def _select_source(sel: Selection, pkg: Package, path: Path, workspace: Path,
 
 
 # ---------------------------------------------------------------- facts
-@lru_cache(maxsize=None)
-def gui_required(workspace: Path = WORKSPACE) -> Set[str]:
-    """mayatk's ``GUI_REQUIRED`` keys, read statically (no import)."""
+def _mayatk_runner_constant(name: str, workspace: Path = WORKSPACE) -> Optional[ast.expr]:
+    """The value of mayatk's runner's module-level constant *name*, read
+    statically (no import); None where it has none."""
     path = workspace / "mayatk" / "tests" / "run_tests.py"
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
-        return set()
+        return None
     for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == "GUI_REQUIRED" for t in node.targets
-        ):
-            if isinstance(node.value, ast.Dict):
-                return {k.value for k in node.value.keys if isinstance(k, ast.Constant)}
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            return node.value
+    return None
+
+
+@lru_cache(maxsize=None)
+def gui_required(workspace: Path = WORKSPACE) -> Set[str]:
+    """mayatk's ``GUI_REQUIRED`` keys, read statically (no import)."""
+    value = _mayatk_runner_constant("GUI_REQUIRED", workspace)
+    if isinstance(value, ast.Dict):
+        return {k.value for k in value.keys if isinstance(k, ast.Constant)}
     return set()
 
 
@@ -1107,11 +1113,19 @@ _RESULT_LINE = re.compile(r"^(test_\w+): [A-Z][A-Z ]+?\[(\d+(?:\.\d+)?)s\]", re.
 
 @lru_cache(maxsize=None)
 def last_seconds(workspace: Path = WORKSPACE, files: int = 40) -> Dict[str, float]:
-    """mayatk module -> seconds, the newest observation in its results files."""
-    temp = workspace / "mayatk" / "tests" / "temp_tests"
+    """mayatk module -> seconds, the newest observation in its runs' results
+    files: each run's own folder in the ecosystem temp root (the runner's
+    ``RUN_PREFIX`` store)."""
     seen: Dict[str, float] = {}
+    prefix = _mayatk_runner_constant("RUN_PREFIX", workspace)
+    if not isinstance(prefix, ast.Constant):
+        return seen
+    _workspace_pythontk()
+    from pythontk import TempArtifacts
+
+    runs = Path(TempArtifacts.root()) / prefix.value
     try:
-        results = sorted(temp.glob("test_results_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        results = sorted(runs.glob("*/test_results_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
     except OSError:
         return seen
     for path in results[:files]:
@@ -1376,18 +1390,16 @@ def run(cmds, workspace: Path = WORKSPACE) -> int:
     env = dict(os.environ)
     env.setdefault("QT_QPA_PLATFORM", "offscreen")
     env["PYTHONIOENCODING"] = env.get("PYTHONIOENCODING", "utf-8")
+    _workspace_pythontk()
+    from pythontk import TestSandbox
+
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     failed, idle = [], []
     for index, (name, argv, modules) in enumerate(cmds):
         pkg = packages(workspace)[RUNNERS[name].unit if name in RUNNERS and RUNNERS[name].unit else name]
-        log_dir = pkg.test_dir / "temp_tests"
+        log_dir = pkg.test_dir / TestSandbox.SCRATCH
         log_dir.mkdir(exist_ok=True)
-        for old in log_dir.glob("affected_*.log"):  # its own, after mayatk's 7-day sweep age
-            try:
-                if old.stat().st_mtime < time.time() - 7 * 86400:
-                    old.unlink()
-            except OSError:
-                pass
+        TestSandbox.sweep_scratch(str(pkg.test_dir))  # the folder it writes into ages out as its runner's does, once a run
         # One log per command: tentacle's plain and --in-maya groups share a package.
         log = log_dir / f"affected_{stamp}_{index}_{name}.log"
         print(f"\n=== {name}: {len(modules)} module(s) ===\n$ {_display(argv)}", flush=True)

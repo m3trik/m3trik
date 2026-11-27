@@ -12,7 +12,7 @@
     {
       "name": "challenge",
       "source": "./claude-challenge",
-      "description": "Challenge a design, plan or proposal with independent agents: attack, rivals, scenarios, verification, judgement. No hooks; install at user scope for every project."
+      "description": "Challenge a design, plan or proposal with independent agents: attack, rivals, scenarios, verification, judgement. With a usage gate that blocks agent launches the account's usage windows cannot finish; install at user scope for every project."
     }
   ]
 }

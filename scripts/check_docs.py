@@ -508,8 +508,34 @@ def _git_tracked_md(repo: Path) -> Optional[Set[str]]:
     return {str((repo / line).resolve()).lower() for line in r.stdout.splitlines() if line.strip()}
 
 
+def _git_ignored(repo: Path) -> Set[str]:
+    """Repo-relative posix paths git ignores (a directory ends in ``/``).
+
+    Scratch trees (a suite's ``tests/temp_unity/`` Unity projects, build dirs)
+    are declared once, in the repo's ``.gitignore``; the sweep reads that, and
+    :data:`WS_PRUNE_DIRS` only covers what git cannot answer (a folder that is
+    not a work tree, a repo missing the line). ``--directory`` reports an ignored
+    tree as one entry, so the walk never enters it; ``-z`` has git write each
+    path as it is, UTF-8 and NUL-separated, where a line per path quotes one
+    with a non-ASCII letter in it. Empty when git is unavailable or *repo* is
+    not a work tree.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(repo), "ls-files", "-z", "--others", "--ignored",
+             "--exclude-standard", "--directory"],
+            capture_output=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if r.returncode != 0:
+        return set()
+    return {path for path in r.stdout.decode("utf-8", errors="surrogateescape").split("\0") if path}
+
+
 def _iter_repo_md(repo: Path, repo_name: str) -> Iterable[Path]:
     vendored = WS_VENDORED.get(repo_name, ())
+    ignored = _git_ignored(repo)
     stack = [repo]
     while stack:
         d = stack.pop()
@@ -522,12 +548,12 @@ def _iter_repo_md(repo: Path, repo_name: str) -> Iterable[Path]:
                 if c.name in WS_PRUNE_DIRS:
                     continue
                 rel = c.relative_to(repo).as_posix() + "/"
-                if any(rel.startswith(v) for v in vendored):
+                if rel in ignored or any(rel.startswith(v) for v in vendored):
                     continue
                 stack.append(c)
             elif c.suffix.lower() == ".md":
                 rel = c.relative_to(repo).as_posix()
-                if any(rel.startswith(v) for v in vendored):
+                if rel in ignored or any(rel.startswith(v) for v in vendored):
                     continue
                 yield c
 

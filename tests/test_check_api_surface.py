@@ -442,6 +442,20 @@ class TestSemverVerdict(unittest.TestCase):
             "a template removal is still REPORTED, it just owes nothing",
         )
 
+    def test_a_name_under_an_underscore_package_is_internal(self):
+        """A ``_``-prefixed package is internal (CODE_STANDARD section 4: a
+        package is reached through its root, never its ``_`` modules): a tool's
+        panel helpers, tentacle's ``slots/tools/_shot_manifest/``, are its own
+        Slots class's alone. Measured 2026-11-26: tentacle's delta owed a minor
+        for ``ManifestData.format_behavior_html``, a helper there. A
+        ``_``-prefixed MODULE is no such package -- a wildcard root re-exports
+        its classes (``_core_utils.py``) -- so its removals still count."""
+        delta = self._delta({"_helpers/data.py": self.WIDGET_2}, {"_helpers/data.py": self.WIDGET_1})
+        self.assertIn("_helpers/data.py::Widget.spin", delta.removed, "still REPORTED")
+        self.assertEqual(g.required_bump(delta), ("patch", []))
+        delta = self._delta({"utils/_utils.py": self.WIDGET_2}, {"utils/_utils.py": self.WIDGET_1})
+        self.assertEqual(g.required_bump(delta), ("minor", ["utils/_utils.py::Widget.spin"]))
+
     def test_no_baseline_owes_nothing(self):
         """A package with no release is not evidence of a break."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
@@ -2797,6 +2811,59 @@ class TestStandaloneFloors(unittest.TestCase):
         problems, notes = self._problems()
         self.assertEqual(problems, [])
         self.assertEqual(notes, ["cons: ups has no release tag here (fetch its tags): unchecked"])
+
+    def test_a_member_and_a_keyword_the_floors_release_lacks_are_named(self):
+        """A name from a module path is checked to its members and the keywords a call
+        passes, as a root name is: unitytk called ``Mapping.resolve(base=)`` and
+        ``Mapping.unmapped_columns`` (submodule imports) under a floor that lacked both,
+        and the check, reading root names alone, passed it."""
+        mod = self.root / "ups" / "ups" / "mod.py"
+        mod.write_text(self.UPS_NOW.replace("def spin(self):", "def spin(self, fast=False):"), encoding="utf-8")
+        (self.root / "cons" / "cons" / "deep.py").write_text(
+            "from ups.mod import Widget as W\n\n"
+            "W.spin(fast=True)\nW.turn()\nW.spin(slow=True)\n",
+            encoding="utf-8",
+        )
+        self._floor("ups>=0.1.0")
+        problems, _notes = self._problems()
+        self.assertEqual(len(problems), 1)
+        for lacking in ("mod::Widget.spin(fast) (cons/cons/deep.py:3)", "mod::Widget.turn (cons/cons/deep.py:4)"):
+            self.assertIn(lacking, problems[0])
+        self.assertNotIn("slow", problems[0], "a keyword today's member does not take either is no floor's")
+
+    def test_a_local_made_by_a_call_on_a_class_reaches_its_members(self):
+        """``fbx = ptk.FbxFile.load(path)``, then ``fbx.take_setup_jumps()``: a member called on what a
+        call on a class made is the floor's too; the check, reading names alone, never saw it."""
+        (self.root / "cons" / "cons" / "held.py").write_text(
+            "import ups\n\n\ndef run():\n    w = ups.Widget.spin()\n    w.turn()\n    return w.spin\n",
+            encoding="utf-8",
+        )
+        self._floor("ups>=0.1.0")
+        problems, _notes = self._problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn("Widget.turn (cons/cons/held.py:6)", problems[0])
+
+    def test_a_value_handed_in_is_not_traced_and_the_ok_line_says_so(self):
+        """``def build(step): step.rows``: a parameter's members are no name the check sees (it adds no
+        heuristic for them); its OK line says exactly that they are unchecked."""
+        (self.root / "cons" / "cons" / "given.py").write_text(
+            "import ups\n\n\ndef build(widget: ups.Widget):\n    return widget.turn()\n",
+            encoding="utf-8",
+        )
+        self._floor("ups>=0.1.0")
+        problems, _notes = self._problems()
+        self.assertNotIn("given.py:5", " ".join(problems), "a parameter's member is unseen")
+        (self.root / "cons" / "cons" / "use.py").unlink()  # no other gap: the OK line
+        out = io.StringIO()
+        with mock.patch.object(g, "REPO_ROOT", self.root), mock.patch.object(
+            g, "ECOSYSTEM_PACKAGES", ("ups", "cons")
+        ), contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(g.main(["cons", "--floors"]), 0, out.getvalue())
+        self.assertIn(
+            "the members of a value handed in (a parameter, an attribute, an item of what a call "
+            "returned) are unchecked",
+            out.getvalue(),
+        )
 
     def test_main_exits_1_on_a_gap_and_0_once_the_floor_names_the_release(self):
         for spec, want in (("ups>=0.1.0", 1), ("ups>=0.2.0", 0)):

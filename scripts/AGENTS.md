@@ -12,7 +12,7 @@
 |:--|:--|:--|
 | `compare_panel_surface.py --all --write` / `--panel <n>`; `generate_parity_audit.py` | `tentacle/docs/PARITY_SURFACE.md`, `PARITY_AUDIT.md` | Every `self.tk` chain resolves on both hosts; gap ⇒ exit 1. |
 | `generate_workspace_inventory.py` (+ `Generate-WorkspaceInventory.ps1`) | `docs/workspace_repo_inventory.{md,json}` | Child repos: package/code roots, LOC. |
-| `sync_unity_samples.py [--check]` | unitytk `Samples~/`, `samples` | Recipes: `unity_samples/`. Maya: local, `push.ps1`. |
+| `sync_unity_samples.py [--check]` | unitytk `Samples~/`, `samples` | Recipes: `unity_samples/`. Maya: local, `push.ps1`; `PRODUCER = "python"`: here. |
 | `generate_readme_diagrams.py [--check] [--prune]` | `docs/diagrams/`, README `diagram:` blocks | |
 | `build_stingray_ao_presets.py [--check]` | `mayatk/mat_utils/shaderfx/Standard_{Masked,Transparent}_AO.sfx` | Maya's opacity presets + the opaque AO chain, spliced. |
 | `scaffold_unity_part.py <kind> <name>` | a unitytk part: folders, asmdefs, `.meta`s, a failing test | One-off; refuses to overwrite. |
@@ -37,6 +37,8 @@
 | `sync_shared_bat.py [--check]` | drift between `m3trik/package-manager.bat` and its mirrors in `mayatk`/`blendertk` `env_utils/` | In each wheel. |
 | `sync_scene_records.py [--check]` | `ptk.SceneRecords` vs doc table, Unity channels + versions, both PRODUCERS; emits `records.js`, `*.g.cs` | |
 | `sync_operation_contract.py [--check]` | drift between pythontk's operation payloads and unitytk's core `*.g.cs` | |
+| `sync_unity_contracts.py [--check]` | drift between unitytk's own declarations (the sheet plan, the sheet settings) and their C# readers, or pythontk defaults (`EffectRecipe`, the emission states) and their C# constants | In the Unity package. |
+| `sync_unity_icons.py [--check]` | drift between `uitk/uitk/icons/*.svg` and unitytk's `Kernel/Editor/Icons` copies (white icon colour, `.meta` GUIDs, removed icons) | In the Unity package. |
 | `sync_job_queue.py [--check]` | drift between pythontk's `JobQueue` layout and extapps' Unity Scripts `QueueLayout.g.cs` | |
 | `sync_workspace.py [--check]` | `../workspace.json` vs the Dispatch table, CI loops, charters; the workspace root's files vs their build from `../agents/workspace.md`; instruction tree + packs; `operations.json`; the stated dependency chain; the `m3trik` distribution's package set | §0. Builds the root; a lone clone writes nothing outside itself. |
 | `sync_github_about.py [--check]` / `--apply` | a repo's GitHub About (description, topics, PyPI homepage) vs its pyproject | `--apply` needs a `gh` login. |

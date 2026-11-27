@@ -149,5 +149,53 @@ class TestSkipUnversioned(unittest.TestCase):
         self.assertIn("2 SKIP", out.getvalue())
 
 
+class TestGitIgnoredTreesAreNotSwept(unittest.TestCase):
+    """A git-ignored tree is scratch (a Unity test project under
+    ``tests/temp_unity/``, a build dir), not the repo's docs: the sweep skips
+    whatever the repo ignores, by its own ``.gitignore``, never by a name list.
+    An untracked doc that is not ignored is still swept."""
+
+    def setUp(self):
+        import shutil
+        import subprocess
+
+        if not shutil.which("git"):
+            self.skipTest("git not on PATH")
+        self._td = tempfile.TemporaryDirectory()
+        self.ws_root = Path(self._td.name)
+        repo = self.ws_root / "pkg"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        (repo / ".gitignore").write_text("tests/scratch_run/\n", encoding="utf-8")
+        (repo / "README.md").write_text("# Pkg\n", encoding="utf-8")
+        scratch = repo / "tests" / "scratch_run" / "Library"
+        scratch.mkdir(parents=True)
+        (scratch / "vendor.md").write_text("[x](missing_ignored.md)\n", encoding="utf-8")
+        (repo / "notes.md").write_text("[y](missing_untracked.md)\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_only_the_ignored_tree_is_skipped(self):
+        report = check_docs.Report()
+        check_docs.run_workspace(self.ws_root, report)
+        fails = "\n".join(report.fails)
+        self.assertNotIn("scratch_run", fails)
+        self.assertIn("missing_untracked.md", fails)
+
+    def test_an_ignored_tree_with_a_non_ascii_name_is_skipped(self):
+        """git quotes such a path (``"tests/caf\\303\\251/"``) unless asked for NUL-separated output, so the
+        sweep entered the tree it ignores. Fixed: 2026-11-26"""
+        repo = self.ws_root / "pkg"
+        name = "café_run"
+        (repo / ".gitignore").write_text("tests/scratch_run/\ntests/%s/\n" % name, encoding="utf-8")
+        (repo / "tests" / name).mkdir(parents=True)
+        (repo / "tests" / name / "vendor.md").write_text("[z](missing_non_ascii.md)\n", encoding="utf-8")
+        self.assertIn("tests/%s/" % name, check_docs._git_ignored(repo))
+        report = check_docs.Report()
+        check_docs.run_workspace(self.ws_root, report)
+        self.assertNotIn("missing_non_ascii.md", "\n".join(report.fails))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -61,10 +61,11 @@ From the workspace root (Windows paths shown). On a new machine, clone `m3trik` 
 
   Name that environment's `python` by its full path, so the servers start in it whatever the client's working directory. Permissions as in step 5 (`mcp__ops__*`, `mcp__ops-apply__*`).
 - **Another agent** (Copilot, Codex, Cursor) reads `AGENTS.md`, whose pointer block names the packs. For the operations, register the same two commands as stdio MCP servers in its configuration, or call the command line.
+- **A copy of the source with nothing installed** (a synced or read-only tree, an agent on another machine: the server's assistant reads the workspace this way) still answers `api.search` and `api.describe`, from the workspace root: `PYTHONPATH=pythontk python -m pythontk ops run --provider pythontk.operations api.search query="triangle count" packages='["mayatk","blendertk"]'`. `--provider` names the declarations that no entry point registers there, and `packages` the packages to read, since none is registered (each is found through the repo folder of its name). Only what reads source works this way: a host's operations need the installs above.
 
 ### The challenge plugin
 
-A second plugin in this marketplace, [`m3trik/claude-challenge/`](../claude-challenge/skills/challenge/SKILL.md): `/challenge` (`/challenge:challenge` where another skill shares the name) stress-tests a design, plan or proposal with independent agents. Critics attack it from named seats, advocates argue rival designs, scenarios are walked through every design, findings are verified and a judge scores. It has no hooks and names nothing of this workspace, so it installs at user scope and works in every project:
+A second plugin in this marketplace, [`m3trik/claude-challenge/`](../claude-challenge/skills/challenge/SKILL.md): `/challenge` (`/challenge:challenge` where another skill shares the name) stress-tests a design, plan or proposal with independent agents. Critics attack it from named seats, advocates argue rival designs, scenarios are walked through every design, findings are verified and a judge scores. It names nothing of this workspace, so it installs at user scope and works in every project. Its one hook is the usage gate ([`usage_gate.py`](../claude-challenge/skills/challenge/usage_gate.py)): before any tool call that launches paid agents (`Agent`, `Task`, `Workflow`, a shell command starting `claude -p` or a challenge run) it reads the account's usage windows (`claude -p /usage`, free, reused for 90 s) and blocks the call, saying when the window resets, when the work would not fit what is left less a 5% reserve; it lets everything through when it cannot read the windows, and `CLAUDE_USAGE_GATE=off` switches it off:
 
 ```
 claude plugin install challenge@m3trik --scope user
@@ -72,7 +73,7 @@ claude plugin install challenge@m3trik --scope user
 
 The marketplace is declared for this workspace (step 4), so in another project add it at user scope first: `claude plugin marketplace add <path of the m3trik checkout> --scope user`.
 
-Every reviewer is told to use no tools. Where a frame sets `critic_agent`, the reviewers on the critic model run as the [`critic`](../claude-challenge/agents/critic.md) agent, which holds the Read tool alone; reviewers on the session's model keep its tools. The `plan` and `stub` modes spend nothing; a `run` is a workflow and needs the user's opt-in.
+`challenge.py` runs the process from the command line, each agent its own headless `claude -p` session in an empty folder outside any project, with no MCP servers and no tools but those its stage needs (none for a reviewer; Read, with the evidence's folders opened to it, when the frame lists evidence; the web tools for a claim; Read, Grep and Glob, with the frame's roots opened to them, for the agents that settle findings against the files; a tool that reads files permitted by a rule per folder, `Read(//<folder>/**)`, never by its bare name, though no run has yet probed whether a headless session refuses a read elsewhere), its system prompt the [`critic`](../claude-challenge/agents/critic.md) agent's text. So it needs Python and the `claude` command alone, in any session. The `plan` and `stub` modes spend nothing; a `run` needs the user's opt-in.
 
 ## Use
 

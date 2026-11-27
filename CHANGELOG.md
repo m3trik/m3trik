@@ -1,5 +1,7 @@
 # m3trik — Changelog
 
+- **2026-11-27 -- The context-budget guard measures the instruction files a commit would hold (`scripts/check_context_budget.py` `_claude_files`).** It read every AGENTS.md on disk, so a build's copy (pythontk's `build/lib`, which now carries the build-sheet rules' AGENTS.md) failed its link check from a folder deeper than the source, and `.git` also skipped `.github`; each repository's ignored files are left out (one `git check-ignore` a repository), and a directory is skipped by its name.
+  - Test(s): `tests/test_check_context_budget.py` `TestInstructionFiles` (2, red first).
 - **2026-11-26 -- `line_budget` raised to 680,741 (`workspace.json`; was 666,461, the count read 14,280 over).** The growth is the build-sheet release: unitytk's Tasks kit, Manifests, Placement, Steps, Viewpoints, Interaction and Panels features with the Manifest window (C#, about 11,000 lines of it with their Edit Mode tests), unitytk's `sheets` reader, pythontk's spot placement and narrator, and the review's regression tests across the cascade; the retirements this release deletes (pythontk 54 notices, mayatk 15, blendertk 18, uitk 3) take some back.
 - **2026-11-26 -- `affected_tests.py` names the scratch folder through `TestSandbox.SCRATCH` and sweeps it through the test folder (`scripts/affected_tests.py` `run`).**
   - Test(s): `test_affected_tests.py` new `TestLastSeconds` (2): timings read from each run's own folder under the temp root, newest first.

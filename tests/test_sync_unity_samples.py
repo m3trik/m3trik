@@ -99,6 +99,14 @@ class TestRecipes(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "two recipes are named 'A'"):
             s.recipes(self.folder)
 
+    def test_a_recipe_runs_in_maya_unless_it_names_another_producer(self):
+        self._write("a", 'NAME = "A"\nDESCRIPTION = "a"\nRECORDS = ()\ndef build(out):\n    return []\n')
+        self._write("b", 'NAME = "B"\nDESCRIPTION = "b"\nRECORDS = ()\nPRODUCER = "python"\ndef build(out):\n    return []\n')
+        self.assertEqual([s.producer(r) for r in s.recipes(self.folder)], ["maya", "python"])
+        self._write("b", 'NAME = "B"\nDESCRIPTION = "b"\nRECORDS = ()\nPRODUCER = "houdini"\ndef build(out):\n    return []\n')
+        with self.assertRaisesRegex(ValueError, "b.py names producer 'houdini'"):
+            s.recipes(self.folder)
+
     def test_the_workspace_recipes_import_without_maya(self):
         """Read here for what the Package Manager lists; Maya is imported only
         inside ``build``."""
@@ -230,6 +238,13 @@ class TestTheDescribedMedia(unittest.TestCase):
         self.assertEqual(s._digest(plain), s._digest(stamped), "the texels do not")
         self.assertTrue(s._digest(plain).startswith("texels:"))
         self.assertNotEqual(s._digest(plain), s._digest(edited), "one texel's channel moved")
+
+    def test_a_file_of_another_kind_is_described_by_its_bytes_not_its_length(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp, "a.csv"), Path(tmp, "b.csv")
+            a.write_bytes(b"A01,Open")
+            b.write_bytes(b"A02,Shut")
+            self.assertTrue(s.differences(s.describe(a), s.describe(b)), "the same length, other bytes: drift")
 
     def test_a_file_that_is_no_image_by_its_bytes(self):
         sound = b"RIFF" + bytes(4) + b"WAVEfmt "
@@ -767,6 +782,104 @@ class TestExport(unittest.TestCase):
         self.assertTrue(lines[-1].startswith("ptk.ProcessExit.hard_exit(0)"), lines[-1])
 
 
+class TestTheCommittedTasksSample(unittest.TestCase):
+    """The committed Tasks sample, written in this interpreter (no DCC): its
+    recipe writes the committed sheet, delivery and plan byte for byte, and the
+    delivery holds a life-size task. Added: 2026-11-19"""
+
+    def setUp(self):
+        self.folder = s.records.unity_package() / s.SAMPLES / "Tasks"
+        (self.recipe,) = [r for r in s.recipes() if r.NAME == "Tasks"]
+
+    def test_a_checkout_keeps_every_delivery_file_held_by_its_bytes_lf(self):
+        """A delivery file no FBX is held to its recipe's output by its bytes
+        (``describe``), and the recipes write LF; nothing pinned their line
+        endings, so a checkout with ``core.autocrlf=true`` (Windows, GitHub's
+        runners) gave the sheet and the plan CRLF and the check drift.
+        Fixed: 2026-11-26"""
+        import subprocess
+
+        unitytk = s.records.UNITYTK
+        if not (unitytk / ".git").exists() or not shutil.which("git"):
+            self.skipTest("unitytk is no git checkout here")
+        samples = s.records.unity_package() / s.SAMPLES
+        held = [
+            p for p in sorted(samples.glob("*/*"))
+            if p.is_file() and p.suffix.lower() not in (".fbx", ".meta") + s.SAMPLE_SOURCES
+        ]
+        self.assertIn(self.folder / "cabinet.csv", held)
+        rels = [p.relative_to(unitytk).as_posix() for p in held]
+        said = subprocess.run(
+            ["git", "-C", str(unitytk), "check-attr", "eol", "--", *rels], capture_output=True, text=True, check=True
+        ).stdout
+        eol = dict(line.rsplit(": eol: ", 1) for line in said.splitlines())
+        self.assertEqual({rel: eol.get(rel) for rel in rels}, {rel: "lf" for rel in rels})
+
+    def test_its_recipe_builds_in_an_interpreter_with_no_package_installed(self):
+        """CI installs no sibling; the recipe put only unitytk's checkout on
+        the path, and unitytk imports pythontk. Fixed: 2026-11-26"""
+        import os
+        import subprocess
+        import textwrap
+
+        probe = textwrap.dedent(
+            f"""
+            import sys
+            from pathlib import Path
+            root = Path({str(s.REPO_ROOT)!r}).resolve()
+            def checkout(entry):
+                path = Path(entry or ".").resolve()
+                return path == root or (path.parent == root and not path.name.startswith("."))
+            sys.path[:] = [p for p in sys.path if not checkout(p)]
+            sys.path.insert(0, {str(SCRIPTS)!r})
+            import sync_unity_samples as s
+            (recipe,) = [r for r in s.recipes() if r.NAME == "Tasks"]
+            print(recipe.build(sys.argv[1]))
+            """
+        )
+        env = {k: v for k, v in os.environ.items() if k.upper() != "PYTHONPATH"}
+        with tempfile.TemporaryDirectory() as tmp:
+            done = subprocess.run(
+                [sys.executable, "-c", probe, tmp], cwd=tmp, env=env, capture_output=True, text=True, timeout=300
+            )
+            self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+            self.assertEqual(Path(tmp, "cabinet.plan.json").read_bytes(), (self.folder / "cabinet.plan.json").read_bytes())
+
+    def test_its_recipe_writes_the_committed_files_byte_for_byte(self):
+        self.assertEqual(s.producer(self.recipe), "python")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in self.recipe.build(tmp):
+                committed = self.folder / name
+                self.assertTrue(committed.is_file(), f"{committed} is missing: run {s.SCRIPT}")
+                self.assertEqual(Path(tmp, name).read_bytes(), committed.read_bytes(), f"{name} is stale: run {s.SCRIPT}")
+                self.assertTrue(committed.with_name(name + ".meta").is_file(), f"{name} has no .meta")
+
+    def test_each_take_starts_where_the_scene_holds_its_part(self):
+        """Unity poses an imported model from its first take's start, so a take
+        that starts a part elsewhere moves that part's rest (a tool's clip from
+        hand to work left the key in front of a latch). Added: 2026-11-19"""
+        rests = {path: at for path, _, at in self.recipe.NODES}
+        for take, _, curves in self.recipe.TAKES:
+            for node, channel, keyed in curves:
+                held = rests[node] if channel == "T" else self.recipe.ROTATIONS.get(node, (0, 0, 0))
+                for axis, start, _ in keyed:
+                    self.assertEqual(start, held["XYZ".index(axis)], f"{take}: {node} {channel}{axis} starts at rest")
+
+    def test_its_animation_record_states_the_scenes_rate(self):
+        import pythontk as ptk
+
+        record = s.describe(self.folder / "cabinet.fbx", ("animation",))["records"]["animation"]
+        self.assertEqual(record["fps"], self.recipe.FPS)
+        verdict = ptk.AnimationRecord.validate(record)
+        self.assertFalse(verdict.errors, f"the reader refuses a record its shape refuses: {verdict.errors}")
+
+    def test_its_delivery_is_life_size_with_one_take_per_clip(self):
+        described = s.describe(self.folder / "cabinet.fbx", self.recipe.RECORDS)
+        self.assertEqual([t["take"] for t in described["takes"]], [t[0] for t in self.recipe.TAKES])
+        self.assertEqual(self.recipe.SIZES["CABINET"], (60, 100, 40), "a cabinet a person stands at, in cm")
+        self.assertTrue(all(n in self.recipe.SIZES for n, kind, _ in self.recipe.NODES if kind == "Mesh"), "every box sized")
+
+
 class TestMain(unittest.TestCase):
     """Added: 2026-11-05"""
 
@@ -794,10 +907,27 @@ class TestMain(unittest.TestCase):
                 produced[recipe.NAME] = names
             return produced
 
-        with patch.object(s, "find_mayapy", return_value="mayapy"), patch.object(s, "export", side_effect=export):
+        with patch.object(s, "find_mayapy", return_value="mayapy"), patch.object(s, "export", side_effect=export) as handed:
             code, said = _run(["--check"])
         self.assertEqual(code, 0, said)
         self.assertIn("in sync: ", said)
+        (found, _, _), _ = handed.call_args
+        self.assertNotIn("Tasks", [r.NAME for r in found], "a recipe of no DCC is built here, never in mayapy")
+
+    def test_a_recipe_of_no_dcc_is_built_in_this_interpreter(self):
+        built = []
+
+        def build(out):
+            built.append(out)
+            Path(out, "a.json").write_text("{}", encoding="utf-8")
+            return ["a.json"]
+
+        recipe = SimpleNamespace(NAME="Here", DESCRIPTION="d", RECORDS=(), PRODUCER="python", build=build)
+        with tempfile.TemporaryDirectory() as tmp:
+            produced = s.build_here([recipe], Path(tmp))
+            self.assertEqual(produced, {"Here": ["a.json"]})
+            self.assertEqual(built, [str(Path(tmp) / "Here")])
+            self.assertTrue(Path(tmp, "Here", "a.json").is_file())
 
     def test_a_sample_folder_no_recipe_makes_is_named(self):
         with tempfile.TemporaryDirectory() as tmp:

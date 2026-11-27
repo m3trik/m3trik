@@ -43,7 +43,8 @@ The [principles](packs/principles.md) rule for the tooling (bridges: §15), made
 - **Encapsulation**: gold standard mayatk `_core_utils`. Sole flat form: the wildcard `*_utils` roots' names, which stay (§4). Exempt: `m3trik/scripts`, exec-templates, `plugin_src/`, addon hooks, bootstrap (§4).
 - **Host conventions**: Maya selection in, one undo chunk, option box; Blender operator undo/redo.
 - **Export**: a lookdev aid composes over the authored value; it never duplicates, reassigns, renames or swaps what the exporter reads. Suspend steps and sidecars are a last resort: first ask whether what they undo should exist (§13).
-- **Testing**: reproduce a bug in `tests/temp_tests/`, the failing test in `tests/test_<module>.py`; the affected tests are `python m3trik/scripts/affected_tests.py <files> --run` (headless); full suites: full reviews and releases (§9).
+- **Build sheets**: the format is declared once, in pythontk's templates ([rules](../../pythontk/pythontk/core_utils/engines/shots/manifest/AGENTS.md)); a reader restates it under test.
+- **Testing**: reproduce a bug in `tests/temp_tests/` (a run's start removes what sat there untouched unless its `.keep` names it, §10), the failing test in `tests/test_<module>.py`; the affected tests are `python m3trik/scripts/affected_tests.py <files> --run` (headless); full suites: full reviews and releases (§9).
 
 ## Conventions
 - **Findings**: one a named blocker stops is logged `ready`. Before applying a reviewer's prescribed fix, grep the backlog for a `decision` entry on that code (the maintainer's call; reviewers never see it). Deferrals go to [`.claude/BACKLOG.md`](../../.claude/BACKLOG.md) (bar and TTL in its header; reviewed ideas: `.claude/FUTURE.md`); delete entries your work resolves; work it with `/m3trik:backlog`.

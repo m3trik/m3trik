@@ -15,7 +15,10 @@ unitytk: this workspace script joins them.
 record: Maya is where the shot tools, the Scene Exporter and the records were
 first written, and Blender mirrors mayatk by name and behaviour, so a sample a
 Blender export would also satisfy is proven by the workspace's end-to-end
-suite (Blender parity), not by a second copy here.
+suite (Blender parity), not by a second copy here. A sample no DCC makes (the
+Tasks kit's task: a sheet, a delivery pythontk writes and the plan
+unitytk reads from them) names ``PRODUCER = "python"`` and is built in this
+interpreter instead (:func:`build_here`), so it needs no Maya of its own.
 
 The recipes run in ONE owned headless mayapy this script launches (never a
 Maya a person opened), each in a new scene, exporting into a temp folder
@@ -84,6 +87,9 @@ TIMEOUT = 900
 #: ``MAYA_DISABLE_CER``: a crash that still happens opens no Error Report
 #: dialog for the user to close (measured 2026-11-12, Maya 2025: none, no dump).
 CHILD_ENV = {"MAYA_DEBUG_NO_SAVE_ON_CRASH": "1", "MAYA_DISABLE_CER": "1"}
+#: Where a recipe runs (its ``PRODUCER``; Maya when it names none): an owned
+#: headless mayapy, or this interpreter for a sample no DCC makes.
+PRODUCERS = ("maya", "python")
 #: The exit code of a run that could not answer (no Maya): never green.
 CANNOT_RUN = 2
 SCRIPT = "sync_unity_samples.py"
@@ -109,7 +115,8 @@ def recipes(folder: Path = RECIPES) -> list:
 
     Raises:
         ValueError: A recipe lacks ``NAME``, ``DESCRIPTION``, ``RECORDS`` or
-            ``build``, or two share a name.
+            ``build``, names a producer not in :data:`PRODUCERS`, or two share a
+            name.
     """
     found, names = [], set()
     for path in sorted(folder.glob("*.py")):
@@ -121,12 +128,19 @@ def recipes(folder: Path = RECIPES) -> list:
         missing = [a for a in ("NAME", "DESCRIPTION", "RECORDS", "build") if not hasattr(module, a)]
         if missing:
             raise ValueError(f"{path.name} declares no {', '.join(missing)}: see unity_samples/__init__.py")
+        if producer(module) not in PRODUCERS:
+            raise ValueError(f"{path.name} names producer {producer(module)!r}, not one of {PRODUCERS}")
         if module.NAME in names:
             raise ValueError(f"two recipes are named {module.NAME!r}")
         names.add(module.NAME)
         module.PATH = path
         found.append(module)
     return sorted(found, key=lambda m: m.NAME)
+
+
+def producer(recipe) -> str:
+    """Where *recipe* runs: its ``PRODUCER``, else ``"maya"``."""
+    return getattr(recipe, "PRODUCER", "maya")
 
 
 def sample_entries(found) -> list:
@@ -192,6 +206,17 @@ with open({artifact!r}, "w", encoding="utf-8") as fh:
 sys.stdout.flush()
 ptk.ProcessExit.hard_exit(0)  # the artifact is the verdict; TerminateProcess skips Maya's crashing teardown
 '''
+
+
+def build_here(found, out_root: Path) -> dict:
+    """Build every recipe of no DCC (``PRODUCER = "python"``) in this
+    interpreter, each into ``<out_root>/<NAME>``; ``{NAME: [file names]}``."""
+    produced = {}
+    for recipe in found:
+        out = out_root / recipe.NAME
+        out.mkdir(parents=True, exist_ok=True)
+        produced[recipe.NAME] = list(recipe.build(str(out)))
+    return produced
 
 
 def export(found, out_root: Path, mayapy: str) -> dict:
@@ -394,11 +419,11 @@ def describe_fbx(path: Path, records=()) -> dict:
 
 def describe(path: Path, records=()) -> dict:
     """*path*'s description (:func:`describe_fbx` for an FBX, with the
-    *records* its feature reads; else its bytes' length, a generated file of
-    another kind being reproducible)."""
+    *records* its feature reads; else its bytes' digest (:func:`_digest`: an
+    image's texels), a generated file of another kind being reproducible)."""
     if path.suffix.lower() == ".fbx":
         return describe_fbx(path, records)
-    return {"bytes": path.stat().st_size}
+    return {"bytes": _digest(path.read_bytes())}
 
 
 def flatten(value, prefix: str = "") -> dict:
@@ -565,8 +590,9 @@ def main(argv=None) -> int:
         print(f"DRIFT: {SAMPLES}/{orphan} has no recipe in unity_samples/: add one or remove the folder")
         failed = True
 
-    mayapy = find_mayapy()
-    if not mayapy:
+    in_maya = [r for r in found if producer(r) == "maya"]
+    mayapy = find_mayapy() if in_maya else None
+    if in_maya and not mayapy:
         print(
             f"FAIL: no Maya to export the samples with (mayatk found no mayapy: install Maya 2025+ or "
             f"set MAYA_LOCATION). {SCRIPT} runs locally and in the release gate, never in the Maya-less CI."
@@ -578,7 +604,9 @@ def main(argv=None) -> int:
     scratch = ptk.TempArtifacts("unity_samples", policy="scoped")
     try:
         out_root = Path(scratch.dir_path())
-        produced = export(found, out_root, mayapy)
+        produced = build_here([r for r in found if producer(r) == "python"], out_root)
+        if in_maya:
+            produced.update(export(in_maya, out_root, mayapy))
         for recipe in found:
             failed |= sync_sample(
                 recipe, produced, out_root / recipe.NAME, samples_dir / recipe.NAME, args.check

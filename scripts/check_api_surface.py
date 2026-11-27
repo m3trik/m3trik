@@ -28,6 +28,11 @@ name its Python reaches there: no cascade ratchets such a floor. It reads the
 floor's ``v<floor>`` tag, or the working tree for a floor above the newest
 tag (the pending release, which publishes first), so it needs the upstream's
 tags (a CI checkout's ``fetch-depth: 0``); without them it says so and passes.
+It sees a name reached by name (off the root or a module path), its members
+and the keywords a call passes, and the members of a local a call on a class
+made; it cannot see the members of a value handed in (a parameter, an
+attribute, an item of what a call returned: a builder's ``step.rows``), whose
+release is unchecked.
 
 ``--check`` fails on a retirement past its window: a ``ptk.Deprecation`` alias
 or retired keyword whose ``remove_in`` the package's ``__version__`` has
@@ -725,8 +730,14 @@ def upstream_uses(source_root: Path, upstream: str, root: Path) -> dict[str, lis
     """Every name the Python under *source_root* reaches on *upstream*, each
     with where (``path:line``, relative to *root*): ``Name`` or
     ``Name.member`` off the root (``import ups as u``; ``u.Name.member``,
-    ``from ups import Name``) and ``module::Name`` off a module path
-    (``from ups.core.mod import Name``: ``core/mod::Name``)."""
+    ``from ups import Name``), ``module::Name`` and ``module::Name.member``
+    off a module path (``from ups.core.mod import Name``: ``core/mod::Name``),
+    each keyword a call of a member passes, ``<member key>(keyword)``
+    (``Name.resolve(sheet, base=b)``: ``Name.resolve(base)``), and each member of
+    a local a call on a class made (``f = Name.load(p)``; ``f.member``:
+    ``Name.member``). A value handed in is not traced, so its members are not
+    among them: a parameter, an attribute, an item of what a call returned
+    (``def build(step): step.rows``)."""
     uses: dict[str, list[str]] = {}
     for path in sorted(source_root.rglob("*.py")):
         try:
@@ -735,7 +746,7 @@ def upstream_uses(source_root: Path, upstream: str, root: Path) -> dict[str, lis
             continue
         where = path.relative_to(root).as_posix()
         roots: set[str] = set()  # local names bound to the root
-        named: dict[str, str] = {}  # local name -> the root name it binds
+        named: dict[str, str] = {}  # local name -> the key of the name it binds
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
@@ -747,11 +758,12 @@ def upstream_uses(source_root: Path, upstream: str, root: Path) -> dict[str, lis
                     continue
                 for alias in node.names:
                     if len(parts) == 1:
-                        named[alias.asname or alias.name] = alias.name
                         key = alias.name
                     else:
                         key = f"{'/'.join(parts[1:])}::{alias.name}"
+                    named[alias.asname or alias.name] = key
                     uses.setdefault(key, []).append(f"{where}:{node.lineno}")
+        keyed: dict[int, str] = {}  # an attribute node -> its key
         for node in ast.walk(tree):
             if not isinstance(node, ast.Attribute):
                 continue
@@ -770,17 +782,42 @@ def upstream_uses(source_root: Path, upstream: str, root: Path) -> dict[str, lis
                 continue
             if not key.split(".")[-1].startswith("_"):
                 uses.setdefault(key, []).append(f"{where}:{node.lineno}")
+                keyed[id(node)] = key
+        # A local a call on a class made (``w = Widget()``, ``fbx = ptk.FbxFile.load(p)``) is that class, where the
+        # file binds it to no other: its members are the floor's too.
+        made: dict[str, set[str]] = {}
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)):
+                continue
+            func = node.value.func
+            key = named.get(func.id) if isinstance(func, ast.Name) else keyed.get(id(func))
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    made.setdefault(target.id, set()).add(key.split(".")[0] if key else "")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and not node.attr.startswith("_"):
+                classes = made.get(node.value.id, set())
+                if len(classes) == 1 and "" not in classes:
+                    key = f"{next(iter(classes))}.{node.attr}"
+                    uses.setdefault(key, []).append(f"{where}:{node.lineno}")
+                    keyed[id(node)] = key
+        for node in ast.walk(tree):  # the keywords each call of a member passes
+            if isinstance(node, ast.Call) and "." in keyed.get(id(node.func), ""):
+                for kw in node.keywords:
+                    if kw.arg:
+                        uses.setdefault(f"{keyed[id(node.func)]}({kw.arg})", []).append(f"{where}:{node.lineno}")
     return uses
 
 
 def _surface_index(surface: PackageSurface):
-    """``(names, {class: (bases, members)}, {module: names})`` of a surface:
-    what :func:`upstream_uses`' keys are looked up in. ``names`` holds every
-    public name, a class's members too: a wildcard root (pythontk's
-    ``*_utils``) hands a ``*Utils`` method out by its bare name."""
+    """``(names, {class: (bases, members)}, {module: names}, {class.member:
+    signature})`` of a surface: what :func:`upstream_uses`' keys are looked up
+    in. ``names`` holds every public name, a class's members too: a wildcard
+    root (pythontk's ``*_utils``) hands a ``*Utils`` method out by its bare name."""
     names: set[str] = set()
     classes: dict[str, tuple[list[str], set[str]]] = {}
     modules: dict[str, set[str]] = {}
+    signatures: dict[str, str] = {}
     for mod in surface.to_dict()["modules"]:
         found = {f["qualname"] for f in mod.get("functions", [])}
         found |= {c["name"] for c in mod.get("constants", [])}
@@ -789,13 +826,24 @@ def _surface_index(surface: PackageSurface):
             bases, members = classes.setdefault(cls["name"], ([], set()))
             bases.extend(b.split(".")[-1].split("[")[0] for b in cls.get("bases", []))
             members.update(m["qualname"].split(".")[-1] for m in cls.get("members", []))
+            for m in cls.get("members", []):
+                signatures[f'{cls["name"]}.{m["qualname"].split(".")[-1]}'] = m.get("signature") or ""
             names |= members
         names |= found
         stem = mod["relpath"][: -len(".py")]
         if stem == "__init__" or stem.endswith("/__init__"):
             stem = stem[: -len("__init__")].rstrip("/")
         modules.setdefault(stem, set()).update(found)
-    return names, classes, modules
+    return names, classes, modules, signatures
+
+
+def _takes(signature: str | None, keyword: str) -> bool | None:
+    """Whether a callable of *signature* takes *keyword* (a ``**`` takes any);
+    None where no signature is recorded."""
+    if signature is None:
+        return None
+    params = signature.split("->")[0]
+    return "**" in params or re.search(rf"(?<![\w.]){re.escape(keyword)}\s*[:=,)]", params) is not None
 
 
 def _has_member(name: str, member: str, classes: dict) -> bool | None:
@@ -822,15 +870,20 @@ def _lacks(key: str, release, today) -> bool:
     records it: the surface keeps methods, not class attributes, so one it
     never records is never called missing. A module path counts its own
     names, a submodule, or the name anywhere (a package re-exports)."""
-    names, classes, modules = release
+    names, classes, modules, signatures = release
+    key, _, keyword = key.rstrip(")").partition("(")
+    if keyword:  # a member's keyword: missing where today's member takes it and the release's does not
+        member = key.split("::", 1)[-1]
+        return bool(_takes(signatures.get(member), keyword) is False and _takes(today[3].get(member), keyword))
     if "::" in key:
         module, name = key.split("::", 1)
-        return not (
-            name in modules.get(module, ()) or name in names or f"{module}/{name}" in modules
-        )
-    name, _, member = key.partition(".")
-    if name not in names:
-        return True
+        name, _, member = name.partition(".")
+        if not (name in modules.get(module, ()) or name in names or f"{module}/{name}" in modules):
+            return True
+    else:
+        name, _, member = key.partition(".")
+        if name not in names:
+            return True
     return bool(
         member
         and _has_member(name, member, classes) is False
@@ -848,7 +901,9 @@ def floor_problems(
     newest tag is the pending release, read from the working tree (it
     publishes first: push.ps1 and PyPI hold that). A released floor with no
     tag here is a problem; a dep with no tags at all (a shallow checkout) a
-    note, never a verdict."""
+    note, never a verdict. The members of a value handed in (a parameter, an
+    attribute, an item of what a call returned) are unchecked:
+    :func:`upstream_uses` cannot see them."""
     members = set(ECOSYSTEM_PACKAGES if ecosystem is None else ecosystem)
     pkg_dir = repo_root / name
     problems: list[str] = []
@@ -1220,9 +1275,14 @@ SEMVER_EXEMPT_DIRS = ("templates",)
 
 
 def _is_semver_exempt(key: str) -> bool:
-    """Whether ``relpath::symbol`` lives under a :data:`SEMVER_EXEMPT_DIRS` dir."""
+    """Whether ``relpath::symbol`` owes no bump: it lives under a
+    :data:`SEMVER_EXEMPT_DIRS` dir, or under a ``_``-prefixed package -- internal
+    (CODE_STANDARD section 4: a package is reached through its root, never its
+    ``_`` modules), as a tool's panel helpers are (tentacle's
+    ``slots/tools/_<tool>/``). A ``_``-prefixed module is no such package: a
+    wildcard root re-exports its classes (``_core_utils.py``)."""
     relpath = key.split("::", 1)[0]
-    return any(part in SEMVER_EXEMPT_DIRS for part in relpath.split("/")[:-1])
+    return any(part in SEMVER_EXEMPT_DIRS or part.startswith("_") for part in relpath.split("/")[:-1])
 
 
 @dataclass(frozen=True)
@@ -1281,8 +1341,8 @@ def required_bump(delta: ApiDelta | None) -> tuple[str, list[str]]:
     site, and a ``changed`` signature is ambiguous on its face -- dropping a
     parameter breaks, adding an optional one does not -- so neither is read as
     a break here; a genuine signature break is the author's call to declare by
-    hand-raising ``__version__``. Symbols under :data:`SEMVER_EXEMPT_DIRS` are
-    not contract and are skipped.
+    hand-raising ``__version__``. Symbols under :data:`SEMVER_EXEMPT_DIRS` or a
+    ``_``-prefixed package are not contract and are skipped (:func:`_is_semver_exempt`).
     """
     if delta is None:
         return "patch", []
@@ -2205,7 +2265,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"[FAIL] {problem}")
             failed = failed or bool(problems)
             if not problems:
-                print(f"[OK] {name}: its floors carry every name it uses")
+                print(
+                    f"[OK] {name}: its floors carry every name it reaches by name, its members and keywords, "
+                    "and every member of a local a call on one made; the members of a value handed in "
+                    "(a parameter, an attribute, an item of what a call returned) are unchecked"
+                )
         return 1 if failed else 0
     return check(names)
 

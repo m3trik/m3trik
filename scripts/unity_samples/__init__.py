@@ -13,6 +13,9 @@ producer's public API and exports it as a user does. It declares:
 - ``build(out_dir) -> list``: run in a new, empty Maya scene; exports into
   *out_dir* and returns the names of the files it wrote. Imports Maya and
   mayatk inside, so the module imports anywhere.
+- ``PRODUCER`` (optional): ``"python"`` for a sample no DCC makes (``task``:
+  a sheet, a delivery pythontk's ``FbxWriter`` writes, and unitytk's plan of
+  them), whose ``build`` runs in the workspace's own interpreter; Maya otherwise.
 
 A module whose name starts with ``_`` (``_images``: the one PNG writer) is a
 helper the recipes import as ``unity_samples._images``, never a recipe.

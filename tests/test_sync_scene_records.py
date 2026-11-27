@@ -41,6 +41,75 @@ class TestSceneRecordsDerivedSurfaces(unittest.TestCase):
             s.unity_mismatch(), {"undeclared": [], "unread": [], "shapeless": []}
         )
 
+    def test_the_handoffs_lighting_recipe_is_unitys_by_the_same_names(self):
+        """The rendering policy's sections, settings and defaults reach C# beside the
+        handoff's reader, so a Unity reader names a setting the one way pythontk does.
+        Added: 2026-11-22"""
+        path = s.rendering_cs()
+        self.assertIsNotNone(path, "Unity reads the handoff record")
+        self.assertEqual(path.name, "HandoffRendering.g.cs")
+        text = s.render_rendering_cs()
+        self.assertIn('public const string Section = "renderer";', text)
+        self.assertIn('public const string ToneMapping = "toneMapping";', text)
+        self.assertIn('public const string ToneMappingDefault = "ACESFilmic";', text)
+        self.assertIn("public const float ToneMappingExposureDefault = 1.0f;", text)
+        self.assertEqual(path.read_text(encoding="utf-8").replace("\r\n", "\n"), dict(s.cs_targets())[path], "the file is current")
+
+    def test_every_rendering_setting_gets_its_default_or_the_render_fails(self):
+        """A setting whose value has no C# form fails the render by name; a
+        list of numbers (the key light's colour and position) gets its default
+        as the rest do, and a string is escaped. (A list was skipped without a
+        word: ``keyLight.color`` had its name and no default.) Fixed: 2026-11-23"""
+        text = s.render_rendering_cs()
+        readonly = "public static readonly System.Collections.Generic.IReadOnlyList<float>"
+        self.assertIn(f"{readonly} ColorDefault = new float[] {{ 1.0f, 1.0f, 1.0f }};", text)
+        self.assertIn(f"{readonly} PositionDefault = new float[] {{ 3.0f, 6.0f, 4.0f }};", text)
+
+        text = s.render_rendering_cs({"look": {"on": True, "path": 'a "b" \\c\n'}})
+        self.assertIn("public const bool OnDefault = true;", text)
+        self.assertIn('public const string PathDefault = "a \\"b\\" \\\\c\\n";', text)
+        for value in (None, {"nested": 1}, [1, "a"], float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex((TypeError, ValueError), r"look\.odd"):
+                    s.render_rendering_cs({"look": {"odd": value}})
+        with self.assertRaisesRegex(ValueError, "tone-mapping"):
+            s.render_rendering_cs({"look": {"tone-mapping": 1.0}})
+        with self.assertRaisesRegex(ValueError, r"look\.section: its C# name 'Section' is taken"):
+            s.render_rendering_cs({"look": {"section": 1.0}})
+
+    def test_a_csharp_literal_is_written_exactly(self):
+        """``cs_float``: repr's shortest form, never a value C# cannot hold;
+        ``cs_string``: quoted, every escape C# needs. Added: 2026-11-23"""
+        self.assertEqual(s.cs_float(1), "1.0f")
+        self.assertEqual(s.cs_float(2.86), "2.86f", "not 2.8599...")
+        self.assertEqual(s.cs_float(1e-05), "1e-05f")
+        self.assertEqual(s.cs_float(1e20), "1e+20f")
+        for value in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                s.cs_float(value)
+        self.assertEqual(s.cs_float(-3.4e38), "-3.4e+38f", "float.MinValue's side of the range")
+        self.assertEqual(s.cs_string("ACESFilmic"), '"ACESFilmic"')
+
+    def test_a_number_beyond_a_floats_range_has_no_csharp_literal(self):
+        """``1e300`` was written ``1e+300f``, which C# refuses to compile
+        (CS0594: the constant is outside a float's range). Fixed: 2026-11-26"""
+        for value in (1e300, -1e39, 3.5e38):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, r"no C# float literal .*float's range"):
+                s.cs_float(value)
+
+    def test_a_scalar_is_one_csharp_constant_of_its_type(self):
+        """``cs_scalar``: the one place a string, a bool and a number are spelled
+        as a C# constant (a bool is no number). Added: 2026-11-26"""
+        self.assertEqual(s.cs_scalar('a"'), ("string", '"a\\""'))
+        self.assertEqual(s.cs_scalar(True), ("bool", "true"))
+        self.assertEqual(s.cs_scalar(2), ("float", "2.0f"))
+        for value in (None, [1.0], (1.0, 2.0), {"a": 1}):
+            with self.subTest(value=value):
+                self.assertIsNone(s.cs_scalar(value))
+        self.assertTrue(s.is_number(1.5) and s.is_number(3))
+        self.assertFalse(s.is_number(True) or s.is_number("1"))
+        self.assertEqual(s.cs_string('a\\b"c\td\x01 '), '"a\\\\b\\"c\\td\\u0001\\u2028"')
+
     def test_a_unity_record_without_a_shape_is_reported(self):
         """A record Unity reads declares its shape: its importer reads it
         through the generated type, and the one version it reads is that
@@ -194,12 +263,14 @@ class TestGeneratedTypes(unittest.TestCase):
 
     def test_only_what_unity_reads_is_generated_for_it(self):
         """Every C# file the script writes is a record type an importer's channel
-        line names, or the map absent values beside their reader: the lighting
-        recipe and the handoff, which no part of unitytk reads, get none.
+        line names, the map absent values beside their reader, or the handoff's
+        lighting recipe beside the handoff's reader (a contract two features read,
+        Looks and Lightmaps); nothing else gets one.
         Added: 2026-11-07"""
         names = {path.name for path, _ in s.cs_targets()}
         self.assertNotIn("RenderingPolicy.g.cs", names)
-        self.assertNotIn("HandoffBlock.g.cs", names)
+        self.assertIn("HandoffBlock.g.cs", names)
+        self.assertEqual(s.rendering_cs().parent, s.unity_reader("HandoffBlock").parent)
         self.assertIn("MapAbsence.g.cs", names)
         self.assertEqual(s.absence_cs().parent, s.unity_file("GltfSurfaces.cs").parent)
 
@@ -208,9 +279,35 @@ class TestGeneratedTypes(unittest.TestCase):
         self.assertTrue(targets, "no record declares a shape Unity reads")
         for spec, shape, path in targets:
             with self.subTest(record=spec.key):
-                self.assertEqual(_text(path), s.render_record_cs(spec, shape))
+                self.assertEqual(_text(path), s.render_record_cs(spec, shape, namespace=s.cs_namespace(path)))
                 meta = path.with_name(path.name + ".meta")
                 self.assertEqual(_text(meta), s.record_cs_meta(spec))
+
+    def test_a_record_type_sits_in_the_namespace_of_its_hand_written_half(self):
+        """A partial class's halves share one namespace: the generated half takes
+        the one its hand-written reader declares (a new contract's, in its
+        assembly's namespace), and stays global where that half is (the record
+        types made before namespaces), the handoff's lighting recipe with it.
+        Added: 2026-11-24"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            generated = Path(folder) / "ThingRecord.g.cs"
+            self.assertIsNone(s.cs_namespace(generated), "no hand-written half: global")
+            half = Path(folder) / "ThingRecord.cs"
+            half.write_text("// a header\nusing System;\n\npublic static partial class ThingRecord\n{\n}\n", encoding="utf-8")
+            self.assertIsNone(s.cs_namespace(generated), "a half in the global namespace")
+            half.write_text("using System;\n\nnamespace M3trik.Unitytk.Contracts\n{\n}\n", encoding="utf-8")
+            self.assertEqual(s.cs_namespace(generated), "M3trik.Unitytk.Contracts")
+        handoff = s.unity_reader("HandoffBlock").with_name("HandoffBlock.g.cs")
+        self.assertEqual(s.cs_namespace(handoff), "M3trik.Unitytk.Contracts")
+        texts = dict(s.cs_targets())
+        for name in ("HandoffBlock.g.cs", "HandoffRendering.g.cs"):
+            with self.subTest(file=name):
+                text = next(t for p, t in texts.items() if p.name == name)
+                self.assertIn("\nnamespace M3trik.Unitytk.Contracts\n{\n", text)
+        material = next(t for p, t in texts.items() if p.name == "MaterialRecord.g.cs")
+        self.assertNotIn("\nnamespace ", material, "an older record type stays global")
 
     def test_a_record_type_states_its_version_first(self):
         """Each generated record type states the version a reader reads -- its

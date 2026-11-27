@@ -40,6 +40,27 @@ class TestScaffoldUnityPart(unittest.TestCase):
                 self.assertTrue(meta.is_file(), path)
                 self.assertRegex(meta.read_text(encoding="utf-8"), META)
 
+    def test_a_plural_feature_names_its_actions_class_feature_actions(self):
+        self.run_kind("feature", "Steps")
+        self.assertIn("public static class StepsActions", (self.root / "Features/Steps/Editor/StepsActions.cs").read_text())
+        self.assertTrue((self.root / "Features/Steps/Tests/StepsActionsTests.cs").is_file())
+
+    def test_a_kit_has_its_recipes_a_failing_test_and_every_meta(self):
+        self.run_kind("kit", "Probe")
+        base = self.root / "Kits/Probe"
+        editor = json.loads((base / "Editor/M3trik.Unitytk.Kits.Probe.Editor.asmdef").read_text())
+        self.assertEqual(editor["includePlatforms"], ["Editor"])
+        self.assertEqual(editor["references"], ["M3trik.Unitytk.Core", "M3trik.Unitytk.Kernel"], "features are named as the kit uses them")
+        recipes = (base / "Editor/ProbeKit.cs").read_text()
+        self.assertIn("namespace M3trik.Unitytk.Kits.Probe", recipes)
+        self.assertIn("Prior art:", recipes)
+        self.assertIn("Assert.Fail", (base / "Tests/ProbeKitTests.cs").read_text())
+        for path in self.root.rglob("*"):
+            if not path.name.endswith(".meta"):
+                self.assertTrue(Path(str(path) + ".meta").is_file(), path)
+        with self.assertRaises(SystemExit):
+            self.run_kind("kit", "Probe")
+
     def test_a_door_compiles_only_with_its_package(self):
         self.run_kind("door", "Probe", "URP", "com.unity.render-pipelines.universal", "17.3.0")
         door = json.loads((self.root / "Features/Probe/URP/M3trik.Unitytk.Probe.URP.asmdef").read_text())

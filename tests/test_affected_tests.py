@@ -111,6 +111,40 @@ class _Fixture(unittest.TestCase):
         return sel, {pkg: set(mods) for pkg, mods in sel.picks.items()}
 
 
+class TestLastSeconds(_Fixture):
+    """mayatk's module timings are read where its runs now keep them: each
+    run's own folder under the ecosystem temp root (the runner's
+    ``RUN_PREFIX``), never ``tests/temp_tests``. Added: 2026-11-26."""
+
+    def setUp(self):
+        super().setUp()
+        _write(self.ws, {"mayatk/tests/run_tests.py": 'RUN_PREFIX = "mayatk_runs"\n'})
+        self.root = self.ws / "temp_root"
+        at._workspace_pythontk()
+        from pythontk import TempArtifacts
+
+        patcher = mock.patch.object(TempArtifacts, "root", staticmethod(lambda: str(self.root)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _results(self, run, text, age=0.0):
+        path = self.root / "mayatk_runs" / run / "test_results_7903_1.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        when = path.stat().st_mtime - age
+        os.utime(path, (when, when))
+
+    def test_the_newest_run_names_a_modules_seconds(self):
+        self._results("mayatk_runs_old", "test_core_utils: PASS [30.0s]\ntest_uv_utils: FAIL [5.5s]\n", age=3600)
+        self._results("mayatk_runs_new", "test_core_utils: PASS [12.5s]\n")
+        self.assertEqual(at.last_seconds(self.ws), {"test_core_utils": 12.5, "test_uv_utils": 5.5})
+
+    def test_a_runner_without_the_prefix_reads_nothing(self):
+        _write(self.ws, {"mayatk/tests/run_tests.py": "OTHER = 1\n"})
+        self._results("mayatk_runs_new", "test_core_utils: PASS [12.5s]\n")
+        self.assertEqual(at.last_seconds(self.ws), {})
+
+
 class TestOperationCatalogs(_Fixture):
     """A declared operation's catalog entry is built from its function's
     signature and docstring, which no import reaches: a change to the file

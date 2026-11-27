@@ -92,6 +92,7 @@ GENERATORS: Dict[str, Callable[[], List[Tuple[Path, str]]]] = {
     ),
     "m3trik/scripts/sync_scene_records.py": _targets("sync_scene_records", "cs_targets"),
     "m3trik/scripts/sync_job_queue.py": _targets("sync_job_queue", "targets"),
+    "m3trik/scripts/sync_unity_contracts.py": _targets("sync_unity_contracts", "targets"),
 }
 
 # ---------------------------------------------------------------- lexing

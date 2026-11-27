@@ -133,17 +133,6 @@
    "widget_A",
    "widget_B"
   ],
-  "blender_bridge": [
-   "QtUi",
-   "b000",
-   "central_widget",
-   "cmb000",
-   "footer",
-   "grp_process",
-   "header",
-   "output_grp",
-   "txt000"
-  ],
   "blendshape_animator": [
    "b000",
    "b001",
@@ -443,6 +432,17 @@
    "s002",
    "s003",
    "s004"
+  ],
+  "dcc_bridge": [
+   "QtUi",
+   "b000",
+   "central_widget",
+   "cmb000",
+   "footer",
+   "grp_process",
+   "header",
+   "output_grp",
+   "txt000"
   ],
   "deform#submenu": [
    "QtUi",
@@ -1036,7 +1036,7 @@
    "output_grp",
    "txt000"
   ],
-  "marmoset_workflow": [
+  "marmoset_scripts": [
    "QtUi",
    "b000",
    "central_widget",
@@ -1100,17 +1100,6 @@
    "widget",
    "widget_A",
    "widget_B"
-  ],
-  "maya_bridge": [
-   "QtUi",
-   "b000",
-   "central_widget",
-   "cmb000",
-   "footer",
-   "grp_process",
-   "header",
-   "output_grp",
-   "txt000"
   ],
   "mesh#submenu": [
    "QtUi",
@@ -1194,6 +1183,7 @@
    "Naming",
    "QtUi",
    "central_widget",
+   "cmb_scope",
    "footer",
    "groupBox_5",
    "header",
@@ -1824,7 +1814,8 @@
    "header",
    "shot_manifest",
    "tbl_steps",
-   "txt_csv_path"
+   "txt_csv_path",
+   "txt_search"
   ],
   "shot_sequencer": [
    "centralwidget",
@@ -1954,23 +1945,16 @@
    "output_grp",
    "txt000"
   ],
-  "substance_workflow": [
-   "File",
+  "substance_scripts": [
    "QtUi",
    "b000",
-   "btn_advanced",
-   "btn_launch",
-   "btn_stages",
    "central_widget",
    "cmb000",
    "footer",
+   "grp_process",
    "header",
-   "output",
-   "painter_group",
-   "txt000",
-   "txt001",
-   "txt002",
-   "txt003"
+   "output_grp",
+   "txt000"
   ],
   "surface#submenu": [
    "QtUi",
@@ -2130,7 +2114,7 @@
    "toolbox_steps",
    "txt000"
   ],
-  "unity_workflow": [
+  "unity_scripts": [
    "QtUi",
    "b000",
    "central_widget",
@@ -2253,28 +2237,25 @@
    "i051",
    "widget"
   ],
-  "workspace_editor": [
+  "workspaces": [
    "QtUi",
-   "central_widget",
-   "footer",
-   "header",
-   "tbl000",
-   "txt000"
-  ],
-  "workspace_map": [
    "b000",
    "b001",
    "b002",
+   "central_widget",
    "footer",
    "groupBox",
    "groupBox_2",
+   "grp_editor",
+   "grp_map",
    "header",
    "label",
    "label_2",
+   "tbl000",
    "tree000",
    "txt000",
    "txt001",
-   "workspace_map"
+   "txt002"
   ]
  },
  "homes": {
@@ -2303,9 +2284,6 @@
    "tentacle"
   ],
   "blender#startmenu": [
-   "tentacle"
-  ],
-  "blender_bridge": [
    "tentacle"
   ],
   "blendshape_animator": [
@@ -2369,6 +2347,9 @@
    "tentacle"
   ],
   "cut_on_axis": [
+   "tentacle"
+  ],
+  "dcc_bridge": [
    "tentacle"
   ],
   "deform#submenu": [
@@ -2506,7 +2487,7 @@
   "marmoset_bridge": [
    "tentacle"
   ],
-  "marmoset_workflow": [
+  "marmoset_scripts": [
    "extapps"
   ],
   "mash#submenu": [
@@ -2522,9 +2503,6 @@
    "tentacle"
   ],
   "maya#startmenu": [
-   "tentacle"
-  ],
-  "maya_bridge": [
    "tentacle"
   ],
   "mesh#submenu": [
@@ -2734,7 +2712,7 @@
   "substance_bridge": [
    "tentacle"
   ],
-  "substance_workflow": [
+  "substance_scripts": [
    "extapps"
   ],
   "surface#submenu": [
@@ -2770,7 +2748,7 @@
   "tube_rig": [
    "tentacle"
   ],
-  "unity_workflow": [
+  "unity_scripts": [
    "extapps"
   ],
   "utilities": [
@@ -2806,10 +2784,7 @@
   "windows#submenu": [
    "tentacle"
   ],
-  "workspace_editor": [
-   "tentacle"
-  ],
-  "workspace_map": [
+  "workspaces": [
    "tentacle"
   ]
  },

@@ -1,14 +1,13 @@
 """The Tasks sample: a cabinet task, its sheet, its delivery and its plan, made with no DCC.
 
-A small task in the Interactive build-sheet format (pythontk's ``docs/build_sheets.md``:
-``IN_01`` / ``A01`` / ``B03.5`` step IDs, ``SECTION X:`` rows, one row per thing a step
-does, each listing its scene names in Asset Names and naming its take where a step plays
-several; a hint, a placard and a narration column): ``cabinet.csv``, its plan read with
-the ``interactive`` template and held to the strict check; the delivery its steps play, at life size (a
-cabinet with a hinged door, two latches on its frame, a bolt, a lid and a button at
-its back, and a table with a key and a wrench on it; two viewpoints, front and back),
-one take per row that plays a clip, named as the Shot Manifest names a step's shots:
-``cabinet.fbx``; and the plan unitytk reads them into: ``cabinet.plan.json``.
+A small task in the Interactive build-sheet format, written in cells (pythontk's
+``docs/build_sheets.md``: a step's own row, ``IN_01`` / ``A01`` / ``B03A`` step IDs, ``SECTION X:``
+rows, then one row per action: its word and the cells it takes, each name the node's own as the
+delivery spells it): ``cabinet.csv``, read with the ``interactive`` template and held to the strict
+check; the delivery its steps play, at life size (a cabinet with a hinged door, two latches on its
+frame, a bolt, a lid and a button at its back, and a table with a key and a wrench on it; two
+viewpoints, front and back), one take per row that plays a clip, named as the Shot Manifest names
+a step's takes: ``cabinet.fbx``; and the plan unitytk reads them into: ``cabinet.plan.json``.
 
 Unlike the other samples, nothing here runs in a DCC (:data:`PRODUCER`): the
 delivery is written by pythontk's ``FbxWriter`` and the plan by unitytk's own
@@ -37,7 +36,7 @@ DESCRIPTION = (
     "A cabinet task from a studio's sequence sheet and its delivery: unlock two latches "
     "with a key, open the door, take a bolt out with a wrench, press a button and answer a "
     "question, each step built by the Tasks kit from the sheet's rows (highlights, "
-    "arrows, viewpoints, selections, clips, choices). The demo scene puts a desktop rig "
+    "pointers, viewpoints, selections, clips, choices). The demo scene puts a desktop rig "
     "in it, a camera that looks about with the right mouse button and clicks to select, "
     "and plays it."
 )
@@ -47,40 +46,43 @@ RECORDS = ()
 #: Written in this interpreter, not a DCC's (``sync_unity_samples.py``).
 PRODUCER = "python"
 
-SHEET = """Step,Step Name,Step Contents,Asset Names,Action,Animation Clip Names,Text On Placard,Hint,Voice Support,Audio Files
-INTRO,,,,,,,,,
-IN_01,Welcome,The cabinet stands in front of you with its tools on the table.,,note,,,,Welcome to the cabinet service task.,
-,,Auto Advance,,,,,,,
-IN_02,Begin,Selecting 'Begin' triggers step advancement,,,,,,Select 'Begin' to start.,
-SECTION A: Open the cabinet,,,,,,,,,
-A01,Unlock the latches,Highlight the Cabinet Latches,CABINET_LATCHES,,,,-Bouncing arrow pointing at the key on the table,Unlock both latches with the key.,
-,,The user is teleported to the front view,VIEW_FRONT,,,,,,
-,,Selecting the key places it in hand,KEY,,,,,,
-,,Selecting the top latch triggers Top Latch Open Animation and returns the key to hand,"LATCH_UPPER
-KEY",,A01_1,,,,
-,,Selecting the bottom latch triggers Bottom Latch Open Animation and returns the key to hand,"LATCH_LOWER
-KEY",,A01_2,,,,
-,,Return the key to the table,KEY,,,,,,
-,,Auto Advance when both latches are open,,,,,,,
-A02,Open the door,Highlight the door,DOOR,,,Select the door to open it,,Now open the door.,
-,,Selecting the door triggers Door Open Animation,DOOR,,A02,,,,
-,,Auto Advance,,,,,,,
-SECTION B: Replace the bolt,,,,,,,,,
-B01,Remove the bolt,Highlight the bolt,BOLT,,,,-Bouncing arrow pointing at the wrench on the table,Remove the bolt with the wrench.,
-,,The user is teleported to the back view,VIEW_BACK,,,,,,
-,,Selecting the wrench places it in hand,WRENCH,,,,,,
-,,Selecting the bolt with wrench in hand triggers Bolt Removal Animation,"BOLT
-WRENCH",,B01_1,,,,
-,,Trigger Lid Open Animation,LID,,B01_2,,,,
-,,The bolt fades away,BOLT,,,,,,
-,,Return the wrench to the table,WRENCH,,,,,,
-,,Auto Advance,,,,,,,
-B02,Test the lamp,Selecting the button triggers step advancement,BUTTON,,,,,Press the button.,
-B03,Did it light?,YES and NO buttons appear on the placard screen,,,,Did the lamp light?,,Did the lamp light?,
-,,Selecting 'YES' triggers step advancement to step B04,,,,,,,
-,,Selecting 'NO' triggers step advancement to step B03.5,,,,,,,
-B03.5,Wrong answer,Selecting 'Try Again' triggers step advancement to step B03,,,,,,That is not right. Try again.,
-B04,Done,Selecting 'Exit' ends the task,,,,,,Well done.,
+SHEET = """Step,Step Name,Voice,Placard,Audio,Action,Target,With,Clip,Members,Label,To,Settings,Notes
+INTRO,,,,,,,,,,,,,
+IN_01,Welcome,Welcome to the cabinet service task.,,,,,,,,,,,
+,,,,,note,,,,,,,,The cabinet stands in front of you with its tools on the table.
+IN_02,Begin,Select 'Begin' to start.,,,,,,,,,,,
+,,,,,button,,,,,Begin,next,,
+SECTION A: Open the cabinet,,,,,,,,,,,,,
+A01,Unlock the latches,Unlock both latches with the key.,,,,,,,,,,,
+,,,,,travel,CABINET,,,,,,where=VIEW_FRONT,
+,,,,,highlight,CABINET_LATCHES_GRP,,,,,,,
+,,,,,indicate,KEY_GRP,,,,,,,
+,,,,,take,KEY_GRP,,,,,,,
+,,,,,use,LATCH_UPPER_GRP,KEY_GRP,A01_1,LATCH_UPPER_GRP,,,,
+,,,,,use,LATCH_LOWER_GRP,KEY_GRP,A01_2,LATCH_LOWER_GRP,,,,
+,,,,,return,KEY_GRP,,,,,,,
+A02,Open the door,Now open the door.,Select the door to open it,,,,,,,,,,
+,,,,,highlight,DOOR_GRP,,,,,,,
+,,,,,use,DOOR_GRP,,A02,,,,,
+SECTION B: Replace the bolt,,,,,,,,,,,,,
+B01,Remove the bolt,Remove the bolt with the wrench.,,,,,,,,,,,
+,,,,,travel,CABINET,,,,,,where=VIEW_BACK,
+,,,,,highlight,BOLT_GRP,,,,,,,
+,,,,,indicate,WRENCH_GRP,,,,,,,
+,,,,,take,WRENCH_GRP,,,,,,,
+,,,,,use,BOLT_GRP,WRENCH_GRP,B01_1,BOLT_GRP,,,,
+,,,,,play,,,B01_2,LID_GRP,,,after=B01_1,
+,,,,,hide,BOLT_GRP,,,,,,,
+,,,,,return,WRENCH_GRP,,,,,,,
+B02,Test the lamp,Press the button.,,,,,,,,,,,
+,,,,,select,BUTTON_GRP,,,,,,,
+B03,Did it light?,Did the lamp light?,Did the lamp light?,,,,,,,,,,
+,,,,,button,,,,,YES,B04,,
+,,,,,button,,,,,NO,B03A,,
+B03A,Wrong answer,That is not right. Try again.,,,,,,,,,,,
+,,,,,button,,,,,Try Again,B03,,
+B04,Done,Well done.,,,,,,,,,,,
+,,,,,button,,,,,Exit,exit,,
 """
 
 #: The delivery's nodes, parents first: ``(path, kind, local position in cm)``, Y up,
